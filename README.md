@@ -136,7 +136,7 @@ Remote PC/
 
 1. Clona el repositorio:
    ```bash
-   git clone https://github.com/TU_USUARIO/Remote-PC.git
+   git clone https://github.com/joseyx/remote-pc.git
    cd "Remote PC"
    ```
 
