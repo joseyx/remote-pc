@@ -1,0 +1,39 @@
+# Binaries & Executables
+*.exe
+remotepc-server.exe
+server/remotepc-server.exe
+*.dll
+*.so
+*.dylib
+
+# Local Configuration (contains user auth token)
+server.config.json
+
+# Go Build & Dependency Caches
+*.test
+*.prof
+vendor/
+
+# Android & Gradle
+android/.gradle/
+android/.idea/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/*.iml
+android/app/*.iml
+android/.shelf/
+*.apk
+*.aab
+
+# Logs & Temporary Files
+*.log
+*.tmp
+*.out
+loc_*.txt
+
+# OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini

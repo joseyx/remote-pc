@@ -1,0 +1,7 @@
+{
+  "port": "8080",
+  "authToken": "change-this-to-a-secure-token",
+  "host": "0.0.0.0",
+  "defaultShell": "powershell.exe",
+  "maxHistoryKB": 64
+}

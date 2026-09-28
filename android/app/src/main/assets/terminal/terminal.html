@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="xterm.css">
+    <script src="xterm.js"></script>
+    <script src="xterm-addon-fit.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #0d1117;
+            overflow: hidden;
+            touch-action: pan-y;
+        }
+        #terminal-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            padding: 2px 4px;
+            touch-action: pan-y;
+        }
+        .xterm {
+            height: 100%;
+            width: 100%;
+        }
+        .xterm .xterm-viewport {
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+            will-change: scroll-position;
+        }
+        /* Style high-contrast scrollbar */
+        .xterm .xterm-viewport::-webkit-scrollbar {
+            width: 4px;
+        }
+        .xterm .xterm-viewport::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        .xterm-cursor-layer {
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal-container"></div>
+    <script>
+        console.log("Initializing xterm.js in Android WebView...");
+
+        window._pending = [];
+        window._userIsAtBottom = true;
+
+        window.writeRawBase64 = function(base64) {
+            if (!window._termReady) {
+                window._pending.push(base64);
+                return;
+            }
+            try {
+                const binaryString = atob(base64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                term.write(bytes, () => {
+                    // Auto-scroll as streaming output / response comes in if user is at bottom
+                    if (window._userIsAtBottom) {
+                        term.scrollToBottom();
+                    }
+                });
+            } catch (e) {
+                console.error("Error writing to term:", e);
+            }
+        };
+
+        const term = new Terminal({
+            theme: {
+                background: '#0d1117',
+                foreground: '#c9d1d9',
+                cursor: '#58a6ff',
+                cursorAccent: '#0d1117',
+                selectionBackground: '#264f78',
+                black: '#484f58',
+                red: '#ff7b72',
+                green: '#3fb950',
+                yellow: '#d29922',
+                blue: '#58a6ff',
+                magenta: '#bc8cff',
+                cyan: '#39c5cf',
+                white: '#b1bac4',
+                brightBlack: '#6e7681',
+                brightRed: '#ffa198',
+                brightGreen: '#56d364',
+                brightYellow: '#e3b341',
+                brightBlue: '#79c0ff',
+                brightMagenta: '#d2a8ff',
+                brightCyan: '#56d4dd',
+                brightWhite: '#f0f6fc'
+            },
+            fontFamily: "monospace",
+            fontSize: 9.5,
+            lineHeight: 1.1,
+            cursorBlink: true,
+            cursorStyle: 'block',
+            scrollback: 5000,
+            disableStdin: true,
+            scrollSensitivity: 3,
+            fastScrollSensitivity: 7,
+            smoothScrollDuration: 0
+        });
+
+        // Register custom sequence handlers to consume unhandled queries gracefully
+        if (term.parser) {
+            term.parser.registerCsiHandler({ prefix: '>', final: 'm' }, () => true);
+            term.parser.registerCsiHandler({ prefix: '>', final: 'q' }, () => true);
+            term.parser.registerOscHandler(0, () => true);
+            term.parser.registerOscHandler(2, () => true);
+        }
+
+        let fitAddon = null;
+        try {
+            const FitClass = (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) ? FitAddon.FitAddon : (typeof FitAddon !== 'undefined' ? FitAddon : null);
+            if (FitClass) {
+                fitAddon = new FitClass();
+                term.loadAddon(fitAddon);
+            }
+        } catch (e) {
+            console.error("FitAddon load error:", e);
+        }
+
+        const container = document.getElementById('terminal-container');
+        term.open(container);
+        window._termReady = true;
+
+        // Track whether user is at bottom or has scrolled up to read past logs
+        function checkScrollPosition() {
+            try {
+                if (term.buffer && term.buffer.active) {
+                    const buf = term.buffer.active;
+                    window._userIsAtBottom = (buf.viewportY >= buf.baseY - 1);
+                }
+            } catch (e) {}
+        }
+        term.onScroll(checkScrollPosition);
+
+        // Drain any pending data
+        if (window._pending && window._pending.length > 0) {
+            for (const b of window._pending) {
+                window.writeRawBase64(b);
+            }
+            window._pending = [];
+        }
+
+        // ==========================================
+        // FLUID KINETIC / INERTIAL TOUCH SCROLLING
+        // ==========================================
+        let isTouching = false;
+        let startTouchY = 0;
+        let lastTouchY = 0;
+        let lastTouchTime = 0;
+        let velocityY = 0;
+        let momentumAnimId = null;
+        let totalMoved = 0;
+
+        container.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 1) {
+                isTouching = true;
+                startTouchY = e.touches[0].clientY;
+                lastTouchY = startTouchY;
+                lastTouchTime = performance.now();
+                velocityY = 0;
+                totalMoved = 0;
+
+                if (momentumAnimId) {
+                    cancelAnimationFrame(momentumAnimId);
+                    momentumAnimId = null;
+                }
+            }
+        }, { passive: true });
+
+        container.addEventListener('touchmove', function(e) {
+            if (!isTouching || e.touches.length !== 1) return;
+
+            const currentY = e.touches[0].clientY;
+            const now = performance.now();
+            const deltaY = lastTouchY - currentY;
+            const dt = Math.max(1, now - lastTouchTime);
+
+            totalMoved += Math.abs(deltaY);
+
+            // Calculate instantaneous velocity
+            const instantVelocity = deltaY / dt;
+            velocityY = velocityY * 0.35 + instantVelocity * 0.65;
+
+            lastTouchY = currentY;
+            lastTouchTime = now;
+
+            // Fluid line scrolling: ~8px per line for fast, responsive tracking
+            const lines = deltaY / 9;
+            if (Math.abs(lines) >= 0.4) {
+                term.scrollLines(Math.round(lines));
+                checkScrollPosition();
+            }
+        }, { passive: true });
+
+        container.addEventListener('touchend', function(e) {
+            if (!isTouching) return;
+            isTouching = false;
+
+            // If it was just a quick tap (< 10px moved), notify Android to focus input field
+            if (totalMoved < 10) {
+                if (window.AndroidBridge && window.AndroidBridge.onTerminalClicked) {
+                    window.AndroidBridge.onTerminalClicked();
+                }
+                return;
+            }
+
+            // Fling momentum physics
+            if (Math.abs(velocityY) > 0.12) {
+                let speed = velocityY * 12; // Initial momentum impulse
+                const friction = 0.91;      // Natural deceleration decay
+
+                function momentumStep() {
+                    if (Math.abs(speed) > 0.3) {
+                        term.scrollLines(Math.round(speed));
+                        speed *= friction;
+                        checkScrollPosition();
+                        momentumAnimId = requestAnimationFrame(momentumStep);
+                    } else {
+                        momentumAnimId = null;
+                        checkScrollPosition();
+                    }
+                }
+                momentumAnimId = requestAnimationFrame(momentumStep);
+            } else {
+                checkScrollPosition();
+            }
+        }, { passive: true });
+
+        let lastStableRows = 30;
+        let lastStableCols = 68;
+
+        function fitTerminal() {
+            try {
+                if (fitAddon) {
+                    fitAddon.fit();
+                }
+
+                // If height shrank drastically (soft keyboard opened), do not crush PTY rows
+                const isKeyboardOpen = (lastStableRows > 0 && term.rows < lastStableRows * 0.7);
+
+                if (isKeyboardOpen) {
+                    term.scrollToBottom();
+                    return;
+                }
+
+                // Legitimate resize (orientation change, initial load, or keyboard closed)
+                if (term.cols >= 20 && term.rows >= 10) {
+                    lastStableCols = term.cols;
+                    lastStableRows = term.rows;
+
+                    if (window.AndroidBridge && window.AndroidBridge.onResize) {
+                        window.AndroidBridge.onResize(term.cols, term.rows);
+                    }
+                }
+            } catch (e) {
+                console.error("Fit error:", e);
+            }
+        }
+
+        setTimeout(fitTerminal, 150);
+        setTimeout(fitTerminal, 500);
+        window.addEventListener('resize', fitTerminal);
+
+        function setFontSize(newSize) {
+            term.options.fontSize = newSize;
+            fitTerminal();
+        }
+
+        function clearTerminal() {
+            term.clear();
+        }
+
+        window.scrollToBottom = function() {
+            window._userIsAtBottom = true;
+            if (momentumAnimId) {
+                cancelAnimationFrame(momentumAnimId);
+                momentumAnimId = null;
+            }
+            term.scrollToBottom();
+        };
+    </script>
+</body>
+</html>

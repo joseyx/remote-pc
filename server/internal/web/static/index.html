@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote PC Host · Claude & Terminal Dashboard</title>
+    <link rel="stylesheet" href="xterm.css">
+    <script src="xterm.js"></script>
+    <script src="xterm-addon-fit.js"></script>
+    <style>
+        :root {
+            --bg-base: #0d1117;
+            --bg-surface: #161b22;
+            --bg-elevated: #21262d;
+            --border-subtle: #30363d;
+            --border-muted: #21262d;
+            --text-main: #f0f6fc;
+            --text-muted: #8b949e;
+            --text-dim: #6e7681;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --green: #3fb950;
+            --red: #f85149;
+            --amber: #d29922;
+            --purple: #bc8cff;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Navigation Header */
+        header {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-badge {
+            background: linear-gradient(135deg, #1f6feb, #238636);
+            color: white;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .header-title h1 {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-title .status-pill {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background-color: rgba(63, 185, 80, 0.15);
+            color: var(--green);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            background-color: var(--green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px var(--green);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge-chip {
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 6px 12px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-family: monospace;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn {
+            background-color: var(--bg-elevated);
+            color: var(--text-main);
+            border: 1px solid var(--border-subtle);
+            padding: 6px 14px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .btn:hover {
+            background-color: #30363d;
+            border-color: #8b949e;
+        }
+
+        .btn-primary {
+            background-color: #238636;
+            border-color: rgba(240, 246, 252, 0.1);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background-color: #2ea043;
+        }
+
+        .btn-danger {
+            color: var(--red);
+        }
+
+        .btn-danger:hover {
+            background-color: rgba(248, 81, 73, 0.15);
+            border-color: var(--red);
+        }
+
+        /* Main Container */
+        main {
+            padding: 24px;
+            max-width: 1300px;
+            margin: 0 auto;
+            width: 100%;
+            flex: 1;
+        }
+
+        /* Top Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .stat-card .value {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .stat-card .meta {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-family: monospace;
+        }
+
+        /* Two Columns Layout */
+        .content-layout {
+            display: grid;
+            grid-template-columns: 1.6fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .content-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Section Cards */
+        .section-panel {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(22, 27, 34, 0.8);
+        }
+
+        .section-header h2 {
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-body {
+            padding: 14px 18px;
+        }
+
+        /* Session Cards */
+        .session-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .session-card {
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-muted);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: border-color 0.15s ease;
+        }
+
+        .session-card:hover {
+            border-color: var(--border-subtle);
+        }
+
+        .session-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .session-name {
+            font-weight: 600;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .session-status {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .session-status.running {
+            background-color: rgba(63, 185, 80, 0.2);
+            color: var(--green);
+            border: 1px solid rgba(63, 185, 80, 0.4);
+        }
+
+        .session-status.stopped {
+            background-color: rgba(248, 81, 73, 0.2);
+            color: var(--red);
+            border: 1px solid rgba(248, 81, 73, 0.4);
+        }
+
+        .session-cwd {
+            font-size: 12px;
+            font-family: monospace;
+            color: var(--text-muted);
+            background-color: rgba(255, 255, 255, 0.03);
+            padding: 4px 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .session-meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .session-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Connections Table */
+        .conn-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .conn-item {
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-muted);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .conn-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .conn-ip {
+            font-size: 13px;
+            font-weight: 600;
+            font-family: monospace;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .conn-meta {
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .empty-placeholder {
+            text-align: center;
+            padding: 36px 16px;
+            color: var(--text-dim);
+            font-size: 13px;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(3px);
+            z-index: 200;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-box {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            width: 90%;
+            max-width: 600px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal-box.wide {
+            max-width: 950px;
+            height: 75vh;
+        }
+
+        .modal-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .modal-body {
+            padding: 18px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 12px 18px;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        /* Form Inputs */
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .form-control {
+            width: 100%;
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-family: inherit;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Live Terminal Mirror Window */
+        #mirror-terminal-container {
+            width: 100%;
+            flex: 1;
+            min-height: 480px;
+            background-color: #0d1117;
+            border-radius: 4px;
+            overflow: hidden;
+            padding: 4px;
+        }
+
+        .mirror-bottom-bar {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        /* Toast notification */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background-color: var(--bg-elevated);
+            color: var(--text-main);
+            border: 1px solid var(--accent);
+            padding: 10px 16px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 300;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="header-left">
+            <div class="logo-badge">
+                <span>&gt;_</span> REMOTE PC
+            </div>
+            <div class="header-title">
+                <h1>Host Dashboard <span class="status-pill"><span class="status-dot"></span> ONLINE</span></h1>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <div class="badge-chip" id="chip-endpoint">
+                <span>LAN:</span> <strong id="val-lan-ip">Loading...</strong>
+            </div>
+            <button class="btn" onclick="copyToken()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                Copy Token
+            </button>
+            <button class="btn" onclick="openPairModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Pair Phone
+            </button>
+            <button class="btn btn-primary" onclick="openNewSessionModal()">
+                + New Session
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Body -->
+    <main>
+        <!-- Top Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="label">Active Sessions</span>
+                <span class="value" id="stat-sessions">0</span>
+                <span class="meta" id="stat-sessions-meta">0 Running</span>
+            </div>
+            <div class="stat-card">
+                <span class="label">Connected Clients</span>
+                <span class="value" id="stat-clients" style="color: var(--green);">0</span>
+                <span class="meta" id="stat-clients-meta">Waiting for devices</span>
+            </div>
+            <div class="stat-card">
+                <span class="label">Windscribe VPN</span>
+                <span class="value" id="stat-vpn" style="font-size: 18px;">Checking...</span>
+                <span class="meta" id="stat-vpn-meta">Querying status...</span>
+            </div>
+            <div class="stat-card">
+                <span class="label">Host Machine</span>
+                <span class="value" id="stat-host" style="font-size: 18px;">Windows PC</span>
+                <span class="meta" id="stat-host-meta">ConPTY Native Host</span>
+            </div>
+            <div class="stat-card">
+                <span class="label">Server Uptime</span>
+                <span class="value" id="stat-uptime" style="font-size: 18px;">--:--:--</span>
+                <span class="meta" id="stat-port-meta">Port 8080 (REST + WS)</span>
+            </div>
+        </div>
+
+        <!-- Two Column Layout -->
+        <div class="content-layout">
+            <!-- Left: Sessions -->
+            <div class="section-panel">
+                <div class="section-header">
+                    <h2>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        Terminal Sessions
+                    </h2>
+                    <button class="btn" style="padding: 3px 8px; font-size: 11px;" onclick="loadData()">Refresh</button>
+                </div>
+                <div class="section-body">
+                    <div id="session-list" class="session-list">
+                        <div class="empty-placeholder">Loading sessions...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: VPN & Connected Clients -->
+            <div style="display: flex; flex-direction: column; gap: 20px;">
+                <!-- Windscribe VPN Control Panel -->
+                <div class="section-panel">
+                    <div class="section-header">
+                        <h2>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            Windscribe VPN
+                        </h2>
+                        <span id="vpn-status-badge" class="session-status stopped">CHECKING</span>
+                    </div>
+                    <div class="section-body">
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-base); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-muted);">
+                                <div>
+                                    <div style="font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                                        <span id="vpn-dot" style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background-color: var(--text-dim);"></span>
+                                        <span id="vpn-loc-display">Checking VPN...</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;" id="vpn-ip-display">
+                                        IP: -- · Protocol: --
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="btn-vpn-toggle" class="btn btn-primary" onclick="toggleVPN('toggle')" style="min-width: 95px;">
+                                        Connect
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Location & Protocol Settings -->
+                            <div style="background-color: var(--bg-base); padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-muted); display: flex; flex-direction: column; gap: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;">Connection Settings</span>
+                                    <span id="vpn-switch-hint" style="font-size: 10px; color: var(--accent); display: none;">Switch without disconnecting</span>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                    <div>
+                                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Target Location</label>
+                                        <select id="vpn-loc-select" class="form-control" onchange="onVpnLocChange()" style="font-size: 12px; padding: 5px 8px; width: 100%;">
+                                            <option value="best">⭐ Best Location (Auto)</option>
+                                            <option value="Miami">Miami, FL</option>
+                                            <option value="New York">New York, NY</option>
+                                            <option value="Atlanta">Atlanta, GA</option>
+                                            <option value="Dallas">Dallas, TX</option>
+                                            <option value="Chicago">Chicago, IL</option>
+                                            <option value="Los Angeles">Los Angeles, CA</option>
+                                            <option value="Seattle">Seattle, WA</option>
+                                            <option value="Toronto">Toronto, Canada</option>
+                                            <option value="London">London, UK</option>
+                                            <option value="Frankfurt">Frankfurt, Germany</option>
+                                            <option value="Paris">Paris, France</option>
+                                            <option value="Amsterdam">Amsterdam, Netherlands</option>
+                                            <option value="Zurich">Zurich, Switzerland</option>
+                                            <option value="Tokyo">Tokyo, Japan</option>
+                                            <option value="custom">✏️ Custom City/Code...</option>
+                                        </select>
+                                        <input type="text" id="vpn-custom-loc" class="form-control" placeholder="e.g. Zurich, Madrid, US" style="display: none; font-size: 11px; padding: 4px 8px; margin-top: 6px; width: 100%;">
+                                    </div>
+
+                                    <div>
+                                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Protocol & Port</label>
+                                        <div style="display: flex; gap: 4px;">
+                                            <select id="vpn-proto-select" class="form-control" onchange="onVpnProtoChange()" style="font-size: 12px; padding: 5px 8px; flex: 1;">
+                                                <option value="wireguard">WireGuard</option>
+                                                <option value="stealth">Stealth</option>
+                                                <option value="udp">OpenVPN UDP</option>
+                                                <option value="tcp">OpenVPN TCP</option>
+                                                <option value="wstunnel">WSTunnel</option>
+                                                <option value="ikev2">IKEv2</option>
+                                            </select>
+                                            <select id="vpn-port-select" class="form-control" style="font-size: 11px; padding: 5px 4px; width: 66px;">
+                                                <option value="443">443</option>
+                                                <option value="80">80</option>
+                                                <option value="53">53</option>
+                                                <option value="1194">1194</option>
+                                                <option value="65142">65142</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="vpn-switch-bar" style="display: none; justify-content: flex-end; padding-top: 6px; border-top: 1px solid var(--border-muted);">
+                                    <button class="btn btn-secondary" onclick="toggleVPN('switch')" style="font-size: 11px; padding: 4px 12px;">
+                                        ⚡ Apply & Switch Now
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style="font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between; padding: 0 4px;">
+                                <span>Firewall: <strong id="vpn-firewall-display">--</strong></span>
+                                <span>Allow LAN Traffic: <strong style="color: var(--green);">Enabled</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Connected Clients -->
+                <div class="section-panel">
+                    <div class="section-header">
+                        <h2>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                            Live Connected Clients
+                        </h2>
+                        <span id="conn-count-badge" class="badge-chip" style="padding: 2px 8px; font-size: 11px;">0 Active</span>
+                    </div>
+                    <div class="section-body">
+                        <div id="conn-list" class="conn-list">
+                            <div class="empty-placeholder">No client connected yet.<br>Open the Remote PC app on your phone.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Live Terminal Mirror -->
+    <div id="modal-mirror" class="modal-overlay">
+        <div class="modal-box wide">
+            <div class="modal-header">
+                <h3 id="mirror-title">Live Terminal Mirror</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn" onclick="clearMirror()">Clear View</button>
+                    <button class="btn" onclick="closeMirrorModal()">Close</button>
+                </div>
+            </div>
+            <div class="modal-body" style="padding: 8px; display: flex; flex-direction: column;">
+                <div id="mirror-terminal-container"></div>
+                <div class="mirror-bottom-bar">
+                    <input type="text" id="mirror-input" class="form-control" placeholder="Type prompt or command directly to session..." onkeydown="handleMirrorInput(event)">
+                    <button class="btn btn-primary" onclick="sendMirrorInput()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: New Session -->
+    <div id="modal-new-session" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Create New Terminal Session</h3>
+                <button class="btn" onclick="closeNewSessionModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Session Name</label>
+                    <input type="text" id="new-sess-name" class="form-control" value="claude">
+                </div>
+                <div class="form-group">
+                    <label>Working Directory</label>
+                    <input type="text" id="new-sess-cwd" class="form-control" placeholder="C:\Users\...">
+                </div>
+                <div class="form-group">
+                    <label>Initial Command</label>
+                    <select id="new-sess-cmd" class="form-control">
+                        <option value="claude">claude (Claude Code CLI)</option>
+                        <option value="powershell.exe">powershell.exe (Windows PowerShell)</option>
+                        <option value="cmd.exe">cmd.exe (Command Prompt)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeNewSessionModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreateSession()">Spawn Session</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Pair Phone -->
+    <div id="modal-pair" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Pair Android App</h3>
+                <button class="btn" onclick="closePairModal()">✕</button>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                    Enter these details into the <strong>Settings</strong> screen in the Remote PC Android app:
+                </p>
+
+                <div style="background-color: var(--bg-base); padding: 16px; border-radius: var(--radius-md); text-align: left; font-family: monospace; font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
+                    <div><span style="color: var(--text-dim);">PC Host/IP:</span> <strong id="pair-ip" style="color: var(--accent);">--</strong></div>
+                    <div><span style="color: var(--text-dim);">Port:</span> <strong id="pair-port" style="color: var(--green);">8080</strong></div>
+                    <div><span style="color: var(--text-dim);">Auth Token:</span> <strong id="pair-token" style="color: var(--amber); word-break: break-all;">--</strong></div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="copyFullConfig()">Copy Configuration JSON</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closePairModal()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast">Copied to clipboard!</div>
+
+    <script>
+        let serverInfo = null;
+        let mirrorTerm = null;
+        let mirrorFit = null;
+        let mirrorWs = null;
+        let activeMirrorSessionId = null;
+
+        async function fetchServerInfo() {
+            try {
+                const res = await fetch('/api/server-info');
+                if (res.ok) {
+                    serverInfo = await res.json();
+                    updateServerDisplay();
+                }
+            } catch (e) {
+                console.error("Error fetching server info:", e);
+            }
+        }
+
+        function updateServerDisplay() {
+            if (!serverInfo) return;
+
+            document.getElementById('stat-host').textContent = serverInfo.hostname || 'Windows PC';
+            document.getElementById('stat-uptime').textContent = serverInfo.uptime || '0m';
+
+            const primaryIp = (serverInfo.lanIps && serverInfo.lanIps.length > 0) ? serverInfo.lanIps[0] : window.location.hostname;
+            document.getElementById('val-lan-ip').textContent = primaryIp + ':' + (serverInfo.port || '8080');
+
+            document.getElementById('pair-ip').textContent = primaryIp;
+            document.getElementById('pair-port').textContent = serverInfo.port || '8080';
+            document.getElementById('pair-token').textContent = serverInfo.authToken || '';
+
+            if (serverInfo.vpn) {
+                updateVPNDisplay(serverInfo.vpn);
+            }
+        }
+
+        let isVpnBusy = false;
+
+        function updateVPNDisplay(vpn) {
+            if (!vpn) return;
+            const statVal = document.getElementById('stat-vpn');
+            const statMeta = document.getElementById('stat-vpn-meta');
+            const badge = document.getElementById('vpn-status-badge');
+            const dot = document.getElementById('vpn-dot');
+            const locDisplay = document.getElementById('vpn-loc-display');
+            const ipDisplay = document.getElementById('vpn-ip-display');
+            const firewallDisplay = document.getElementById('vpn-firewall-display');
+            const btn = document.getElementById('btn-vpn-toggle');
+
+            const switchBar = document.getElementById('vpn-switch-bar');
+            const switchHint = document.getElementById('vpn-switch-hint');
+
+            if (!vpn.installed) {
+                statVal.textContent = "Not Detected";
+                statVal.style.color = "var(--text-dim)";
+                statMeta.textContent = "windscribe-cli not found";
+                badge.className = "session-status stopped";
+                badge.textContent = "NOT INSTALLED";
+                btn.disabled = true;
+                btn.textContent = "Unavailable";
+                if (switchBar) switchBar.style.display = "none";
+                if (switchHint) switchHint.style.display = "none";
+                return;
+            }
+
+            firewallDisplay.textContent = vpn.firewall || "Off";
+
+            if (vpn.state === "Connecting" || isVpnBusy) {
+                statVal.textContent = "Connecting...";
+                statVal.style.color = "var(--amber)";
+                statMeta.textContent = "Establishing tunnel...";
+                badge.className = "session-status";
+                badge.style.backgroundColor = "rgba(210, 153, 34, 0.2)";
+                badge.style.color = "var(--amber)";
+                badge.style.border = "1px solid rgba(210, 153, 34, 0.4)";
+                badge.textContent = "CONNECTING...";
+                dot.style.backgroundColor = "var(--amber)";
+                locDisplay.textContent = "Connecting to Windscribe...";
+                ipDisplay.textContent = "Establishing secure encrypted tunnel...";
+                btn.disabled = true;
+                btn.className = "btn";
+                btn.textContent = "Connecting...";
+                if (switchBar) switchBar.style.display = "none";
+                if (switchHint) switchHint.style.display = "none";
+            } else if (vpn.connected) {
+                statVal.textContent = "Connected";
+                statVal.style.color = "var(--green)";
+                statMeta.textContent = (vpn.location || "Secure Tunnel") + (vpn.ip ? ` · ${vpn.ip}` : "");
+                badge.className = "session-status running";
+                badge.textContent = "CONNECTED";
+                dot.style.backgroundColor = "var(--green)";
+                locDisplay.textContent = vpn.location || "Connected Location";
+                ipDisplay.textContent = `VPN IP: ${vpn.ip || '--'} · Protocol: ${vpn.protocol || 'Auto'}`;
+                btn.disabled = false;
+                btn.className = "btn btn-danger";
+                btn.textContent = "Disconnect";
+                if (switchBar) switchBar.style.display = "flex";
+                if (switchHint) switchHint.style.display = "inline";
+            } else {
+                statVal.textContent = "Disconnected";
+                statVal.style.color = "var(--text-muted)";
+                statMeta.textContent = "Direct Internet Connection";
+                badge.className = "session-status stopped";
+                badge.textContent = "DISCONNECTED";
+                dot.style.backgroundColor = "var(--text-dim)";
+                locDisplay.textContent = "Tunnel Inactive";
+                ipDisplay.textContent = `Public IP: ${vpn.ip || '--'} · Ready to connect`;
+                btn.disabled = false;
+                btn.className = "btn btn-primary";
+                btn.textContent = "Connect";
+                if (switchBar) switchBar.style.display = "none";
+                if (switchHint) switchHint.style.display = "none";
+            }
+        }
+
+        const PROTOCOL_PORTS = {
+            wireguard: ["443", "80", "53", "1194", "65142"],
+            stealth: ["443", "8080", "8443"],
+            udp: ["443", "80", "53", "1194"],
+            tcp: ["443", "80", "53"],
+            wstunnel: ["443", "8080"],
+            ikev2: ["500"]
+        };
+
+        function onVpnProtoChange() {
+            const proto = document.getElementById('vpn-proto-select').value;
+            const portSelect = document.getElementById('vpn-port-select');
+            const ports = PROTOCOL_PORTS[proto] || ["443"];
+            portSelect.innerHTML = ports.map(p => `<option value="${p}">${p}</option>`).join('');
+        }
+
+        function onVpnLocChange() {
+            const loc = document.getElementById('vpn-loc-select').value;
+            const customInput = document.getElementById('vpn-custom-loc');
+            if (loc === 'custom') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+            }
+        }
+
+        async function toggleVPN(action = 'toggle') {
+            const btn = document.getElementById('btn-vpn-toggle');
+            const token = serverInfo ? serverInfo.authToken : '';
+            const headers = {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+            };
+
+            const isCurrentlyConnected = serverInfo && serverInfo.vpn && serverInfo.vpn.connected;
+            let endpoint = '/api/vpn/connect';
+            let body = null;
+
+            if (action === 'toggle' && isCurrentlyConnected) {
+                endpoint = '/api/vpn/disconnect';
+            } else {
+                endpoint = '/api/vpn/connect';
+                let loc = document.getElementById('vpn-loc-select').value;
+                if (loc === 'custom') {
+                    loc = document.getElementById('vpn-custom-loc').value.trim();
+                }
+                const proto = document.getElementById('vpn-proto-select').value;
+                const port = document.getElementById('vpn-port-select').value;
+                body = JSON.stringify({ location: loc, protocol: proto, port: port });
+            }
+
+            isVpnBusy = true;
+            if (btn) btn.disabled = true;
+            if (btn) btn.textContent = (endpoint === '/api/vpn/disconnect') ? "Disconnecting..." : "Connecting...";
+
+            try {
+                const res = await fetch(endpoint, { method: 'POST', headers, body });
+                if (res.ok) {
+                    showToast((endpoint === '/api/vpn/disconnect') ? "VPN Disconnecting..." : "VPN Connecting...");
+                    setTimeout(loadData, 1000);
+                    setTimeout(loadData, 3500);
+                    setTimeout(loadData, 7000);
+                    setTimeout(() => { isVpnBusy = false; loadData(); }, 12000);
+                } else {
+                    isVpnBusy = false;
+                    alert("VPN action failed: " + (await res.text()));
+                    await loadData();
+                }
+            } catch (e) {
+                isVpnBusy = false;
+                alert("Network error: " + e);
+                await loadData();
+            }
+        }
+
+        async function loadData() {
+            await fetchServerInfo();
+            await loadSessions();
+            await loadConnections();
+        }
+
+        async function loadSessions() {
+            try {
+                const token = serverInfo ? serverInfo.authToken : '';
+                const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                const res = await fetch('/api/sessions', { headers });
+                if (!res.ok) return;
+
+                const sessions = await res.json();
+                renderSessions(sessions);
+            } catch (e) {
+                console.error("Error loading sessions:", e);
+            }
+        }
+
+        function renderSessions(sessions) {
+            const list = document.getElementById('session-list');
+            const total = sessions.length;
+            const running = sessions.filter(s => s.isRunning).length;
+
+            document.getElementById('stat-sessions').textContent = total;
+            document.getElementById('stat-sessions-meta').textContent = `${running} Running / ${total - running} Stopped`;
+
+            if (sessions.length === 0) {
+                list.innerHTML = `<div class="empty-placeholder">No active sessions.<br>Click <strong>+ New Session</strong> to spawn Claude Code.</div>`;
+                return;
+            }
+
+            list.innerHTML = sessions.map(s => `
+                <div class="session-card">
+                    <div class="session-top">
+                        <div class="session-name">
+                            <span style="color: var(--accent);">&gt;_</span>
+                            <span>${escapeHtml(s.name)}</span>
+                            <span class="session-status ${s.isRunning ? 'running' : 'stopped'}">
+                                ${s.isRunning ? 'RUNNING' : 'STOPPED'}
+                            </span>
+                        </div>
+                        <div class="session-actions">
+                            <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="openMirrorModal('${s.id}', '${escapeHtml(s.name)}', ${s.isRunning})">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                Live Mirror
+                            </button>
+                            <button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="terminateSession('${s.id}')">
+                                Kill
+                            </button>
+                        </div>
+                    </div>
+                    <div class="session-cwd" title="${escapeHtml(s.cwd)}">
+                        📁 ${escapeHtml(s.cwd)}
+                    </div>
+                    <div class="session-meta-row">
+                        <span>PID: <strong>${s.pid}</strong> · Cmd: <code>${escapeHtml(s.command)}</code></span>
+                        <span>Created: ${new Date(s.createdAt).toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadConnections() {
+            try {
+                const token = serverInfo ? serverInfo.authToken : '';
+                const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                const res = await fetch('/api/connections', { headers });
+                if (!res.ok) return;
+
+                const conns = await res.json();
+                renderConnections(conns);
+            } catch (e) {
+                console.error("Error loading connections:", e);
+            }
+        }
+
+        function renderConnections(conns) {
+            const list = document.getElementById('conn-list');
+            const count = conns.length;
+
+            document.getElementById('stat-clients').textContent = count;
+            document.getElementById('conn-count-badge').textContent = `${count} Active`;
+            document.getElementById('stat-clients-meta').textContent = count > 0 ? `${count} Connected` : 'Waiting for devices';
+
+            if (conns.length === 0) {
+                list.innerHTML = `<div class="empty-placeholder">No client connected right now.<br>Connect from Android app to interact.</div>`;
+                return;
+            }
+
+            list.innerHTML = conns.map(c => {
+                const isMobile = c.userAgent.toLowerCase().includes('android') || c.userAgent.toLowerCase().includes('mobile');
+                const timeAgo = formatTimeAgo(new Date(c.connectedAt));
+                return `
+                    <div class="conn-item">
+                        <div class="conn-info">
+                            <div class="conn-ip">
+                                <span>${isMobile ? '📱' : '💻'}</span>
+                                <span>${escapeHtml(c.remoteAddr)}</span>
+                            </div>
+                            <div class="conn-meta">
+                                Session: <strong>${escapeHtml(c.sessionName || c.sessionId.substring(0, 8))}</strong> · ${timeAgo}
+                            </div>
+                        </div>
+                        <span class="session-status running">CONNECTED</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function terminateSession(id) {
+            if (!confirm("Are you sure you want to terminate this session?")) return;
+            try {
+                const token = serverInfo ? serverInfo.authToken : '';
+                const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                await fetch(`/api/sessions/${id}`, { method: 'DELETE', headers });
+                showToast("Session terminated.");
+                await loadData();
+            } catch (e) {
+                alert("Error terminating session: " + e);
+            }
+        }
+
+        function openNewSessionModal() {
+            document.getElementById('modal-new-session').classList.add('open');
+        }
+
+        function closeNewSessionModal() {
+            document.getElementById('modal-new-session').classList.remove('open');
+        }
+
+        async function submitCreateSession() {
+            const name = document.getElementById('new-sess-name').value.trim();
+            const cwd = document.getElementById('new-sess-cwd').value.trim();
+            const command = document.getElementById('new-sess-cmd').value;
+
+            try {
+                const token = serverInfo ? serverInfo.authToken : '';
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                };
+
+                const res = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ name, cwd, command, cols: 100, rows: 30 })
+                });
+
+                if (res.ok) {
+                    closeNewSessionModal();
+                    showToast("Session spawned successfully!");
+                    await loadData();
+                } else {
+                    const err = await res.text();
+                    alert("Failed to spawn session: " + err);
+                }
+            } catch (e) {
+                alert("Network error: " + e);
+            }
+        }
+
+        function openPairModal() {
+            document.getElementById('modal-pair').classList.add('open');
+        }
+
+        function closePairModal() {
+            document.getElementById('modal-pair').classList.remove('open');
+        }
+
+        // Live Mirror Terminal
+        let mirrorResizeHandler = null;
+
+        function openMirrorModal(sessionId, sessionName, isRunning = true) {
+            activeMirrorSessionId = sessionId;
+            const titleEl = document.getElementById('mirror-title');
+            if (!isRunning) {
+                titleEl.innerHTML = `Live Terminal Mirror · ${escapeHtml(sessionName)} <span class="session-status stopped" style="margin-left: 8px;">STOPPED</span>`;
+            } else {
+                titleEl.innerHTML = `Live Terminal Mirror · ${escapeHtml(sessionName)} <span class="session-status running" style="margin-left: 8px;">LIVE</span>`;
+            }
+            document.getElementById('modal-mirror').classList.add('open');
+
+            const container = document.getElementById('mirror-terminal-container');
+            container.innerHTML = '';
+
+            if (mirrorTerm) {
+                mirrorTerm.dispose();
+                mirrorTerm = null;
+            }
+            if (mirrorWs) {
+                mirrorWs.close();
+                mirrorWs = null;
+            }
+
+            mirrorTerm = new Terminal({
+                theme: {
+                    background: '#0d1117',
+                    foreground: '#c9d1d9',
+                    cursor: '#58a6ff'
+                },
+                fontFamily: "monospace",
+                fontSize: 12,
+                cursorBlink: true,
+                convertEol: false
+            });
+
+            if (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) {
+                mirrorFit = new FitAddon.FitAddon();
+                mirrorTerm.loadAddon(mirrorFit);
+            }
+
+            mirrorTerm.open(container);
+
+            function doFit() {
+                if (mirrorFit) {
+                    try {
+                        mirrorFit.fit();
+                        if (mirrorWs && mirrorWs.readyState === WebSocket.OPEN && mirrorTerm.cols > 0 && mirrorTerm.rows > 0) {
+                            mirrorWs.send(JSON.stringify({ type: "resize", cols: mirrorTerm.cols, rows: mirrorTerm.rows }));
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            // Staggered fits to guarantee proper dimensions after CSS layout and modal transition
+            setTimeout(doFit, 50);
+            setTimeout(doFit, 150);
+            setTimeout(doFit, 350);
+
+            if (mirrorResizeHandler) {
+                window.removeEventListener('resize', mirrorResizeHandler);
+            }
+            mirrorResizeHandler = doFit;
+            window.addEventListener('resize', mirrorResizeHandler);
+
+            // Forward direct keyboard typing from the terminal to the session
+            mirrorTerm.onData(data => {
+                if (mirrorWs && mirrorWs.readyState === WebSocket.OPEN) {
+                    mirrorWs.send(JSON.stringify({ type: "input", data }));
+                }
+            });
+
+            // Connect WebSocket
+            const token = serverInfo ? serverInfo.authToken : '';
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/session/${sessionId}?token=${encodeURIComponent(token)}`;
+
+            mirrorWs = new WebSocket(wsUrl);
+            mirrorWs.binaryType = 'arraybuffer';
+
+            mirrorWs.onopen = function() {
+                doFit();
+            };
+
+            mirrorWs.onmessage = function(e) {
+                if (e.data instanceof ArrayBuffer) {
+                    mirrorTerm.write(new Uint8Array(e.data));
+                } else if (e.data instanceof Blob) {
+                    e.data.arrayBuffer().then(buf => mirrorTerm.write(new Uint8Array(buf)));
+                } else {
+                    mirrorTerm.write(e.data);
+                }
+            };
+
+            mirrorWs.onerror = function(e) {
+                if (mirrorTerm) mirrorTerm.writeln("\r\n\x1b[31m[WebSocket connection error]\x1b[0m");
+            };
+
+            mirrorWs.onclose = function(e) {
+                if (mirrorTerm) {
+                    mirrorTerm.writeln("\r\n\x1b[33m[Session disconnected or terminated]\x1b[0m");
+                }
+            };
+
+            // Focus terminal input
+            const inputField = document.getElementById('mirror-input');
+            if (inputField) {
+                inputField.focus();
+            }
+        }
+
+        function closeMirrorModal() {
+            document.getElementById('modal-mirror').classList.remove('open');
+            if (mirrorResizeHandler) {
+                window.removeEventListener('resize', mirrorResizeHandler);
+                mirrorResizeHandler = null;
+            }
+            if (mirrorWs) {
+                mirrorWs.close();
+                mirrorWs = null;
+            }
+            if (mirrorTerm) {
+                mirrorTerm.dispose();
+                mirrorTerm = null;
+            }
+            activeMirrorSessionId = null;
+        }
+
+        function clearMirror() {
+            if (mirrorTerm) mirrorTerm.clear();
+        }
+
+        function handleMirrorInput(e) {
+            if (e.key === 'Enter') {
+                sendMirrorInput();
+            }
+        }
+
+        function sendMirrorInput() {
+            const input = document.getElementById('mirror-input');
+            if (!mirrorWs || mirrorWs.readyState !== WebSocket.OPEN) return;
+
+            const text = input ? input.value : '';
+            // If text is entered, send text + \r; if empty, send Enter (\r)
+            const data = text ? text + "\r" : "\r";
+            const msg = JSON.stringify({ type: "input", data });
+            mirrorWs.send(msg);
+            if (input) input.value = '';
+        }
+
+        function copyToken() {
+            if (!serverInfo) return;
+            navigator.clipboard.writeText(serverInfo.authToken);
+            showToast("Auth token copied!");
+        }
+
+        function copyFullConfig() {
+            if (!serverInfo) return;
+            const primaryIp = (serverInfo.lanIps && serverInfo.lanIps.length > 0) ? serverInfo.lanIps[0] : window.location.hostname;
+            const config = {
+                host: primaryIp,
+                port: serverInfo.port || "8080",
+                token: serverInfo.authToken || ""
+            };
+            navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+            showToast("Configuration copied to clipboard!");
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; }, 2500);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, function(m) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m];
+            });
+        }
+
+        function formatTimeAgo(date) {
+            const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+            if (sec < 60) return `${sec}s ago`;
+            const min = Math.floor(sec / 60);
+            if (min < 60) return `${min}m ago`;
+            const hr = Math.floor(min / 60);
+            return `${hr}h ago`;
+        }
+
+        // Initialize & poll every 3 seconds for live dashboard updates
+        loadData();
+        setInterval(loadData, 3000);
+    </script>
+</body>
+</html>
