@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -79,6 +80,14 @@ func (m *Manager) ListBubbles() []*Bubble {
 	for _, b := range m.bubbles {
 		res = append(res, b)
 	}
+	sort.Slice(res, func(i, j int) bool {
+		nameI := strings.ToLower(res[i].Name)
+		nameJ := strings.ToLower(res[j].Name)
+		if nameI == nameJ {
+			return res[i].ID < res[j].ID
+		}
+		return nameI < nameJ
+	})
 	return res
 }
 

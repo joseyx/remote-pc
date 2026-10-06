@@ -2647,6 +2647,7 @@
                 const res = await fetch('/api/bubbles', { headers });
                 if (!res.ok) return;
                 allBubbles = await res.json();
+                allBubbles.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
                 renderBubblesList();
                 // If a bubble was active, update its status
                 if (currentBubble) {
@@ -2712,6 +2713,7 @@
                 }
                 return true;
             });
+            filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
 
             const countTitle = filterOnlyWithTerminals ? `CON TERMINALES (${filtered.length})` : `TAREAS ACTIVAS (${filtered.length})`;
             const countEl = document.getElementById('sidebar-bubbles-count');
