@@ -79,6 +79,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/workspaces", s.withAuth(s.handleListWorkspaces))
 	mux.HandleFunc("GET /api/bubbles", s.withAuth(s.handleListBubbles))
 	mux.HandleFunc("POST /api/bubbles", s.withAuth(s.handleCreateBubble))
+	mux.HandleFunc("PATCH /api/bubbles/{id}", s.withAuth(s.handleUpdateBubbleMetadata))
+	mux.HandleFunc("POST /api/bubbles/reorder", s.withAuth(s.handleReorderBubbles))
 	mux.HandleFunc("DELETE /api/bubbles/{id}", s.withAuth(s.handleDeleteBubble))
 	mux.HandleFunc("POST /api/bubbles/{id}/dev/start", s.withAuth(s.handleStartDevServer))
 	mux.HandleFunc("POST /api/bubbles/{id}/dev/stop", s.withAuth(s.handleStopDevServer))
@@ -578,6 +580,53 @@ func (s *Server) handleDeleteBubble(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type UpdateBubbleMetaReq struct {
+	Priority   *string `json:"priority,omitempty"`
+	CustomRank *int    `json:"customRank,omitempty"`
+}
+
+func (s *Server) handleUpdateBubbleMetadata(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "missing bubble id", http.StatusBadRequest)
+		return
+	}
+	var req UpdateBubbleMetaReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := s.bubbleMgr.UpdateBubbleMetadata(id, req.Priority, req.CustomRank); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	b, ok := s.bubbleMgr.GetBubble(id)
+	if !ok {
+		http.Error(w, "bubble not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(b)
+}
+
+type ReorderBubblesReq struct {
+	Order []string `json:"order"`
+}
+
+func (s *Server) handleReorderBubbles(w http.ResponseWriter, r *http.Request) {
+	var req ReorderBubblesReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := s.bubbleMgr.ReorderBubbles(req.Order); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
 func (s *Server) handleStartDevServer(w http.ResponseWriter, r *http.Request) {

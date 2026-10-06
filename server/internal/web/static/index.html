@@ -321,6 +321,209 @@
             box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
         }
 
+        /* Task Sort Bar */
+        .task-sort-bar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            margin-bottom: 2px;
+            background-color: var(--bg-base);
+            padding: 3px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .task-sort-bar .sort-bar-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            padding: 0 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .sort-chip {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 4px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .sort-chip:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .sort-chip.active {
+            background-color: var(--bg-elevated);
+            color: var(--accent);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        /* Priority Badges */
+        .badge-priority {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+
+        .badge-priority:hover {
+            filter: brightness(1.25);
+            transform: scale(1.04);
+        }
+
+        .badge-priority.p0 {
+            background: rgba(239, 68, 68, 0.18);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.45);
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.25);
+        }
+
+        .badge-priority.p1 {
+            background: rgba(249, 115, 22, 0.18);
+            color: #fb923c;
+            border: 1px solid rgba(249, 115, 22, 0.45);
+            box-shadow: 0 0 6px rgba(249, 115, 22, 0.2);
+        }
+
+        .badge-priority.p2 {
+            background: rgba(234, 179, 8, 0.18);
+            color: #facc15;
+            border: 1px solid rgba(234, 179, 8, 0.45);
+        }
+
+        .badge-priority.p3 {
+            background: rgba(34, 197, 94, 0.18);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.45);
+        }
+
+        .badge-priority.none {
+            background: rgba(148, 163, 184, 0.08);
+            color: var(--text-dim);
+            border: 1px dashed rgba(148, 163, 184, 0.3);
+        }
+
+        .badge-priority.none:hover {
+            color: var(--text-main);
+            border-color: var(--border-muted);
+            background: rgba(148, 163, 184, 0.15);
+        }
+
+        /* Drag & Drop Reordering Styles */
+        .bubble-card.is-draggable {
+            cursor: grab;
+        }
+
+        .bubble-card.is-draggable:active {
+            cursor: grabbing;
+        }
+
+        .bubble-card.dragging {
+            opacity: 0.4;
+            transform: scale(0.98);
+            border: 1px dashed var(--accent);
+        }
+
+        .bubble-card.drag-over {
+            border-top: 2px solid var(--accent);
+            box-shadow: 0 -4px 12px var(--accent-glow);
+        }
+
+        .card-drag-handle {
+            color: var(--text-dim);
+            font-size: 13px;
+            cursor: grab;
+            padding: 0 2px;
+            user-select: none;
+            opacity: 0.6;
+            transition: opacity 0.15s ease, color 0.15s ease;
+        }
+
+        .card-drag-handle:hover {
+            opacity: 1;
+            color: var(--accent);
+        }
+
+        /* Floating Priority Picker Menu */
+        #priority-picker-menu {
+            position: fixed;
+            z-index: 10000;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-muted);
+            border-radius: var(--radius-md);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 0 15px rgba(56, 189, 248, 0.15);
+            padding: 6px;
+            display: none;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 175px;
+            backdrop-filter: blur(12px);
+            animation: fadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .priority-picker-header {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            padding: 4px 8px;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 3px;
+        }
+
+        .priority-picker-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: all 0.12s ease;
+            border: 1px solid transparent;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+        }
+
+        .priority-picker-item:hover {
+            background-color: var(--bg-elevated);
+            border-color: var(--border-subtle);
+            transform: translateX(2px);
+        }
+
+        .priority-picker-item.active {
+            background: rgba(56, 189, 248, 0.12);
+            border-color: rgba(56, 189, 248, 0.3);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
         .sidebar-actions-row {
             display: flex;
             justify-content: space-between;
@@ -1656,6 +1859,20 @@
                     </button>
                 </div>
 
+                <!-- Sort Modes: Alfabético, Prioridad Notion, Manual (Arrastrar) -->
+                <div class="task-sort-bar">
+                    <span class="sort-bar-label">Orden:</span>
+                    <button class="sort-chip active" id="sort-chip-alpha" onclick="setBubbleSortMode('alpha')" title="Orden Alfabético (A-Z)">
+                        🔤 A-Z
+                    </button>
+                    <button class="sort-chip" id="sort-chip-priority" onclick="setBubbleSortMode('priority')" title="Orden por Prioridad Notion">
+                        🎯 Prioridad
+                    </button>
+                    <button class="sort-chip" id="sort-chip-custom" onclick="setBubbleSortMode('custom')" title="Orden Manual (Arrastrar para ordenar)">
+                        ✋ Manual
+                    </button>
+                </div>
+
                 <div class="sidebar-actions-row">
                     <span class="sidebar-title" id="sidebar-bubbles-count">
                         TAREAS ACTIVAS (0)
@@ -1724,6 +1941,9 @@
                         <div class="bubble-active-title">
                             <span class="badge-ws" id="active-bubble-ws-badge">ADITUM</span>
                             <span id="active-bubble-title">TAR-XXXX</span>
+                            <span class="badge-priority none" id="active-bubble-priority" onclick="openPriorityPicker(event, currentBubble ? currentBubble.id : '')" style="cursor: pointer;" title="Cambiar prioridad Notion">
+                                ⚪ Prioridad
+                            </span>
                         </div>
                         <div class="bubble-branch-chip" id="active-bubble-branch">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
@@ -2411,6 +2631,26 @@
         </div>
     </div>
 
+    <!-- Floating Priority Picker Menu -->
+    <div id="priority-picker-menu">
+        <div class="priority-picker-header">Prioridad (Notion)</div>
+        <button class="priority-picker-item" onclick="selectTaskPriority('P0')">
+            <span>🔴</span> <span><strong>P0</strong> - Urgente</span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskPriority('P1')">
+            <span>🟠</span> <span><strong>P1</strong> - Alta</span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskPriority('P2')">
+            <span>🟡</span> <span><strong>P2</strong> - Media</span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskPriority('P3')">
+            <span>🟢</span> <span><strong>P3</strong> - Baja</span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskPriority('')">
+            <span>⚪</span> <span style="color: var(--text-dim);">Sin prioridad</span>
+        </button>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast">Notificación</div>
 
@@ -2423,6 +2663,23 @@
         let currentBubble = null;
         let activeTab = 'terminal';
         let activeBubbleSession = null;
+
+        // Bubble Sorting & Priority State
+        let bubbleSortMode = localStorage.getItem('remotepc_bubble_sort_mode') || 'alpha';
+        let priorityPickerBubbleId = null;
+        let draggedBubbleId = null;
+
+        const PRIORITY_CONFIG = {
+            'P0': { label: 'P0 - Urgente', icon: '🔴', weight: 1, class: 'p0' },
+            'P1': { label: 'P1 - Alta',    icon: '🟠', weight: 2, class: 'p1' },
+            'P2': { label: 'P2 - Media',   icon: '🟡', weight: 3, class: 'p2' },
+            'P3': { label: 'P3 - Baja',    icon: '🟢', weight: 4, class: 'p3' },
+            '':   { label: 'Sin prioridad', icon: '⚪', weight: 99, class: 'none' }
+        };
+
+        function getPriorityInfo(p) {
+            return PRIORITY_CONFIG[p] || PRIORITY_CONFIG[''];
+        }
 
         // Interactive Terminal Objects (Primary & Split)
         let termObj = null;
@@ -2467,6 +2724,7 @@
         // Initial Load
         window.addEventListener('DOMContentLoaded', async () => {
             applyTerminalFontSize();
+            updateSortBarUI();
             initSplitResizer();
             initSysStatsDrag();
             await refreshAll();
@@ -2490,6 +2748,7 @@
                         openTerminalSearch();
                     }
                 } else if (e.key === 'Escape') {
+                    closePriorityPicker();
                     if (isQuakeOpen) {
                         toggleQuakeTerminal();
                         return;
@@ -2713,7 +2972,29 @@
                 }
                 return true;
             });
-            filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
+            
+            // Apply chosen sorting mode
+            if (bubbleSortMode === 'priority') {
+                filtered.sort((a, b) => {
+                    const wA = getPriorityInfo(a.priority).weight;
+                    const wB = getPriorityInfo(b.priority).weight;
+                    if (wA !== wB) return wA - wB;
+                    const rA = (typeof a.customRank === 'number' && a.customRank > 0) ? a.customRank : 99999;
+                    const rB = (typeof b.customRank === 'number' && b.customRank > 0) ? b.customRank : 99999;
+                    if (rA !== rB) return rA - rB;
+                    return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+                });
+            } else if (bubbleSortMode === 'custom') {
+                filtered.sort((a, b) => {
+                    const rA = (typeof a.customRank === 'number' && a.customRank > 0) ? a.customRank : 99999;
+                    const rB = (typeof b.customRank === 'number' && b.customRank > 0) ? b.customRank : 99999;
+                    if (rA !== rB) return rA - rB;
+                    return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+                });
+            } else {
+                // Default 'alpha'
+                filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
+            }
 
             const countTitle = filterOnlyWithTerminals ? `CON TERMINALES (${filtered.length})` : `TAREAS ACTIVAS (${filtered.length})`;
             const countEl = document.getElementById('sidebar-bubbles-count');
@@ -2746,15 +3027,29 @@
                 const bSessions = getBubbleSessions(b);
                 const hasTerms = bSessions.length > 0;
                 const claudeCount = bSessions.filter(s => s.role === 'claude').length;
+                const pInfo = getPriorityInfo(b.priority);
+                const isCustom = bubbleSortMode === 'custom';
 
                 return `
-                    <div class="bubble-card ${isActive ? 'active' : ''}" onclick="selectBubble('${b.id}')">
+                    <div class="bubble-card ${isActive ? 'active' : ''} ${isCustom ? 'is-draggable' : ''}" 
+                         id="bubble-card-${b.id}"
+                         draggable="${isCustom ? 'true' : 'false'}"
+                         ondragstart="onBubbleDragStart(event, '${b.id}')"
+                         ondragover="onBubbleDragOver(event)"
+                         ondragleave="onBubbleDragLeave(event)"
+                         ondrop="onBubbleDrop(event, '${b.id}')"
+                         ondragend="onBubbleDragEnd(event)"
+                         onclick="selectBubble('${b.id}')">
                         <div class="bubble-card-top">
                             <div class="bubble-card-title">
+                                ${isCustom ? `<span class="card-drag-handle" title="Arrastrar para ordenar">⠿</span>` : ''}
                                 <span class="badge-ws ${b.workspace}">${b.workspace}</span>
-                                <span>${escapeHtml(b.name)}</span>
+                                <span title="${escapeHtml(b.name)}">${escapeHtml(b.name)}</span>
                             </div>
-                            <div style="display: flex; gap: 5px; align-items: center;">
+                            <div style="display: flex; gap: 4px; align-items: center;">
+                                <span class="badge-priority ${pInfo.class}" onclick="openPriorityPicker(event, '${b.id}')" title="Prioridad Notion: ${pInfo.label} (Clic para cambiar)">
+                                    ${pInfo.icon} ${b.priority || 'P-'}
+                                </span>
                                 ${hasTerms ? `
                                     <span class="badge-term-active" title="${bSessions.length} terminal(es) abierta(s)">
                                         💻 ${bSessions.length}${claudeCount > 0 ? ` 🤖${claudeCount}` : ''}
@@ -2776,6 +3071,228 @@
                 `;
             }).join('');
         }
+
+        // Bubble Sort Modes & Controls
+        function setBubbleSortMode(mode) {
+            bubbleSortMode = mode;
+            localStorage.setItem('remotepc_bubble_sort_mode', mode);
+            updateSortBarUI();
+            renderBubblesList();
+            if (mode === 'custom') {
+                showToast("Modo manual: arrastra las tarjetas para ordenar");
+            } else if (mode === 'priority') {
+                showToast("Ordenado por prioridad de Notion");
+            } else {
+                showToast("Ordenado alfabéticamente (A-Z)");
+            }
+        }
+
+        function updateSortBarUI() {
+            ['alpha', 'priority', 'custom'].forEach(m => {
+                const btn = document.getElementById(`sort-chip-${m}`);
+                if (btn) btn.classList.toggle('active', bubbleSortMode === m);
+            });
+        }
+
+        // Priority Picker
+        function openPriorityPicker(e, bubbleId) {
+            if (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            if (!bubbleId && currentBubble) {
+                bubbleId = currentBubble.id;
+            }
+            if (!bubbleId) return;
+
+            priorityPickerBubbleId = bubbleId;
+            const menu = document.getElementById('priority-picker-menu');
+            if (!menu) return;
+
+            const b = allBubbles.find(x => x.id === bubbleId);
+            const currentP = (b && b.priority) ? b.priority : '';
+
+            menu.querySelectorAll('.priority-picker-item').forEach(item => {
+                const itemOnClick = item.getAttribute('onclick') || '';
+                item.classList.toggle('active', itemOnClick.includes(`'${currentP}'`));
+            });
+
+            menu.style.display = 'flex';
+            const rect = (e && e.currentTarget) ? e.currentTarget.getBoundingClientRect() : { top: 120, left: 160, bottom: 140 };
+            const menuWidth = 180;
+            let left = rect.left;
+            if (left + menuWidth > window.innerWidth - 10) {
+                left = window.innerWidth - menuWidth - 10;
+            }
+            let top = rect.bottom + 4;
+            if (top + 210 > window.innerHeight) {
+                top = Math.max(10, rect.top - 210);
+            }
+            menu.style.left = `${Math.max(10, left)}px`;
+            menu.style.top = `${Math.max(10, top)}px`;
+        }
+
+        function closePriorityPicker() {
+            const menu = document.getElementById('priority-picker-menu');
+            if (menu) menu.style.display = 'none';
+            priorityPickerBubbleId = null;
+        }
+
+        async function selectTaskPriority(priority) {
+            if (!priorityPickerBubbleId) return;
+            const bId = priorityPickerBubbleId;
+            closePriorityPicker();
+
+            const target = allBubbles.find(x => x.id === bId);
+            if (target) {
+                target.priority = priority;
+                if (currentBubble && currentBubble.id === bId) {
+                    currentBubble.priority = priority;
+                    updateBubbleHeaderUI();
+                }
+                renderBubblesList();
+            }
+
+            try {
+                const token = serverInfo ? serverInfo.authToken : '';
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                };
+                const res = await fetch(`/api/bubbles/${bId}`, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({ priority })
+                });
+                if (!res.ok) {
+                    console.error("Error setting priority:", await res.text());
+                    showToast("Error al guardar prioridad");
+                } else {
+                    const updated = await res.json();
+                    if (target) {
+                        target.priority = updated.priority;
+                    }
+                    if (currentBubble && currentBubble.id === bId) {
+                        currentBubble.priority = updated.priority;
+                        updateBubbleHeaderUI();
+                    }
+                    renderBubblesList();
+                    showToast(`Prioridad ${priority || 'removida'} guardada`);
+                }
+            } catch (err) {
+                console.error("Error setting priority:", err);
+                showToast("Error al conectar con servidor");
+            }
+        }
+
+        // Drag and Drop for Custom Sorting
+        function onBubbleDragStart(e, bubbleId) {
+            if (bubbleSortMode !== 'custom') return;
+            draggedBubbleId = bubbleId;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', bubbleId);
+            const card = document.getElementById(`bubble-card-${bubbleId}`);
+            if (card) {
+                setTimeout(() => card.classList.add('dragging'), 0);
+            }
+        }
+
+        function onBubbleDragOver(e) {
+            if (bubbleSortMode !== 'custom' || !draggedBubbleId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const card = e.currentTarget;
+            if (card && !card.classList.contains('dragging')) {
+                card.classList.add('drag-over');
+            }
+        }
+
+        function onBubbleDragLeave(e) {
+            const card = e.currentTarget;
+            if (card) {
+                card.classList.remove('drag-over');
+            }
+        }
+
+        function onBubbleDragEnd(e) {
+            document.querySelectorAll('.bubble-card').forEach(el => {
+                el.classList.remove('dragging', 'drag-over');
+            });
+            draggedBubbleId = null;
+        }
+
+        async function onBubbleDrop(e, targetBubbleId) {
+            if (bubbleSortMode !== 'custom' || !draggedBubbleId) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const sourceId = draggedBubbleId;
+            document.querySelectorAll('.bubble-card').forEach(el => {
+                el.classList.remove('dragging', 'drag-over');
+            });
+            draggedBubbleId = null;
+
+            if (sourceId === targetBubbleId) return;
+
+            // Visible filtered list currently displayed
+            const visible = allBubbles.filter(b => {
+                if (activeFilter !== 'all' && b.workspace !== activeFilter) return false;
+                if (filterOnlyWithTerminals) return getBubbleSessions(b).length > 0;
+                return true;
+            });
+
+            // Sort visible in their current order
+            visible.sort((a, b) => {
+                const rA = (typeof a.customRank === 'number' && a.customRank > 0) ? a.customRank : 99999;
+                const rB = (typeof b.customRank === 'number' && b.customRank > 0) ? b.customRank : 99999;
+                if (rA !== rB) return rA - rB;
+                return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+            });
+
+            const sourceIdx = visible.findIndex(b => b.id === sourceId);
+            const targetIdx = visible.findIndex(b => b.id === targetBubbleId);
+            if (sourceIdx === -1 || targetIdx === -1) return;
+
+            const moved = visible.splice(sourceIdx, 1)[0];
+            visible.splice(targetIdx, 0, moved);
+
+            // Reassign ranks
+            visible.forEach((b, idx) => {
+                b.customRank = idx + 1;
+            });
+
+            renderBubblesList();
+
+            // Persist order to backend
+            try {
+                const token = serverInfo ? serverInfo.authToken : '';
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                };
+                const order = visible.map(b => b.id);
+                const res = await fetch('/api/bubbles/reorder', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ order })
+                });
+                if (!res.ok) {
+                    console.error("Error saving bubble order:", await res.text());
+                    showToast("Error al guardar orden en servidor");
+                } else {
+                    showToast("Orden personalizado guardado");
+                }
+            } catch (err) {
+                console.error("Error persisting order:", err);
+            }
+        }
+
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('priority-picker-menu');
+            if (menu && menu.style.display === 'flex' && !menu.contains(e.target) && !e.target.closest('.badge-priority')) {
+                closePriorityPicker();
+            }
+        });
 
         // Select Bubble
         async function selectBubble(id) {
@@ -2811,6 +3328,13 @@
             document.getElementById('active-bubble-ws-badge').className = `badge-ws ${currentBubble.workspace}`;
             document.getElementById('active-bubble-title').textContent = currentBubble.name;
             document.getElementById('active-bubble-branch-name').textContent = currentBubble.branch || 'main';
+
+            const prioBadge = document.getElementById('active-bubble-priority');
+            if (prioBadge) {
+                const pInfo = getPriorityInfo(currentBubble.priority);
+                prioBadge.className = `badge-priority ${pInfo.class}`;
+                prioBadge.innerHTML = `${pInfo.icon} ${currentBubble.priority ? pInfo.label : 'Prioridad'}`;
+            }
 
             const port = currentBubble.port || (currentBubble.workspace === 'aditum' ? 8080 : 8000);
             document.getElementById('active-bubble-port').textContent = port;

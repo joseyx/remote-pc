@@ -35,6 +35,8 @@ type Bubble struct {
 	IsWorktree bool              `json:"isWorktree"`
 	DevRunning bool              `json:"devRunning"`
 	DevPid     int               `json:"devPid,omitempty"`
+	Priority   string            `json:"priority,omitempty"`
+	CustomRank int               `json:"customRank,omitempty"`
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 

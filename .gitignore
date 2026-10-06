@@ -10,6 +10,8 @@ server/remotepc-server.exe
 server.config.json
 sessions_state.json
 sessions_state.json.tmp
+bubbles_metadata.json
+bubbles_metadata.json.tmp
 
 # Go Build & Dependency Caches
 *.test

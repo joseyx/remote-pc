@@ -3,6 +3,7 @@ package bubble
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -15,11 +16,18 @@ import (
 	"time"
 )
 
+type BubbleMeta struct {
+	Priority   string `json:"priority,omitempty"`
+	CustomRank int    `json:"customRank,omitempty"`
+}
+
 type Manager struct {
 	mu         sync.RWMutex
 	workspaces map[WorkspaceType]WorkspaceInfo
 	bubbles    map[string]*Bubble
 	devCmds    map[string]*exec.Cmd
+	metaPath   string
+	metadata   map[string]BubbleMeta
 }
 
 func NewManager() *Manager {
@@ -27,7 +35,10 @@ func NewManager() *Manager {
 		workspaces: make(map[WorkspaceType]WorkspaceInfo),
 		bubbles:    make(map[string]*Bubble),
 		devCmds:    make(map[string]*exec.Cmd),
+		metaPath:   "bubbles_metadata.json",
+		metadata:   make(map[string]BubbleMeta),
 	}
+	m.loadMetadata()
 
 	m.workspaces[WorkspaceAditum] = WorkspaceInfo{
 		ID:          "aditum",
@@ -98,6 +109,72 @@ func (m *Manager) GetBubble(id string) (*Bubble, bool) {
 	return b, ok
 }
 
+func (m *Manager) loadMetadata() {
+	if m.metaPath == "" {
+		return
+	}
+	data, err := os.ReadFile(m.metaPath)
+	if err != nil {
+		return
+	}
+	_ = json.Unmarshal(data, &m.metadata)
+}
+
+func (m *Manager) saveMetadataLocked() error {
+	if m.metaPath == "" {
+		return nil
+	}
+	data, err := json.MarshalIndent(m.metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(m.metaPath, data, 0644)
+}
+
+func (m *Manager) applyMetadata(b *Bubble) {
+	if meta, ok := m.metadata[b.ID]; ok {
+		b.Priority = meta.Priority
+		b.CustomRank = meta.CustomRank
+	}
+}
+
+func (m *Manager) UpdateBubbleMetadata(id string, priority *string, customRank *int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	meta := m.metadata[id]
+	if priority != nil {
+		meta.Priority = *priority
+	}
+	if customRank != nil {
+		meta.CustomRank = *customRank
+	}
+	m.metadata[id] = meta
+
+	if b, ok := m.bubbles[id]; ok {
+		b.Priority = meta.Priority
+		b.CustomRank = meta.CustomRank
+	}
+
+	return m.saveMetadataLocked()
+}
+
+func (m *Manager) ReorderBubbles(orderedIDs []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for rank, id := range orderedIDs {
+		meta := m.metadata[id]
+		meta.CustomRank = rank + 1
+		m.metadata[id] = meta
+		if b, ok := m.bubbles[id]; ok {
+			b.CustomRank = rank + 1
+		}
+	}
+
+	return m.saveMetadataLocked()
+}
+
 func (m *Manager) ScanExistingBubbles() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -124,7 +201,7 @@ func (m *Manager) ScanExistingBubbles() {
 		}
 
 		// Register the monorepo root bubble as the primary bubble
-		m.bubbles["brif-main"] = &Bubble{
+		brifBubble := &Bubble{
 			ID:         "brif-main",
 			Name:       "Brif",
 			Workspace:  WorkspaceBrif,
@@ -135,6 +212,8 @@ func (m *Manager) ScanExistingBubbles() {
 			CreatedAt:  time.Now(),
 			IsWorktree: false,
 		}
+		m.applyMetadata(brifBubble)
+		m.bubbles["brif-main"] = brifBubble
 
 		// Scan worktrees belonging to brif-scrapper if it exists
 		if _, err := os.Stat(scrapperPath); err == nil {
@@ -243,6 +322,7 @@ func (m *Manager) registerDiscoveredWorktree(wsType WorkspaceType, repoPath, wtP
 		Metadata:   meta,
 	}
 
+	m.applyMetadata(b)
 	m.bubbles[id] = b
 }
 
