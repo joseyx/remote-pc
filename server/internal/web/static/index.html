@@ -643,6 +643,8 @@
             justify-content: space-between;
             align-items: center;
             flex-shrink: 0;
+            gap: 12px;
+            overflow-x: auto;
         }
 
         .term-subtabs {
@@ -650,6 +652,8 @@
             gap: 6px;
             align-items: center;
             overflow-x: auto;
+            min-width: 0;
+            flex: 1;
         }
 
         .term-subtab-btn {
@@ -1772,7 +1776,7 @@
                             <div class="term-subtabs" id="term-subtabs-container">
                                 <!-- Subtabs will be injected here: Claude Code, Dev Server, Shell -->
                             </div>
-                            <div style="display: flex; gap: 6px; align-items: center;">
+                            <div class="term-actions-bar" style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
                                 <!-- Celery Dropdown for Brif -->
                                 <div id="brif-celery-dropdown" style="display: none; position: relative;">
                                     <button class="btn btn-sm btn-success" onclick="toggleCeleryMenu()" title="Lanzar Workers de Celery para Brif">
@@ -1808,9 +1812,9 @@
                                         <!-- Injected dynamically based on active workspace -->
                                     </div>
                                 </div>
-                                <div class="font-size-controls" style="display: inline-flex; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1px 4px; gap: 3px;" title="Tamaño de fuente de terminal (Ctrl + / Ctrl -)">
+                                <div class="font-size-controls" style="display: inline-flex; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1px 4px; gap: 3px; flex-shrink: 0;" title="Tamaño de fuente de terminal (Ctrl + / Ctrl -)">
                                     <button class="btn btn-sm" onclick="changeTerminalFontSize(-1)" style="padding: 1px 6px; font-size: 11px; height: 24px; min-width: 24px;" title="Disminuir fuente (Ctrl+-)">A-</button>
-                                    <span id="term-font-size-display" style="font-size: 11px; font-family: monospace; color: var(--accent); min-width: 32px; text-align: center; user-select: none;">14px</span>
+                                    <span id="term-font-size-display" class="term-font-size-val" style="font-size: 11px; font-family: monospace; color: var(--accent); min-width: 32px; text-align: center; user-select: none;">14px</span>
                                     <button class="btn btn-sm" onclick="changeTerminalFontSize(1)" style="padding: 1px 6px; font-size: 11px; height: 24px; min-width: 24px;" title="Aumentar fuente (Ctrl++)">A+</button>
                                 </div>
                                 <button class="btn btn-sm" onclick="openTerminalSearch()" title="Buscar en buffer de terminal (Ctrl+F)">
@@ -2381,6 +2385,11 @@
                 <span style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">Atajo: <kbd style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 3px; font-family: monospace;">F12</kbd> o <kbd style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 3px; font-family: monospace;">Ctrl+\`</kbd></span>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
+                <div class="font-size-controls" style="display: inline-flex; align-items: center; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1px 4px; gap: 3px;" title="Tamaño de fuente (Ctrl + / Ctrl -)">
+                    <button class="btn btn-sm" onclick="changeTerminalFontSize(-1)" style="padding: 1px 6px; font-size: 11px; height: 24px; min-width: 24px;" title="Disminuir fuente">A-</button>
+                    <span class="term-font-size-val" style="font-size: 11px; font-family: monospace; color: var(--accent); min-width: 32px; text-align: center; user-select: none;">14px</span>
+                    <button class="btn btn-sm" onclick="changeTerminalFontSize(1)" style="padding: 1px 6px; font-size: 11px; height: 24px; min-width: 24px;" title="Aumentar fuente">A+</button>
+                </div>
                 <button class="btn btn-sm" onclick="clearQuakeTerminal()" title="Limpiar buffer">Limpiar</button>
                 <button class="btn btn-sm btn-danger" onclick="toggleQuakeTerminal()" title="Cerrar Quick Terminal (Esc / F12)">✕</button>
             </div>
@@ -2898,8 +2907,9 @@
         }
 
         function applyTerminalFontSize() {
-            const disp = document.getElementById('term-font-size-display');
-            if (disp) disp.textContent = currentTermFontSize + 'px';
+            document.querySelectorAll('.term-font-size-val, #term-font-size-display').forEach(el => {
+                el.textContent = currentTermFontSize + 'px';
+            });
             if (termObj) {
                 termObj.options.fontSize = currentTermFontSize;
                 fitActiveTerminal();
