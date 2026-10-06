@@ -21,7 +21,7 @@ func LoadConfig() *Config {
 		Port:         "8080",
 		Host:         "0.0.0.0",
 		DefaultShell: "powershell.exe",
-		MaxHistoryKB: 64, // 64 KB ring buffer per session
+		MaxHistoryKB: 2048, // 2 MB ring buffer per session
 	}
 
 	configPath := "server.config.json"

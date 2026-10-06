@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -183,6 +184,11 @@ fun TerminalScreen(
                 },
                 actions = {
                     IconButton(onClick = {
+                        webViewRef?.evaluateJavascript("window.scrollToBottom();", null)
+                    }) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Scroll to Bottom", tint = TerminalAccent)
+                    }
+                    IconButton(onClick = {
                         webViewRef?.evaluateJavascript("clearTerminal();", null)
                     }) {
                         Icon(Icons.Default.ClearAll, contentDescription = "Clear", tint = TerminalTextMuted)
@@ -313,6 +319,7 @@ fun TerminalScreen(
                         isVerticalScrollBarEnabled = false
                         isHorizontalScrollBarEnabled = false
 
+                        WebView.setWebContentsDebuggingEnabled(true)
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.allowFileAccess = true
@@ -335,9 +342,6 @@ fun TerminalScreen(
                                 scope.launch {
                                     focusRequester.requestFocus()
                                     keyboardController?.show()
-                                    postDelayed({
-                                        evaluateJavascript("window.scrollToBottom();", null)
-                                    }, 250)
                                 }
                             }
                         )

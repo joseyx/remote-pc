@@ -11,6 +11,9 @@
             box-sizing: border-box;
             -webkit-touch-callout: none;
             -webkit-tap-highlight-color: transparent;
+            touch-action: none !important;
+            -webkit-user-select: none !important;
+            user-select: none !important;
         }
         html, body {
             margin: 0;
@@ -24,7 +27,8 @@
             bottom: 0;
             background-color: #0d1117;
             overflow: hidden;
-            touch-action: pan-y;
+            touch-action: none !important;
+            overscroll-behavior: none !important;
         }
         #terminal-container {
             position: absolute;
@@ -35,23 +39,30 @@
             width: 100%;
             height: 100%;
             padding: 2px 4px;
-            touch-action: pan-y;
+            touch-action: none !important;
+            overscroll-behavior: none !important;
         }
         .xterm {
             height: 100%;
             width: 100%;
+            touch-action: none !important;
         }
         .xterm .xterm-viewport {
             overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch;
+            -webkit-overflow-scrolling: auto;
             will-change: scroll-position;
+            touch-action: none !important;
+            overscroll-behavior: none !important;
+        }
+        .xterm .xterm-screen, .xterm canvas, .xterm-scroll-area {
+            touch-action: none !important;
         }
         /* Style high-contrast scrollbar */
         .xterm .xterm-viewport::-webkit-scrollbar {
             width: 4px;
         }
         .xterm .xterm-viewport::-webkit-scrollbar-thumb {
-            background-color: rgba(255, 255, 255, 0.2);
+            background-color: rgba(255, 255, 255, 0.25);
             border-radius: 4px;
         }
         .xterm-cursor-layer {
@@ -66,9 +77,11 @@
 
         window._pending = [];
         window._userIsAtBottom = true;
+        window._termReady = false;
+        window._fitted = false;
 
         window.writeRawBase64 = function(base64) {
-            if (!window._termReady) {
+            if (!window._termReady || !window._fitted) {
                 window._pending.push(base64);
                 return;
             }
@@ -79,8 +92,8 @@
                     bytes[i] = binaryString.charCodeAt(i);
                 }
                 term.write(bytes, () => {
-                    // Auto-scroll as streaming output / response comes in if user is at bottom
-                    if (window._userIsAtBottom) {
+                    // Auto-scroll as streaming output comes in ONLY if user is not actively touching, no momentum active, and is at bottom
+                    if (!isTouching && !momentumAnimId && window._userIsAtBottom) {
                         term.scrollToBottom();
                     }
                 });
@@ -118,10 +131,11 @@
             lineHeight: 1.1,
             cursorBlink: true,
             cursorStyle: 'block',
-            scrollback: 5000,
+            scrollback: 10000,
             disableStdin: true,
-            scrollSensitivity: 3,
-            fastScrollSensitivity: 7,
+            convertEol: true,
+            scrollSensitivity: 1,
+            fastScrollSensitivity: 4,
             smoothScrollDuration: 0
         });
 
@@ -146,104 +160,173 @@
 
         const container = document.getElementById('terminal-container');
         term.open(container);
-        window._termReady = true;
 
-        // Track whether user is at bottom or has scrolled up to read past logs
+        let viewportElement = null;
+        function getViewport() {
+            if (!viewportElement) {
+                viewportElement = container.querySelector('.xterm-viewport');
+            }
+            return viewportElement;
+        }
+
+        // Track whether user is at bottom or has scrolled up
         function checkScrollPosition() {
             try {
-                if (term.buffer && term.buffer.active) {
+                const vp = getViewport();
+                if (vp) {
+                    const maxScroll = vp.scrollHeight - vp.clientHeight;
+                    window._userIsAtBottom = (vp.scrollTop >= maxScroll - 4);
+                } else if (term.buffer && term.buffer.active) {
                     const buf = term.buffer.active;
-                    window._userIsAtBottom = (buf.viewportY >= buf.baseY - 1);
+                    window._userIsAtBottom = (buf.viewportY >= buf.baseY);
                 }
             } catch (e) {}
         }
         term.onScroll(checkScrollPosition);
 
-        // Drain any pending data
-        if (window._pending && window._pending.length > 0) {
-            for (const b of window._pending) {
-                window.writeRawBase64(b);
-            }
-            window._pending = [];
-        }
-
         // ==========================================
-        // FLUID KINETIC / INERTIAL TOUCH SCROLLING
+        // SUB-PIXEL CONTINUOUS KINETIC TOUCH SCROLLING
         // ==========================================
         let isTouching = false;
         let startTouchY = 0;
+        let startTouchTime = 0;
         let lastTouchY = 0;
-        let lastTouchTime = 0;
-        let velocityY = 0;
-        let momentumAnimId = null;
         let totalMoved = 0;
+        let touchSamples = []; // Array of { t, y }
+        let momentumAnimId = null;
+        let currentVelocity = 0; // px/ms
 
         container.addEventListener('touchstart', function(e) {
             if (e.touches.length === 1) {
                 isTouching = true;
+                const now = performance.now();
                 startTouchY = e.touches[0].clientY;
+                startTouchTime = now;
                 lastTouchY = startTouchY;
-                lastTouchTime = performance.now();
-                velocityY = 0;
                 totalMoved = 0;
 
+                // Stop active momentum animation instantly on contact
                 if (momentumAnimId) {
                     cancelAnimationFrame(momentumAnimId);
                     momentumAnimId = null;
                 }
+                currentVelocity = 0;
+
+                touchSamples = [{ t: now, y: startTouchY }];
             }
-        }, { passive: true });
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+        }, { capture: true, passive: false });
 
         container.addEventListener('touchmove', function(e) {
             if (!isTouching || e.touches.length !== 1) return;
 
-            const currentY = e.touches[0].clientY;
             const now = performance.now();
-            const deltaY = lastTouchY - currentY;
-            const dt = Math.max(1, now - lastTouchTime);
+            const currentY = e.touches[0].clientY;
+            const deltaY = lastTouchY - currentY; // positive = drag up (scroll down); negative = drag down (scroll up)
+            lastTouchY = currentY;
 
             totalMoved += Math.abs(deltaY);
 
-            // Calculate instantaneous velocity
-            const instantVelocity = deltaY / dt;
-            velocityY = velocityY * 0.35 + instantVelocity * 0.65;
-
-            lastTouchY = currentY;
-            lastTouchTime = now;
-
-            // Fluid line scrolling: ~8px per line for fast, responsive tracking
-            const lines = deltaY / 9;
-            if (Math.abs(lines) >= 0.4) {
-                term.scrollLines(Math.round(lines));
-                checkScrollPosition();
+            // Record touch sample for rolling velocity window
+            touchSamples.push({ t: now, y: currentY });
+            const cutoff = now - 120;
+            while (touchSamples.length > 2 && touchSamples[0].t < cutoff) {
+                touchSamples.shift();
             }
-        }, { passive: true });
+
+            // Stop xterm's internal conflicting touch handler
+            e.stopPropagation();
+
+            if (deltaY < 0) {
+                window._userIsAtBottom = false;
+            }
+
+            // Direct 1:1 responsive sub-pixel scrolling
+            const vp = getViewport();
+            if (vp) {
+                vp.scrollTop += deltaY;
+            }
+            checkScrollPosition();
+
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+        }, { capture: true, passive: false });
 
         container.addEventListener('touchend', function(e) {
             if (!isTouching) return;
             isTouching = false;
 
-            // If it was just a quick tap (< 10px moved), notify Android to focus input field
-            if (totalMoved < 10) {
+            const now = performance.now();
+            const touchDuration = now - startTouchTime;
+
+            // Compute true fling velocity over the release window (~65ms)
+            let flingVelocity = 0; // px/ms
+            if (touchSamples.length >= 2) {
+                const recentCutoff = now - 65;
+                let sampleStart = touchSamples[0];
+                for (let i = touchSamples.length - 1; i >= 0; i--) {
+                    if (touchSamples[i].t <= recentCutoff) {
+                        sampleStart = touchSamples[i];
+                        break;
+                    }
+                }
+                const sampleEnd = touchSamples[touchSamples.length - 1];
+                const dt = sampleEnd.t - sampleStart.t;
+                if (dt >= 8) {
+                    flingVelocity = (sampleStart.y - sampleEnd.y) / dt;
+                }
+            }
+
+            const isFlick = Math.abs(flingVelocity) > 0.08;
+
+            // Detect tap ONLY if movement is tiny (< 8px), duration is short (< 250ms), and user didn't flick
+            if (totalMoved < 8 && !isFlick && touchDuration < 250) {
                 if (window.AndroidBridge && window.AndroidBridge.onTerminalClicked) {
                     window.AndroidBridge.onTerminalClicked();
                 }
                 return;
             }
 
-            // Fling momentum physics
-            if (Math.abs(velocityY) > 0.12) {
-                let speed = velocityY * 12; // Initial momentum impulse
-                const friction = 0.91;      // Natural deceleration decay
+            // Fluid kinetic fling momentum
+            if (isFlick) {
+                const vp = getViewport();
+                if (!vp) return;
 
-                function momentumStep() {
-                    if (Math.abs(speed) > 0.3) {
-                        term.scrollLines(Math.round(speed));
-                        speed *= friction;
+                // 1.15x impulse multiplier for effortless, fluid glides on short flicks
+                currentVelocity = flingVelocity * 1.15;
+
+                let lastAnimTime = performance.now();
+                const friction = 0.972; // Smooth, natural deceleration
+
+                function momentumStep(animNow) {
+                    const dt = Math.min(32, Math.max(1, animNow - lastAnimTime));
+                    lastAnimTime = animNow;
+
+                    vp.scrollTop += currentVelocity * dt;
+                    checkScrollPosition();
+
+                    // If we hit the boundary, halt momentum cleanly
+                    const maxScroll = vp.scrollHeight - vp.clientHeight;
+                    if ((currentVelocity < 0 && vp.scrollTop <= 0) || 
+                        (currentVelocity > 0 && vp.scrollTop >= maxScroll - 1)) {
+                        momentumAnimId = null;
+                        currentVelocity = 0;
                         checkScrollPosition();
+                        return;
+                    }
+
+                    // Frame-rate independent decay (works identical at 60Hz, 90Hz, 120Hz)
+                    const frameDecay = Math.pow(friction, dt / 16.67);
+                    currentVelocity *= frameDecay;
+
+                    if (Math.abs(currentVelocity) > 0.02) {
                         momentumAnimId = requestAnimationFrame(momentumStep);
                     } else {
                         momentumAnimId = null;
+                        currentVelocity = 0;
                         checkScrollPosition();
                     }
                 }
@@ -251,7 +334,7 @@
             } else {
                 checkScrollPosition();
             }
-        }, { passive: true });
+        }, { capture: true, passive: true });
 
         let lastStableRows = 30;
         let lastStableCols = 68;
@@ -279,13 +362,28 @@
                         window.AndroidBridge.onResize(term.cols, term.rows);
                     }
                 }
+
+                window._fitted = true;
+                if (!window._termReady) {
+                    window._termReady = true;
+                    // Drain any pending data
+                    if (window._pending && window._pending.length > 0) {
+                        for (const b of window._pending) {
+                            window.writeRawBase64(b);
+                        }
+                        window._pending = [];
+                    }
+                }
             } catch (e) {
                 console.error("Fit error:", e);
             }
         }
 
-        setTimeout(fitTerminal, 150);
-        setTimeout(fitTerminal, 500);
+        // Fit immediately and schedule micro-checks for layout settling
+        fitTerminal();
+        requestAnimationFrame(fitTerminal);
+        setTimeout(fitTerminal, 80);
+        setTimeout(fitTerminal, 250);
         window.addEventListener('resize', fitTerminal);
 
         function setFontSize(newSize) {
@@ -303,6 +401,7 @@
                 cancelAnimationFrame(momentumAnimId);
                 momentumAnimId = null;
             }
+            currentVelocity = 0;
             term.scrollToBottom();
         };
     </script>

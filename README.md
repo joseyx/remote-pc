@@ -1,12 +1,13 @@
-# 🚀 Remote PC: Host & Control Remoto para Terminal y Claude Code
+# 🚀 Remote PC: Eco Workspace Hub & Control Remoto para Claude Code
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=flat&logo=windows)](https://microsoft.com)
 [![Android](https://img.shields.io/badge/Android-Kotlin%20%2B%20Compose-3DDC84?style=flat&logo=android)](https://developer.android.com)
 [![Protocol](https://img.shields.io/badge/Streaming-WebSockets%20%2B%20ConPTY-FF6B6B?style=flat)]()
 [![VPN Integration](https://img.shields.io/badge/VPN-Windscribe%20CLI-0066FF?style=flat)]()
+[![Obsidian](https://img.shields.io/badge/Obsidian-Vaults%20Sync-7C3AED?style=flat&logo=obsidian)]()
 
-**Remote PC** es una suite completa de desarrollo remoto y control de terminal diseñada específicamente para ejecutar, supervisar y controlar **Claude Code** y shells interactivas de tu PC Windows directamente desde tu **teléfono Android** o desde un **Dashboard Web en tiempo real**.
+**Remote PC** es una suite completa de desarrollo remoto y centro de operaciones de ingeniería (**Eco Workspace Hub**) diseñada para operar todos tus proyectos de software (**Aditum** y **Brif**) con aislamiento por tareas (*bubbles*), soporte nativo para **Git Worktrees**, bases de datos locales multiesquema en **MySQL 8.0**, integración directa con tus bóvedas de **Obsidian**, previsualización web en vivo, y ejecución supervisada de **Claude Code** y shells interactivas tanto desde tu **teléfono Android** como desde un **Dashboard Web en tiempo real**.
 
 Sin servidores en la nube de terceros, sin telemetría y con latencia ultra baja en red local (LAN) o VPN privada (Tailscale).
 
@@ -14,30 +15,54 @@ Sin servidores en la nube de terceros, sin telemetría y con latencia ultra baja
 
 ## 🌟 Características Principales
 
-### 🖥️ Windows Pseudo Console (ConPTY) Nativo
+### 🫧 Eco Workspace Hub & Gestión de Bubbles
+- **Organización por Workspaces**: Separación de contextos para **Aditum** (Java / Spring Boot + MySQL 8.0 multi-esquema + Liquibase) y **Brif** (Django + Scrapy + Celery + GitLab).
+- **Flujo de Trabajo Paralelo de Aditum con Worktrees**:
+  - Creación automatizada de worktrees aislados (`C:\Users\Jose\bin\start-worktree.sh <TAR-ID>`).
+  - Clonado de base de datos MySQL local en ~25 segundos desde la semilla ultraligera `aditum_slim` hacia el esquema `aditum_<branch>` sin necesidad de Docker.
+  - Asignación inteligente de puertos dinámicos (`8080+N`, ej. `:8081` a `:8099`) y lectura de variables `.worktree.env`.
+  - Control de Dev Server con arranque/parada en un clic (`start-backend.sh` o Maven).
+- **Flujo de Trabajo Lineal y Worktrees en Brif**:
+  - Soporte para trabajo lineal ágil en el repositorio principal (`brif-scrapper`) mediante cambio de rama en caliente (`feat/<slug>`, `fix/<slug>`).
+  - Modo opcional de worktree aislado (`brif-scrapper-<slug>`) para tareas de largo aliento.
+  - Control de servidor Django (`python manage.py runserver`).
+- **Eliminación y Limpieza Segura**:
+  - Destrucción limpia de worktrees con `remove-worktree.sh` que purga la carpeta y el esquema de base de datos asociado de forma segura.
+
+### 📓 Integración Nativa con Bóvedas de Obsidian (Runbooks)
+- Detección automática de las bóvedas locales de Obsidian desde `%APPDATA%\obsidian\obsidian.json`.
+- Acceso directo a las bóvedas de **Aditum** (`Vaultsa\Aditum`) y **Brif** (`Vaultsa\Brif\Brif`).
+- Búsqueda instantánea de runbooks, incidentes, guías de despliegue y documentación de arquitectura.
+- Lector de Markdown integrado (`marked.js`) y editor en caliente para consultar guías de trabajo y comandos sin abandonar la consola.
+
+### 🔀 Git & Diff Viewer Integrado
+- Vista en tiempo real del estado de Git para cada bubble: rama actual, commits pendientes (ahead / behind) y árbol sucio.
+- Lista de archivos modificados, staged y sin rastrear con códigos de estado (`M`, `A`, `D`, `??`).
+- Visor de diferencias unificadas (*diff*) línea por línea con resaltado visual de inserciones y eliminaciones.
+
+### 🌐 Embedded Live Preview
+- Pestaña de previsualización en vivo mediante un iframe embebido apuntando a `http://localhost:<PORT>`.
+- Barra de navegación con recarga rápida y apertura en nueva pestaña para inspeccionar APIs, Swagger UI o paneles administrativos.
+
+### 🖥️ Windows Pseudo Console (ConPTY) Nativo & Multi-Terminal
 - Emulación de terminal raw completa en Windows a través de la API oficial `CreatePseudoConsole` de Windows (`kernel32.dll`).
 - Soporte íntegro para secuencias de escape ANSI, colores de 24 bits, menús interactivos, spinners y cursores dinámicos de **Claude Code**.
+- Pestañas multi-terminal por tarea: subpestañas independientes para `Claude Code`, `Dev Server` y `Shells (Git Bash / PowerShell)`.
+- **VPN Guard para Claude Code**: Verificación previa del estado de Windscribe VPN antes de lanzar sesiones de Claude Code con advertencia y conexión en un clic si el túnel está inactivo.
 - Persistencia de sesiones estilo **tmux**: los procesos continúan ejecutándose en tu PC en segundo plano aunque cierres la app del teléfono o pierdas la conexión Wi-Fi temporalmente.
-- Búfer circular de terminal (64 KB configurable) que envía instantáneamente el historial reciente a cualquier cliente al reconectar.
+- Búfer circular de terminal (2 MB configurable) que envía instantáneamente el historial reciente a cualquier cliente al reconectar.
 
 ### 📱 Aplicación Móvil Android (100% Nativa)
 - Construida en **Kotlin** con **Jetpack Compose** y **Material Design 3**.
 - **Barra de Atajos Especializada para Claude Code**:
-  - Teclas que no existen en los teclados móviles estándar: `ESC`, `TAB`, `CTRL+C` (cancelar/interrumpir prompt), `CTRL+D`, flechas de navegación (`↑`, `↓`, `←`, `→`) y `ENTER`.
-  - Botones de acción rápida con un solo toque: `✓ YES / y`, `✗ NO / n`, `/cost`, `/compact`, `/help`, `/clear`.
+  - Teclas rápidas: `ESC`, `TAB`, `CTRL+C`, `CTRL+D`, flechas de navegación (`↑`, `↓`, `←`, `→`) y `ENTER`.
+  - Botones de acción rápida: `✓ YES / y`, `✗ NO / n`, `/cost`, `/compact`, `/help`, `/clear`.
 - **Explorador de Archivos Remoto**: Navega por los discos y carpetas de tu PC desde el móvil para crear sesiones en la ruta exacta de cualquier proyecto.
-- **Auto-scroll y Desplazamiento Fluido**: Sigue automáticamente la salida generada por Claude Code y permite scroll manual suave por todo el buffer histórico.
-- **Control de Windscribe VPN Integrado**: Monitoreo de estado en vivo, cambio de locaciones y protocolos con un solo toque.
-
-### 🌐 Desktop Web Dashboard Embebido (`http://localhost:8080/`)
-- Interfaz web moderna servida directamente por el binario de Go (`embed.FS`).
-- **Live Terminal Mirror**: Espejo en tiempo real de cualquier sesión activa utilizando **xterm.js**, permitiendo escribir prompts e interactuar en simultáneo con el teléfono.
-- **Monitor de Conexiones Activas**: Visualiza qué dispositivos móviles están conectados en tiempo real con su dirección IP y tiempo de conexión.
-- **Panel de Estadísticas**: Uso de recursos, tiempo de actividad (uptime), sesiones activas y emparejamiento rápido por token / JSON.
+- **Scroll Táctil Cinético Sub-píxel**: Desplazamiento ultra fluido con inercia física y botón flotante de retorno rápido al cursor.
 
 ### 🛡️ Integración Nativa con Windscribe VPN
 - Diseñado para superar bloqueos geográficos de Claude Code (errores HTTP 403 Forbidden).
-- **Selector de Locaciones**: Conexión a *Best Location (Auto)*, *Miami*, *New York*, *Dallas*, *Chicago*, *Los Angeles*, *Seattle*, *Toronto*, *London*, *Frankfurt*, *Paris*, *Amsterdam* o cualquier ciudad/código personalizado.
+- **Selector de Locaciones**: Conexión a *Best Location (Auto)*, *Miami*, *New York*, *Dallas*, *Chicago*, *Los Angeles*, *Seattle*, *Toronto*, *London*, *Frankfurt*, *Paris*, *Amsterdam*, *Zurich*, *Tokyo* o cualquier ciudad/código personalizado.
 - **Selector de Protocolos**: *WireGuard* (más rápido), *Stealth:443* (anti-DPI / TLS ofuscado), *OpenVPN UDP*, *OpenVPN TCP*, *WSTunnel* e *IKEv2*.
 - **Cambio en Caliente (On-the-fly Switch)**: Cambia de servidor o protocolo sin necesidad de desconectarte manualmente primero.
 - **Priorización de IP Física**: El servidor detecta y filtra adaptadores virtuales para que la app del móvil siempre apunte a tu IP Wi-Fi física (`192.168.x.x`), manteniendo la comunicación teléfono-PC intacta (con *Allow LAN Traffic* activo en Windscribe).
@@ -50,32 +75,47 @@ Sin servidores en la nube de terceros, sin telemetría y con latencia ultra baja
 flowchart TD
     subgraph PC["🖥️ Workstation Windows (Host)"]
         subgraph ServerDaemon["remotepc-server (Go Backend)"]
+            BubbleMgr["🫧 Bubble Manager (Aditum & Brif Worktrees)"]
+            GitPkg["🔀 Git Status, Diff & Branches"]
+            ObsidianPkg["📓 Obsidian Vault Discovery & Search"]
             ConPTY["ConPTY Engine (kernel32.dll)"]
             SessionMgr["Session Manager (tmux-style persist)"]
-            RingBuf["Ring Buffer (History)"]
+            RingBuf["Ring Buffer (2MB History)"]
             WsServer["WebSocket Server (/ws/session/:id)"]
             RestAPI["REST API (/api/...)"]
-            WebDash["Embedded Web Dashboard (xterm.js)"]
+            WebDash["Embedded Eco Dashboard (xterm.js + marked)"]
             VpnMgr["Windscribe VPN Controller (CLI Bridge)"]
         end
 
+        Scripts["📜 bin/start-worktree.sh & remove-worktree.sh"]
+        MySQL["🗄️ MySQL 8.0 Local (aditum_slim seed)"]
+        Vaults["📚 Vaultsa/Aditum & Vaultsa/Brif"]
         ClaudeCLI["🤖 Claude Code CLI / PowerShell"]
         WindscribeApp["🛡️ Windscribe Service & CLI"]
+
+        BubbleMgr --> Scripts
+        BubbleMgr --> MySQL
+        ObsidianPkg --> Vaults
         ConPTY --> ClaudeCLI
         VpnMgr --> WindscribeApp
     end
 
     subgraph Mobile["📱 Dispositivo Android (Cliente)"]
         ComposeUI["Jetpack Compose UI (Material 3)"]
-        TermView["Terminal Screen + Smooth Scroll"]
+        TermView["Terminal Screen + Kinetic Sub-pixel Scroll"]
         ClaudeBar["Claude Shortcut Bar (ESC, Tab, Ctrl+C, Yes/No)"]
         VpnCard["VPN Controller Card (Locations & Protocols)"]
         ApiClient["OkHttp / Coroutines WebSocket Client"]
     end
 
+    subgraph Browser["🌐 Navegador Web (Dashboard Local/Remoto)"]
+        EcoWeb["Eco Liquid Glass Hub (/index.html)"]
+        EcoTabs["Terminales · Live Preview · Git Diff · Obsidian"]
+    end
+
     ApiClient <-->|Local Wi-Fi / Tailscale| WsServer
     ApiClient <-->|HTTP REST Requests| RestAPI
-    WebDash <-->|Local Mirror| WsServer
+    Browser <-->|HTTP / WebSockets| ServerDaemon
 ```
 
 ---
@@ -88,16 +128,20 @@ Remote PC/
 │   ├── cmd/server/             # Punto de entrada (main.go)
 │   ├── internal/
 │   │   ├── api/                # Enrutador HTTP REST y WebSocket
+│   │   ├── bubble/             # Gestor de Bubbles, Worktrees y Dev Servers
 │   │   ├── config/             # Carga y persistencia de configuración
+│   │   ├── git/                # Helpers de Git (status, diff, branch, log)
+│   │   ├── obsidian/           # Búsqueda y lectura de Vaults de Obsidian
 │   │   ├── pty/                # Windows ConPTY API (CreatePseudoConsole)
 │   │   ├── session/            # Gestor de procesos, buffer circular y clientes
 │   │   ├── vpn/                # Integración con Windscribe CLI
-│   │   └── web/                # Dashboard Web embebido (HTML/CSS/JS + xterm.js)
+│   │   └── web/                # Dashboard Web embebido (HTML/CSS/JS + xterm.js + marked)
 │   └── README.md
 ├── android/                    # Cliente Nativo Android (Kotlin + Compose)
 │   ├── app/src/main/java/com/remotepc/app/
 │   │   ├── data/
 │   │   │   ├── model/          # Modelos de Sesión, VPN y Directorios
+
 │   │   │   └── network/        # ApiClient, WebSocket y AppConfig
 │   │   ├── ui/
 │   │   │   ├── components/     # Barra de atajos para Claude Code

@@ -8,6 +8,8 @@ server/remotepc-server.exe
 
 # Local Configuration (contains user auth token)
 server.config.json
+sessions_state.json
+sessions_state.json.tmp
 
 # Go Build & Dependency Caches
 *.test

@@ -2,10 +2,13 @@ package session
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -22,6 +25,21 @@ type SessionInfo struct {
 	IsRunning bool      `json:"isRunning"`
 	ExitCode  int       `json:"exitCode"`
 	CreatedAt time.Time `json:"createdAt"`
+	BubbleID  string    `json:"bubbleId,omitempty"`
+	Role      string    `json:"role,omitempty"` // "claude", "server", "shell"
+}
+
+type StoredSession struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Cwd       string    `json:"cwd"`
+	Command   string    `json:"command"`
+	BubbleID  string    `json:"bubbleId,omitempty"`
+	Role      string    `json:"role,omitempty"`
+	Cols      uint16    `json:"cols"`
+	Rows      uint16    `json:"rows"`
+	BufferB64 string    `json:"bufferB64,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type Session struct {
@@ -33,6 +51,10 @@ type Session struct {
 	IsRunning bool
 	ExitCode  int
 	CreatedAt time.Time
+	BubbleID  string
+	Role      string
+	Cols      uint16
+	Rows      uint16
 
 	pty pty.PTY
 
@@ -59,15 +81,24 @@ func (rb *ringBuffer) Write(p []byte) (int, error) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
-	// If buffer exceeds max size, trim old bytes
+	// If buffer exceeds max size, trim old bytes cleanly at newline boundary
 	if rb.buf.Len()+len(p) > rb.maxSize {
 		excess := (rb.buf.Len() + len(p)) - rb.maxSize
 		b := rb.buf.Bytes()
 		if excess >= len(b) {
 			rb.buf.Reset()
 		} else {
-			remaining := b[excess:]
+			// Find first newline at or after excess so we never slice mid-character or mid-escape sequence
+			idx := bytes.IndexByte(b[excess:], '\n')
+			var remaining []byte
+			if idx != -1 && (excess+idx+1) < len(b) {
+				remaining = b[excess+idx+1:]
+			} else {
+				remaining = b[excess:]
+			}
 			rb.buf.Reset()
+			// Reset ANSI attributes so discarded text formatting never bleeds into remaining history
+			rb.buf.WriteString("\x1b[0m")
 			rb.buf.Write(remaining)
 		}
 	}
@@ -96,22 +127,54 @@ type Manager struct {
 	sessions     map[string]*Session
 	connections  map[string]*ClientConnection
 	maxHistoryKB int
+	statePath    string
+	stopTicker   chan struct{}
 }
 
-func NewManager(maxHistoryKB int) *Manager {
-	return &Manager{
+func NewManager(maxHistoryKB int, statePath ...string) *Manager {
+	sp := "sessions_state.json"
+	if len(statePath) > 0 && statePath[0] != "" {
+		sp = statePath[0]
+	}
+
+	m := &Manager{
 		sessions:     make(map[string]*Session),
 		connections:  make(map[string]*ClientConnection),
 		maxHistoryKB: maxHistoryKB,
+		statePath:    sp,
+		stopTicker:   make(chan struct{}),
 	}
+
+	// Periodic buffer flush every 15 seconds
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = m.SaveState()
+			case <-m.stopTicker:
+				return
+			}
+		}
+	}()
+
+	return m
 }
 
 func (m *Manager) CreateSession(name, cwd, command string, cols, rows uint16) (*Session, error) {
+	return m.CreateBubbleSession(name, cwd, command, "", "shell", cols, rows)
+}
+
+func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string, cols, rows uint16) (*Session, error) {
 	if command == "" {
 		command = "powershell.exe"
 	}
 	if name == "" {
 		name = "Terminal"
+	}
+	if role == "" {
+		role = "shell"
 	}
 
 	p, err := pty.Start(command, cwd, cols, rows)
@@ -127,6 +190,10 @@ func (m *Manager) CreateSession(name, cwd, command string, cols, rows uint16) (*
 		PID:       p.ProcessID(),
 		IsRunning: true,
 		CreatedAt: time.Now(),
+		BubbleID:  bubbleID,
+		Role:      role,
+		Cols:      cols,
+		Rows:      rows,
 		pty:       p,
 		buffer:    newRingBuffer(m.maxHistoryKB * 1024),
 		listeners: make(map[chan []byte]struct{}),
@@ -134,6 +201,7 @@ func (m *Manager) CreateSession(name, cwd, command string, cols, rows uint16) (*
 
 	m.mu.Lock()
 	m.sessions[s.ID] = s
+	_ = m.saveStateLocked()
 	m.mu.Unlock()
 
 	// Start asynchronous output pump
@@ -142,6 +210,181 @@ func (m *Manager) CreateSession(name, cwd, command string, cols, rows uint16) (*
 	go s.waitLoop()
 
 	return s, nil
+}
+
+func (m *Manager) RenameSession(id, newName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.sessions[id]
+	if !ok {
+		return errors.New("session not found")
+	}
+	s.mu.Lock()
+	s.Name = newName
+	s.mu.Unlock()
+	_ = m.saveStateLocked()
+	return nil
+}
+
+func (m *Manager) DeleteBubbleSessions(bubbleID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, s := range m.sessions {
+		if s.BubbleID == bubbleID {
+			delete(m.sessions, id)
+			_ = s.Close()
+		}
+	}
+	_ = m.saveStateLocked()
+}
+
+func (m *Manager) CloseAllPTYs() {
+	if m.stopTicker != nil {
+		select {
+		case m.stopTicker <- struct{}{}:
+		default:
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.sessions {
+		_ = s.Close()
+	}
+}
+
+func (m *Manager) SaveState() error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.saveStateLocked()
+}
+
+func (m *Manager) saveStateLocked() error {
+	if m.statePath == "" {
+		return nil
+	}
+
+	list := make([]StoredSession, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		s.mu.RLock()
+		buf := s.buffer.Bytes()
+		// Limit saved history buffer to 512KB per session to keep JSON agile
+		if len(buf) > 512*1024 {
+			buf = buf[len(buf)-512*1024:]
+		}
+		st := StoredSession{
+			ID:        s.ID,
+			Name:      s.Name,
+			Cwd:       s.Cwd,
+			Command:   s.Command,
+			BubbleID:  s.BubbleID,
+			Role:      s.Role,
+			Cols:      s.Cols,
+			Rows:      s.Rows,
+			BufferB64: base64.StdEncoding.EncodeToString(buf),
+			CreatedAt: s.CreatedAt,
+		}
+		s.mu.RUnlock()
+		list = append(list, st)
+	}
+
+	data, err := json.MarshalIndent(list, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	tmpFile := m.statePath + ".tmp"
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmpFile, m.statePath)
+}
+
+func (m *Manager) RestoreSessions() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.statePath == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(m.statePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	var stored []StoredSession
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return fmt.Errorf("failed to parse stored sessions: %w", err)
+	}
+
+	restoredCount := 0
+	for _, st := range stored {
+		if st.Cwd != "" {
+			if _, statErr := os.Stat(st.Cwd); os.IsNotExist(statErr) {
+				log.Printf("[Session Restore] Path '%s' no longer exists, skipping session %s (%s)", st.Cwd, st.ID, st.Name)
+				continue
+			}
+		}
+
+		cols := st.Cols
+		if cols == 0 {
+			cols = 100
+		}
+		rows := st.Rows
+		if rows == 0 {
+			rows = 30
+		}
+		cmd := st.Command
+		if cmd == "" {
+			cmd = "powershell.exe"
+		}
+
+		p, err := pty.Start(cmd, st.Cwd, cols, rows)
+		if err != nil {
+			log.Printf("[Session Restore] Could not restart PTY for session %s: %v", st.ID, err)
+			continue
+		}
+
+		ring := newRingBuffer(m.maxHistoryKB * 1024)
+		if len(st.BufferB64) > 0 {
+			bufBytes, _ := base64.StdEncoding.DecodeString(st.BufferB64)
+			if len(bufBytes) > 0 {
+				ring.Write(bufBytes)
+				ring.Write([]byte("\r\n\x1b[36m--- [Sesión restaurada tras reiniciar Remote PC] ---\x1b[0m\r\n"))
+			}
+		}
+
+		s := &Session{
+			ID:        st.ID,
+			Name:      st.Name,
+			Cwd:       st.Cwd,
+			Command:   cmd,
+			PID:       p.ProcessID(),
+			IsRunning: true,
+			CreatedAt: st.CreatedAt,
+			BubbleID:  st.BubbleID,
+			Role:      st.Role,
+			Cols:      cols,
+			Rows:      rows,
+			pty:       p,
+			buffer:    ring,
+			listeners: make(map[chan []byte]struct{}),
+		}
+
+		m.sessions[s.ID] = s
+		go s.readLoop()
+		go s.waitLoop()
+		restoredCount++
+		log.Printf("[Session Restore] Restored session %s (%s) [PID %d] in %s", s.ID, s.Name, s.PID, s.Cwd)
+	}
+
+	if restoredCount > 0 {
+		log.Printf("[Session Restore] Successfully restored %d active terminal sessions from previous run", restoredCount)
+	}
+	return nil
 }
 
 func (s *Session) readLoop() {
@@ -201,6 +444,11 @@ func (s *Session) WriteInput(data []byte) error {
 }
 
 func (s *Session) Resize(cols, rows uint16) error {
+	s.mu.Lock()
+	s.Cols = cols
+	s.Rows = rows
+	s.mu.Unlock()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if !s.IsRunning {
@@ -248,6 +496,8 @@ func (s *Session) ToInfo() *SessionInfo {
 		IsRunning: s.IsRunning,
 		ExitCode:  s.ExitCode,
 		CreatedAt: s.CreatedAt,
+		BubbleID:  s.BubbleID,
+		Role:      s.Role,
 	}
 }
 
@@ -277,6 +527,7 @@ func (m *Manager) DeleteSession(id string) error {
 		return errors.New("session not found")
 	}
 	delete(m.sessions, id)
+	_ = m.saveStateLocked()
 	m.mu.Unlock()
 
 	return s.Close()
@@ -304,4 +555,3 @@ func (m *Manager) ListConnections() []*ClientConnection {
 	}
 	return res
 }
-

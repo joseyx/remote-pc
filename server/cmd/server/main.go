@@ -22,7 +22,10 @@ func main() {
 	flag.Parse()
 
 	cfg := config.LoadConfig()
-	manager := session.NewManager(cfg.MaxHistoryKB)
+	manager := session.NewManager(cfg.MaxHistoryKB, "sessions_state.json")
+	if err := manager.RestoreSessions(); err != nil {
+		log.Printf("Warning: failed to restore previous sessions: %v", err)
+	}
 	server := api.NewServer(cfg, manager)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
@@ -69,11 +72,13 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Terminate active sessions
-	sessions := manager.ListSessions()
-	for _, s := range sessions {
-		_ = manager.DeleteSession(s.ID)
+	// Persist active terminal sessions state for the next run
+	if err := manager.SaveState(); err != nil {
+		log.Printf("Error saving session state: %v", err)
+	} else {
+		fmt.Println("Saved active terminal sessions state to disk.")
 	}
+	manager.CloseAllPTYs()
 
 	_ = httpServer.Shutdown(ctx)
 	fmt.Println("Server stopped.")
