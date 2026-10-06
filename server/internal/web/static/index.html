@@ -2143,6 +2143,8 @@
                 </button>
             </div>
         </div>
+    </div>
+
     <!-- MODAL: VPN WARNING GUARD FOR CLAUDE CODE -->
     <div id="modal-vpn-warning" class="modal-overlay" onclick="if(event.target === this) closeVpnWarningModal()">
         <div class="modal-box" style="max-width: 480px; box-shadow: 0 20px 48px rgba(0,0,0,0.85); border: 1px solid rgba(245, 158, 11, 0.35);">
@@ -3885,7 +3887,10 @@
 
         // Spawn Claude with VPN Guard Modal
         function spawnClaudeInBubble() {
-            if (!currentBubble) return;
+            if (!currentBubble) {
+                showToast("Selecciona una tarea primero.");
+                return;
+            }
             switchWorkspaceTab('terminal');
 
             // VPN GUARD: If VPN is disconnected, warn user with custom app modal
@@ -3900,23 +3905,28 @@
 
         function openVpnWarningModal() {
             const locEl = document.getElementById('vpn-warning-target-loc');
-            if (locEl && serverInfo && serverInfo.vpn && serverInfo.vpn.lastLocation) {
-                locEl.textContent = `Ubicación: ${serverInfo.vpn.lastLocation}`;
+            if (locEl) {
+                const targetLoc = (serverInfo && serverInfo.vpn && (serverInfo.vpn.location || serverInfo.vpn.lastLocation)) || 'Miami Vice (US)';
+                locEl.textContent = `Ubicación: ${targetLoc}`;
             }
             const modal = document.getElementById('modal-vpn-warning');
-            if (modal) modal.style.display = 'flex';
+            if (modal) {
+                modal.classList.add('open');
+            }
         }
 
         function closeVpnWarningModal() {
             const modal = document.getElementById('modal-vpn-warning');
-            if (modal) modal.style.display = 'none';
+            if (modal) {
+                modal.classList.remove('open');
+            }
         }
 
         async function proceedClaudeWithVpn() {
             closeVpnWarningModal();
             showToast("Conectando Windscribe VPN...");
             try {
-                await toggleVPNMini();
+                await toggleVPN('connect');
             } catch(e) {
                 console.warn("VPN connect error:", e);
             }
@@ -3933,6 +3943,10 @@
         }
 
         async function spawnClaudeProcess() {
+            if (!currentBubble) {
+                showToast("Selecciona una tarea primero.");
+                return;
+            }
             try {
                 switchWorkspaceTab('terminal');
                 const token = serverInfo ? serverInfo.authToken : '';
@@ -3965,7 +3979,10 @@
         }
 
         async function spawnShellInBubble() {
-            if (!currentBubble) return;
+            if (!currentBubble) {
+                showToast("Selecciona una tarea primero.");
+                return;
+            }
             switchWorkspaceTab('terminal');
             try {
                 const token = serverInfo ? serverInfo.authToken : '';
