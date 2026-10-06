@@ -2672,7 +2672,14 @@
 
         function getBubbleSessions(b) {
             if (!b) return [];
-            return allSessions.filter(s => s.bubbleId === b.id || (s.cwd && b.path && s.cwd.toLowerCase() === b.path.toLowerCase()));
+            return allSessions
+                .filter(s => s.bubbleId === b.id || (s.cwd && b.path && s.cwd.toLowerCase() === b.path.toLowerCase()))
+                .sort((a, b) => {
+                    const tA = new Date(a.createdAt || 0).getTime();
+                    const tB = new Date(b.createdAt || 0).getTime();
+                    if (tA !== tB) return tA - tB;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
         }
 
         function setWorkspaceFilter(filter) {
@@ -2866,6 +2873,12 @@
                 const res = await fetch('/api/sessions', { headers });
                 if (!res.ok) return;
                 allSessions = await res.json();
+                allSessions.sort((a, b) => {
+                    const tA = new Date(a.createdAt || 0).getTime();
+                    const tB = new Date(b.createdAt || 0).getTime();
+                    if (tA !== tB) return tA - tB;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
                 allSessions.forEach(s => {
                     if (s.name && !sessionCustomNames[s.id]) {
                         sessionCustomNames[s.id] = s.name;
@@ -3155,17 +3168,30 @@
                 }
             }
 
-            container.innerHTML = bubbleSessions.map(s => {
+            // Count duplicates of displayName in the same bubble
+            const nameFrequency = {};
+            bubbleSessions.forEach(s => {
+                const name = sessionCustomNames[s.id] || s.name;
+                nameFrequency[name] = (nameFrequency[name] || 0) + 1;
+            });
+            const nameOccurrence = {};
+
+            container.innerHTML = bubbleSessions.map((s, idx) => {
                 const isSel = activeBubbleSession && activeBubbleSession.id === s.id;
                 const isSplitSel = isSplitActive && splitSecondarySession && splitSecondarySession.id === s.id;
                 const roleIcon = s.role === 'claude' ? '🤖' : (s.role === 'server' ? '⚙️' : '🐚');
-                const displayName = sessionCustomNames[s.id] || s.name;
+                let displayName = sessionCustomNames[s.id] || s.name;
+                if (nameFrequency[displayName] > 1 && !sessionCustomNames[s.id]) {
+                    nameOccurrence[displayName] = (nameOccurrence[displayName] || 0) + 1;
+                    displayName = `${displayName} #${nameOccurrence[displayName]}`;
+                }
                 return `
                     <button class="term-subtab-btn ${isSel ? 'active' : ''} ${isSplitSel ? 'split-active' : ''}" 
                             onclick="switchTerminalSession('${s.id}')"
                             ondblclick="promptRenameSession('${s.id}')"
                             oncontextmenu="handleSubtabContextMenu(event, '${s.id}', '${escapeHtml(displayName)}')"
-                            title="Click para ver · Doble clic para renombrar · Click derecho para opciones">
+                            title="Terminal #${idx + 1} · Click para ver · Doble clic para renombrar · Click derecho para opciones">
+                        <span style="font-size: 10px; color: ${isSel ? 'var(--accent)' : 'var(--text-dim)'}; font-family: monospace; font-weight: 700; margin-right: 2px;">#${idx + 1}</span>
                         ${isSel ? '<span class="term-active-pill" title="Terminal activa">●</span>' : ''}
                         <span>${roleIcon}</span>
                         <span class="term-subtab-title">${escapeHtml(displayName)}</span>
@@ -3964,8 +3990,12 @@
                     'Content-Type': 'application/json',
                     ...(token ? { 'Authorization': 'Bearer ' + token } : {})
                 };
+                const existingClaude = getBubbleSessions(currentBubble).filter(s => s.role === 'claude').length;
+                const defaultName = existingClaude > 0 
+                    ? `Claude (${currentBubble.name}) #${existingClaude + 1}` 
+                    : `Claude (${currentBubble.name})`;
                 const body = {
-                    name: `Claude (${currentBubble.name})`,
+                    name: defaultName,
                     cwd: currentBubble.path,
                     command: 'claude',
                     bubbleId: currentBubble.id,
@@ -4000,8 +4030,12 @@
                     'Content-Type': 'application/json',
                     ...(token ? { 'Authorization': 'Bearer ' + token } : {})
                 };
+                const existingShell = getBubbleSessions(currentBubble).filter(s => s.role === 'shell').length;
+                const defaultName = existingShell > 0 
+                    ? `Shell (${currentBubble.name}) #${existingShell + 1}` 
+                    : `Shell (${currentBubble.name})`;
                 const body = {
-                    name: `Shell (${currentBubble.name})`,
+                    name: defaultName,
                     cwd: currentBubble.path,
                     command: 'powershell.exe',
                     bubbleId: currentBubble.id,

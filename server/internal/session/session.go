@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -516,6 +517,12 @@ func (m *Manager) ListSessions() []*SessionInfo {
 	for _, s := range m.sessions {
 		res = append(res, s.ToInfo())
 	}
+	sort.Slice(res, func(i, j int) bool {
+		if res[i].CreatedAt.Equal(res[j].CreatedAt) {
+			return res[i].ID < res[j].ID
+		}
+		return res[i].CreatedAt.Before(res[j].CreatedAt)
+	})
 	return res
 }
 
