@@ -137,10 +137,13 @@ func Start(command string, dir string, cols, rows uint16) (*WindowsPTY, error) {
 	}
 
 	// 4. Spawn Process with ConPTY
+	desktopUtf16, _ := windows.UTF16PtrFromString(`winsta0\default`)
 	siEx := startupInfoEx{
 		StartupInfo: windows.StartupInfo{
-			Cb:    uint32(unsafe.Sizeof(startupInfoEx{})),
-			Flags: windows.STARTF_USESTDHANDLES,
+			Cb:         uint32(unsafe.Sizeof(startupInfoEx{})),
+			Desktop:    desktopUtf16,
+			Flags:      windows.STARTF_USESTDHANDLES | windows.STARTF_USESHOWWINDOW,
+			ShowWindow: windows.SW_SHOWNORMAL,
 		},
 		lpAttributeList: lpAttrList,
 	}
