@@ -2422,6 +2422,33 @@
         </div>
     </div>
 
+    <!-- MODAL: UNIVERSAL APP DIALOG (ALERT / CONFIRM / PROMPT) -->
+    <div id="modal-custom-dialog" class="modal-overlay" onclick="if(event.target === this) handleCustomDialogCancel()" style="z-index: 10500; display: none; opacity: 0; pointer-events: none; transition: opacity 0.15s ease;">
+        <div class="modal-box" id="custom-dialog-box" style="max-width: 450px; box-shadow: 0 24px 64px rgba(0,0,0,0.85); border: 1px solid var(--border-muted); transform: translateY(-10px); transition: transform 0.15s ease;">
+            <div class="modal-header" style="border-bottom: 1px solid var(--border-subtle); padding: 14px 18px;">
+                <div style="display: flex; align-items: center; gap: 9px;">
+                    <span id="custom-dialog-icon" style="font-size: 18px;">⚠️</span>
+                    <h3 id="custom-dialog-title" style="font-size: 15px; margin: 0; font-weight: 700; color: var(--text-main);">Aviso</h3>
+                </div>
+                <button class="btn btn-sm btn-ghost" id="custom-dialog-close-x" onclick="handleCustomDialogCancel()" style="padding: 2px 7px;">✕</button>
+            </div>
+            <div class="modal-body" style="padding: 18px 20px;">
+                <p id="custom-dialog-message" style="font-size: 13px; color: var(--text-main); margin: 0; line-height: 1.5; white-space: pre-wrap; word-break: break-word;"></p>
+                <div id="custom-dialog-input-container" style="display: none; margin-top: 14px;">
+                    <input type="text" id="custom-dialog-input" class="form-control" style="width: 100%; background: var(--bg-base); border: 1px solid var(--border-muted); border-radius: var(--radius-sm); color: var(--text-main); padding: 8px 12px; font-size: 13px; font-family: inherit; outline: none;" placeholder="" onkeydown="if(event.key==='Enter') handleCustomDialogConfirm(); if(event.key==='Escape') handleCustomDialogCancel();" />
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; border-top: 1px solid var(--border-subtle); padding: 12px 18px;">
+                <button class="btn btn-sm" id="custom-dialog-cancel-btn" onclick="handleCustomDialogCancel()" style="display: none;">
+                    Cancelar
+                </button>
+                <button class="btn btn-sm btn-primary" id="custom-dialog-confirm-btn" onclick="handleCustomDialogConfirm()">
+                    Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: PAIR ANDROID APP -->
     <div id="modal-pair" class="modal-overlay">
         <div class="modal-box">
@@ -2681,6 +2708,134 @@
             return PRIORITY_CONFIG[p] || PRIORITY_CONFIG[''];
         }
 
+        // Universal App Dialog State & Methods (Alert / Confirm / Prompt)
+        let customDialogResolver = null;
+
+        function showAppDialog({ title = 'Aviso', message = '', icon = 'ℹ️', type = 'alert', confirmText = 'Aceptar', cancelText = 'Cancelar', defaultValue = '', isDanger = false }) {
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('modal-custom-dialog');
+                const box = document.getElementById('custom-dialog-box');
+                const titleEl = document.getElementById('custom-dialog-title');
+                const msgEl = document.getElementById('custom-dialog-message');
+                const iconEl = document.getElementById('custom-dialog-icon');
+                const inputCont = document.getElementById('custom-dialog-input-container');
+                const inputEl = document.getElementById('custom-dialog-input');
+                const confirmBtn = document.getElementById('custom-dialog-confirm-btn');
+                const cancelBtn = document.getElementById('custom-dialog-cancel-btn');
+
+                if (!overlay) {
+                    if (type === 'confirm') return resolve(window.confirm(message));
+                    if (type === 'prompt') return resolve(window.prompt(message, defaultValue));
+                    window.alert(message);
+                    return resolve(true);
+                }
+
+                titleEl.textContent = title;
+                msgEl.textContent = message;
+                iconEl.textContent = icon;
+
+                confirmBtn.textContent = confirmText;
+                if (isDanger) {
+                    confirmBtn.className = "btn btn-sm btn-danger";
+                } else {
+                    confirmBtn.className = "btn btn-sm btn-primary";
+                }
+
+                if (type === 'alert') {
+                    cancelBtn.style.display = 'none';
+                    inputCont.style.display = 'none';
+                } else if (type === 'confirm') {
+                    cancelBtn.textContent = cancelText;
+                    cancelBtn.style.display = 'inline-flex';
+                    inputCont.style.display = 'none';
+                } else if (type === 'prompt') {
+                    cancelBtn.textContent = cancelText;
+                    cancelBtn.style.display = 'inline-flex';
+                    inputCont.style.display = 'block';
+                    inputEl.value = defaultValue || '';
+                }
+
+                customDialogResolver = {
+                    type,
+                    resolve
+                };
+
+                overlay.style.display = 'flex';
+                requestAnimationFrame(() => {
+                    overlay.style.opacity = '1';
+                    overlay.style.pointerEvents = 'auto';
+                    if (box) box.style.transform = 'translateY(0)';
+                    if (type === 'prompt' && inputEl) {
+                        inputEl.focus();
+                        inputEl.select();
+                    } else if (confirmBtn) {
+                        confirmBtn.focus();
+                    }
+                });
+            });
+        }
+
+        function closeCustomDialog() {
+            const overlay = document.getElementById('modal-custom-dialog');
+            const box = document.getElementById('custom-dialog-box');
+            if (overlay) {
+                overlay.style.opacity = '0';
+                overlay.style.pointerEvents = 'none';
+                if (box) box.style.transform = 'translateY(-10px)';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 160);
+            }
+        }
+
+        function handleCustomDialogConfirm() {
+            if (!customDialogResolver) return;
+            const res = customDialogResolver;
+            customDialogResolver = null;
+            closeCustomDialog();
+
+            if (res.type === 'prompt') {
+                const val = document.getElementById('custom-dialog-input')?.value || '';
+                res.resolve(val);
+            } else if (res.type === 'confirm') {
+                res.resolve(true);
+            } else {
+                res.resolve(true);
+            }
+        }
+
+        function handleCustomDialogCancel() {
+            if (!customDialogResolver) return;
+            const res = customDialogResolver;
+            customDialogResolver = null;
+            closeCustomDialog();
+
+            if (res.type === 'prompt') {
+                res.resolve(null);
+            } else if (res.type === 'confirm') {
+                res.resolve(false);
+            } else {
+                res.resolve(false);
+            }
+        }
+
+        function appAlert(message, title = 'Notificación', icon = '⚠️') {
+            return showAppDialog({ title, message, icon, type: 'alert' });
+        }
+
+        function appConfirm(message, title = 'Confirmar', confirmText = 'Confirmar', cancelText = 'Cancelar', isDanger = false, icon = '❓') {
+            return showAppDialog({ title, message, icon, type: 'confirm', confirmText, cancelText, isDanger });
+        }
+
+        function appPrompt(message, defaultValue = '', title = 'Entrada requerida', confirmText = 'Aceptar', icon = '✏️') {
+            return showAppDialog({ title, message, icon, type: 'prompt', defaultValue, confirmText });
+        }
+
+        // Global alert override: all alerts use the dark cyber UI modal instead of native browser popup
+        window.alert = function(msg) {
+            appAlert(String(msg));
+        };
+
         // Interactive Terminal Objects (Primary & Split)
         let termObj = null;
         let fitAddon = null;
@@ -2748,6 +2903,10 @@
                         openTerminalSearch();
                     }
                 } else if (e.key === 'Escape') {
+                    if (customDialogResolver) {
+                        handleCustomDialogCancel();
+                        return;
+                    }
                     closePriorityPicker();
                     if (isQuakeOpen) {
                         toggleQuakeTerminal();
@@ -3463,11 +3622,11 @@
             }
         }
 
-        function promptRenameSession(sessId) {
+        async function promptRenameSession(sessId) {
             const sess = allSessions.find(s => s.id === sessId);
             if (!sess) return;
             const currentName = sessionCustomNames[sessId] || sess.name;
-            const newName = prompt(`Renombrar terminal "${currentName}" a:`, currentName);
+            const newName = await appPrompt(`Renombrar terminal "${currentName}" a:`, currentName, "Renombrar Terminal", "Guardar", "✏️");
             if (newName && newName.trim() && newName.trim() !== currentName) {
                 const finalName = newName.trim();
                 sessionCustomNames[sessId] = finalName;
@@ -3573,32 +3732,23 @@
                     return false;
                 }
 
-                // Ctrl+V / Ctrl+Shift+V: Smart Paste
-                if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+                // Shift+Enter: Insert newline without submitting (Claude Code / Multiline Input)
+                if (e.key === 'Enter' && e.shiftKey) {
                     if (e.type === 'keydown') {
-                        if (navigator.clipboard && navigator.clipboard.readText) {
-                            navigator.clipboard.readText().then(text => {
-                                const ws = typeof getWs === 'function' ? getWs() : getWs;
-                                if (text && ws && ws.readyState === WebSocket.OPEN) {
-                                    ws.send(JSON.stringify({ type: "input", data: text }));
-                                }
-                            }).catch(err => {
-                                console.warn("Clipboard read failed, using prompt fallback:", err);
-                                const text = prompt("Pegar texto en terminal:");
-                                const ws = typeof getWs === 'function' ? getWs() : getWs;
-                                if (text && ws && ws.readyState === WebSocket.OPEN) {
-                                    ws.send(JSON.stringify({ type: "input", data: text }));
-                                }
-                            });
-                        } else {
-                            const text = prompt("Pegar texto en terminal:");
-                            const ws = typeof getWs === 'function' ? getWs() : getWs;
-                            if (text && ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({ type: "input", data: text }));
-                            }
+                        const ws = typeof getWs === 'function' ? getWs() : getWs;
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: "input", data: "\x1b\r" }));
                         }
                     }
-                    return false; // Prevent sending \x16
+                    return false;
+                }
+
+                // Ctrl+V / Ctrl+Shift+V: Clean Paste (prevents double pasting bug)
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+                    // Returning false prevents xterm from translating to raw \x16 (SYN).
+                    // The browser fires native paste on xterm's helper textarea, which
+                    // xterm handles cleanly and emits once via term.onData.
+                    return false;
                 }
 
                 return true;
@@ -3892,7 +4042,8 @@
 
         async function closeTerminalSession(e, sessId, name) {
             if (e) e.stopPropagation();
-            if (!confirm(`¿Cerrar y terminar la terminal "${name}"?`)) return;
+            const ok = await appConfirm(`¿Cerrar y terminar la terminal "${name}"?`, "Cerrar Terminal", "Cerrar", "Cancelar", true, "💻");
+            if (!ok) return;
             try {
                 const token = serverInfo ? serverInfo.authToken : '';
                 const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
@@ -3906,7 +4057,7 @@
                 }
                 await fetchSessions();
             } catch (err) {
-                alert("Error al cerrar terminal: " + err);
+                appAlert("Error al cerrar terminal: " + err, "Error", "❌");
             }
         }
 
@@ -4440,10 +4591,10 @@
                     await fetchSessions();
                     switchTerminalSession(sess.id);
                 } else {
-                    alert("Error al iniciar worker de Celery: " + (await res.text()));
+                    appAlert("Error al iniciar worker de Celery: " + (await res.text()), "Error en Celery", "❌");
                 }
             } catch (e) {
-                alert("Error de red: " + e);
+                appAlert("Error de red: " + e, "Error de Conexión", "❌");
             }
         }
 
@@ -4537,10 +4688,10 @@
                     await fetchSessions();
                     switchTerminalSession(sess.id);
                 } else {
-                    alert("Error al iniciar Claude: " + (await res.text()));
+                    appAlert("Error al iniciar Claude: " + (await res.text()), "Error en Claude", "❌");
                 }
             } catch (e) {
-                alert("Error de red: " + e);
+                appAlert("Error de red: " + e, "Error de Conexión", "❌");
             }
         }
 
@@ -4578,7 +4729,7 @@
                     switchTerminalSession(sess.id);
                 }
             } catch (e) {
-                alert("Error: " + e);
+                appAlert("Error al iniciar shell: " + e, "Error en Terminal", "❌");
             }
         }
 
@@ -4600,7 +4751,7 @@
                         showToast("Dev Server detenido.");
                     }
                 } catch (e) {
-                    alert("Error: " + e);
+                    appAlert("Error al detener dev server: " + e, "Error", "❌");
                 }
             } else {
                 // Start
@@ -4617,10 +4768,10 @@
                             setTimeout(reloadPreviewFrame, 1500);
                         }
                     } else {
-                        alert("Error al iniciar dev server: " + (await res.text()));
+                        appAlert("Error al iniciar dev server: " + (await res.text()), "Error en Dev Server", "❌");
                     }
                 } catch (e) {
-                    alert("Error: " + e);
+                    appAlert("Error de red: " + e, "Error de Conexión", "❌");
                 }
             }
         }
@@ -4812,7 +4963,7 @@
 
                 document.getElementById('obsidian-raw-editor').value = note.content;
             } catch (e) {
-                alert("Error al abrir nota: " + e);
+                appAlert("Error al abrir nota: " + e, "Error en Obsidian", "❌");
             }
         }
 
@@ -4858,10 +5009,10 @@
                     showToast("Nota guardada en Obsidian!");
                     toggleObsidianEditMode();
                 } else {
-                    alert("Error al guardar: " + (await res.text()));
+                    appAlert("Error al guardar nota: " + (await res.text()), "Error en Obsidian", "❌");
                 }
             } catch (e) {
-                alert("Error: " + e);
+                appAlert("Error de red: " + e, "Error de Conexión", "❌");
             }
         }
 
@@ -4873,7 +5024,8 @@
                 ? `¿Eliminar worktree ${currentBubble.name}?\nSe ejecutará remove-worktree.sh y se limpiará el esquema MySQL asignado.`
                 : `¿Eliminar bubble ${currentBubble.name}?`;
 
-            if (!confirm(msg)) return;
+            const ok = await appConfirm(msg, "Eliminar Tarea", "Eliminar Worktree", "Cancelar", true, "🗑️");
+            if (!ok) return;
 
             try {
                 const token = serverInfo ? serverInfo.authToken : '';
@@ -4886,10 +5038,10 @@
                     document.getElementById('workspace-empty-view').style.display = 'flex';
                     await fetchBubbles();
                 } else {
-                    alert("Error al eliminar worktree: " + (await res.text()));
+                    appAlert("Error al eliminar worktree: " + (await res.text()), "Error", "❌");
                 }
             } catch (e) {
-                alert("Error de red: " + e);
+                appAlert("Error de red: " + e, "Error de Red", "❌");
             }
         }
 
@@ -4973,7 +5125,7 @@
                 if (wizardWs === 'aditum') {
                     const taskId = document.getElementById('aditum-task-id').value.trim();
                     if (!taskId) {
-                        alert("Por favor ingresa un ID de tarea (ej. TAR-1130)");
+                        appAlert("Por favor ingresa un ID de tarea (ej. TAR-1130)", "Campo Requerido", "⚠️");
                         btn.disabled = false;
                         btn.textContent = "⚡ Crear y Configurar Bubble";
                         return;
@@ -4992,7 +5144,7 @@
                 } else {
                     const taskId = document.getElementById('brif-task-id').value.trim();
                     if (!taskId) {
-                        alert("Por favor ingresa un nombre de tarea o spider (ej. dialogos-mx)");
+                        appAlert("Por favor ingresa un nombre de tarea o spider (ej. dialogos-mx)", "Campo Requerido", "⚠️");
                         btn.disabled = false;
                         btn.textContent = "⚡ Crear y Configurar Bubble";
                         return;
@@ -5016,10 +5168,10 @@
                     await fetchBubbles();
                     selectBubble(created.id);
                 } else {
-                    alert("Error al crear bubble: " + (await res.text()));
+                    appAlert("Error al crear bubble: " + (await res.text()), "Error al Crear Tarea", "❌");
                 }
             } catch (e) {
-                alert("Error de red: " + e);
+                appAlert("Error de red: " + e, "Error de Conexión", "❌");
             } finally {
                 btn.disabled = false;
                 btn.textContent = "⚡ Crear y Configurar Bubble";
@@ -5097,10 +5249,10 @@
                     setTimeout(fetchServerInfo, 3500);
                     setTimeout(fetchServerInfo, 7000);
                 } else {
-                    alert("Fallo acción VPN: " + (await res.text()));
+                    appAlert("Fallo acción VPN: " + (await res.text()), "Error de VPN", "❌");
                 }
             } catch (e) {
-                alert("Error de red: " + e);
+                appAlert("Error de red: " + e, "Error de Conexión", "❌");
             }
         }
 
@@ -5753,9 +5905,8 @@
         }
 
         async function killProcessPrompt(pid, name) {
-            if (!confirm(`¿Estás seguro de que deseas forzar el cierre del proceso?\n\nNombre: ${name}\nPID: ${pid}\n\nEsta acción finalizará el proceso inmediatamente.`)) {
-                return;
-            }
+            const ok = await appConfirm(`¿Estás seguro de que deseas forzar el cierre del proceso?\n\nNombre: ${name}\nPID: ${pid}\n\nEsta acción finalizará el proceso inmediatamente.`, "Forzar Cierre de Proceso", "Finalizar Proceso", "Cancelar", true, "💀");
+            if (!ok) return;
             try {
                 const token = serverInfo ? serverInfo.authToken : '';
                 const headers = {
@@ -5772,10 +5923,10 @@
                     fetchSystemStats(true);
                 } else {
                     const err = await res.json();
-                    alert(`No se pudo finalizar el proceso: ${err.error || 'Error desconocido'}`);
+                    appAlert(`No se pudo finalizar el proceso: ${err.error || 'Error desconocido'}`, "Error de Proceso", "❌");
                 }
             } catch (e) {
-                alert("Error de conexión: " + e);
+                appAlert("Error de conexión: " + e, "Error", "❌");
             }
         }
 
@@ -5794,10 +5945,10 @@
                     setTimeout(() => fetchSystemStats(true), 2200);
                 } else {
                     const err = await res.json();
-                    alert(`Error al gestionar servicio: ${err.error || 'Error desconocido'}`);
+                    appAlert(`Error al gestionar servicio: ${err.error || 'Error desconocido'}`, "Error en Servicio", "❌");
                 }
             } catch(e) {
-                alert("Error de conexión: " + e);
+                appAlert("Error de conexión: " + e, "Error", "❌");
             }
         }
 
