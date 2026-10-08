@@ -6046,7 +6046,7 @@
 
         function resumeTaskFromHandoff(bubbleId, taskName, pendingText) {
             if (bubbleId) {
-                const target = bubbles.find(b => b.id === bubbleId);
+                const target = allBubbles.find(b => b.id === bubbleId);
                 if (target) {
                     selectBubble(target);
                     switchWorkspaceTab('terminal');
@@ -6062,7 +6062,7 @@
         function openHandoffModalForActive() {
             const selectEl = document.getElementById('handoff-bubble-select');
             if (selectEl) {
-                selectEl.innerHTML = bubbles.map(b => `
+                selectEl.innerHTML = allBubbles.map(b => `
                     <option value="${b.id}" ${currentBubble && currentBubble.id === b.id ? 'selected' : ''}>
                         ${b.workspace === 'aditum' ? '🏢' : '⚡'} ${escapeHtml(b.name)} (${escapeHtml(b.branch)})
                     </option>
@@ -6128,7 +6128,7 @@
                 return;
             }
 
-            const targetBubble = bubbles.find(b => b.id === bubbleId);
+            const targetBubble = allBubbles.find(b => b.id === bubbleId);
             const taskName = targetBubble ? targetBubble.name : 'Tarea';
 
             const payload = {
@@ -6172,7 +6172,7 @@
             const container = document.getElementById('eod-active-tasks-list');
             if (container) {
                 // Find bubbles that have running sessions
-                const activeBubblesWithTerms = bubbles.filter(b => {
+                const activeBubblesWithTerms = allBubbles.filter(b => {
                     const terms = allSessions.filter(s => s.bubbleId === b.id && s.isRunning);
                     return terms.length > 0;
                 });
@@ -6217,7 +6217,7 @@
         }
 
         function selectBubbleById(id) {
-            const target = bubbles.find(b => b.id === id);
+            const target = allBubbles.find(b => b.id === id);
             if (target) selectBubble(target);
         }
 
