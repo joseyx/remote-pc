@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"remotepc-server/internal/bubble"
+	"remotepc-server/internal/calendar"
 	"remotepc-server/internal/config"
 	"remotepc-server/internal/git"
 	"remotepc-server/internal/obsidian"
@@ -37,6 +39,7 @@ type Server struct {
 	vpnMgr      *vpn.Manager
 	bubbleMgr   *bubble.Manager
 	obsidianMgr *obsidian.Manager
+	calendarMgr *calendar.Manager
 	startedAt   time.Time
 }
 
@@ -47,6 +50,7 @@ func NewServer(cfg *config.Config, manager *session.Manager) *Server {
 		vpnMgr:      vpn.NewManager(),
 		bubbleMgr:   bubble.NewManager(),
 		obsidianMgr: obsidian.NewManager(),
+		calendarMgr: calendar.NewManager(),
 		startedAt:   time.Now(),
 	}
 }
@@ -95,6 +99,13 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/vaults/{vault}/notes", s.withAuth(s.handleSearchNotes))
 	mux.HandleFunc("GET /api/vaults/{vault}/note", s.withAuth(s.handleReadNote))
 	mux.HandleFunc("POST /api/vaults/{vault}/note", s.withAuth(s.handleSaveNote))
+
+	// Calendar & Daily Notes Routes
+	mux.HandleFunc("GET /api/calendar/month", s.withAuth(s.handleCalendarMonth))
+	mux.HandleFunc("GET /api/calendar/note", s.withAuth(s.handleCalendarGetNote))
+	mux.HandleFunc("PUT /api/calendar/note", s.withAuth(s.handleCalendarSaveNote))
+	mux.HandleFunc("POST /api/calendar/handoff", s.withAuth(s.handleCalendarHandoff))
+	mux.HandleFunc("GET /api/calendar/standup", s.withAuth(s.handleCalendarStandup))
 
 	// Embedded Desktop Web Dashboard
 	mux.Handle("/", web.Handler())
@@ -791,6 +802,123 @@ func (s *Server) handleSaveNote(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
+}
+
+func (s *Server) handleCalendarMonth(w http.ResponseWriter, r *http.Request) {
+	yearStr := r.URL.Query().Get("year")
+	monthStr := r.URL.Query().Get("month")
+	now := time.Now()
+	year := now.Year()
+	month := int(now.Month())
+
+	if y, err := strconv.Atoi(yearStr); err == nil && y > 2000 {
+		year = y
+	}
+	if m, err := strconv.Atoi(monthStr); err == nil && m >= 1 && m <= 12 {
+		month = m
+	}
+
+	summary, err := s.calendarMgr.GetMonthSummary(year, month)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(summary)
+}
+
+func (s *Server) handleCalendarGetNote(w http.ResponseWriter, r *http.Request) {
+	date := r.URL.Query().Get("date")
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+
+	note, err := s.calendarMgr.GetDayNote(date)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(note)
+}
+
+func (s *Server) handleCalendarSaveNote(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Date    string `json:"date"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if body.Date == "" {
+		body.Date = time.Now().Format("2006-01-02")
+	}
+
+	if err := s.calendarMgr.SaveDayNote(body.Date, body.Content); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved", "date": body.Date})
+}
+
+func (s *Server) handleCalendarHandoff(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Date     string `json:"date"`
+		BubbleID string `json:"bubbleId"`
+		TaskName string `json:"taskName"`
+		Agent    string `json:"agent"`
+		Status   string `json:"status"`
+		Summary  string `json:"summary"`
+		Pending  string `json:"pending"`
+		Blockers string `json:"blockers"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	workDir := ""
+	if body.BubbleID != "" {
+		if b, ok := s.bubbleMgr.GetBubble(body.BubbleID); ok && b != nil {
+			workDir = b.Path
+			if body.TaskName == "" {
+				body.TaskName = b.Name
+			}
+		}
+	}
+
+	item := calendar.HandoffItem{
+		Date:     body.Date,
+		BubbleID: body.BubbleID,
+		TaskName: body.TaskName,
+		Agent:    body.Agent,
+		Status:   body.Status,
+		Summary:  body.Summary,
+		Pending:  body.Pending,
+		Blockers: body.Blockers,
+	}
+
+	created, err := s.calendarMgr.AddHandoff(item, workDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(created)
+}
+
+func (s *Server) handleCalendarStandup(w http.ResponseWriter, r *http.Request) {
+	date := r.URL.Query().Get("date")
+	standup, err := s.calendarMgr.GetStandup(date)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(standup)
 }
 
 // Helpers

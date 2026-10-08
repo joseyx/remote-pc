@@ -12,6 +12,7 @@ sessions_state.json
 sessions_state.json.tmp
 bubbles_metadata.json
 bubbles_metadata.json.tmp
+calendar_notes/
 
 # Go Build & Dependency Caches
 *.test

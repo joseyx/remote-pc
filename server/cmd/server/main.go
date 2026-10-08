@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -18,8 +19,17 @@ import (
 )
 
 func main() {
-	openFlag := flag.Bool("open", false, "Open web dashboard in browser on start")
+	// Ensure working directory is the executable's directory
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		_ = os.Chdir(exeDir)
+	}
+
+	openFlag := flag.Bool("open", true, "Open web dashboard in browser on start (default: true)")
+	noOpenFlag := flag.Bool("no-open", false, "Do not open web dashboard in browser on start")
 	flag.Parse()
+
+	shouldOpen := *openFlag && !*noOpenFlag
 
 	cfg := config.LoadConfig()
 	manager := session.NewManager(cfg.MaxHistoryKB, "sessions_state.json")
@@ -49,7 +59,7 @@ func main() {
 		Handler: server.Routes(),
 	}
 
-	if *openFlag {
+	if shouldOpen {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			_ = exec.Command("cmd", "/c", "start", dashUrl).Start()
