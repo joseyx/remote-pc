@@ -1004,6 +1004,20 @@ let quakeFitAddon = null;
 let quakeTermWs = null;
 let isQuakeOpen = false;
 
+function fitQuakeTerminal() {
+    if (!quakeFitAddon || !quakeTermObj) return;
+    try {
+        quakeFitAddon.fit();
+        if (quakeTermWs && quakeTermWs.readyState === WebSocket.OPEN) {
+            quakeTermWs.send(JSON.stringify({
+                type: 'resize',
+                cols: quakeTermObj.cols,
+                rows: quakeTermObj.rows
+            }));
+        }
+    } catch (e) {}
+}
+
 async function toggleQuakeTerminal() {
     const container = document.getElementById('quake-terminal-container');
     if (!container) return;
@@ -1011,13 +1025,11 @@ async function toggleQuakeTerminal() {
     isQuakeOpen = !isQuakeOpen;
     if (isQuakeOpen) {
         container.classList.add('open');
-        if (!quakeSessionId) {
+        if (!quakeSessionId || !quakeTermWs || quakeTermWs.readyState !== WebSocket.OPEN) {
             await initQuakeTerminal();
         } else {
             setTimeout(() => {
-                if (quakeFitAddon) {
-                    try { quakeFitAddon.fit(); } catch (e) {}
-                }
+                fitQuakeTerminal();
                 if (quakeTermObj) quakeTermObj.focus();
             }, 120);
         }
@@ -1040,15 +1052,17 @@ async function initQuakeTerminal() {
             ...(token ? { 'Authorization': 'Bearer ' + token } : {})
         };
 
-        // Find or create quake session
-        let sess = allSessions.find(s => s.name === '⚡ Quick Terminal');
+        // Find or create quake session (must be running)
+        let sess = allSessions.find(s => s.name === '⚡ Quick Terminal' && s.isRunning);
         if (!sess) {
+            const cwd = (currentBubble && currentBubble.path) ? currentBubble.path : '';
             const res = await fetch('/api/sessions', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
                     name: '⚡ Quick Terminal',
                     command: 'powershell.exe',
+                    cwd: cwd,
                     cols: 120,
                     rows: 25
                 })
@@ -1061,6 +1075,19 @@ async function initQuakeTerminal() {
 
         if (!sess) return;
         quakeSessionId = sess.id;
+
+        // Cleanup existing WS / Term if any
+        if (quakeTermWs) {
+            quakeTermWs.onopen = null;
+            quakeTermWs.onclose = null;
+            quakeTermWs.onmessage = null;
+            quakeTermWs.close();
+            quakeTermWs = null;
+        }
+        if (quakeTermObj) {
+            try { quakeTermObj.dispose(); } catch (e) {}
+            quakeTermObj = null;
+        }
 
         embed.innerHTML = '';
         quakeTermObj = new Terminal({
@@ -1093,23 +1120,40 @@ async function initQuakeTerminal() {
         const wsUrl = `${protocol}//${window.location.host}/ws/session/${quakeSessionId}?token=${encodeURIComponent(token)}`;
 
         quakeTermWs = new WebSocket(wsUrl);
-        quakeTermWs.onmessage = e => {
+        quakeTermWs.binaryType = 'arraybuffer';
+
+        quakeTermWs.onopen = () => {
+            setTimeout(fitQuakeTerminal, 80);
+            setTimeout(fitQuakeTerminal, 250);
+        };
+
+        quakeTermWs.onmessage = (e) => {
+            if (!quakeTermObj) return;
             try {
-                const msg = JSON.parse(e.data);
-                if (msg.type === "output" && msg.data) {
-                    quakeTermObj.write(msg.data);
+                if (e.data instanceof ArrayBuffer) {
+                    quakeTermObj.write(new Uint8Array(e.data));
+                } else if (e.data instanceof Blob) {
+                    e.data.arrayBuffer().then(buf => {
+                        if (quakeTermObj) quakeTermObj.write(new Uint8Array(buf));
+                    });
+                } else {
+                    quakeTermObj.write(e.data);
                 }
-            } catch(err) {}
+            } catch (err) {
+                console.warn("quake xterm write error:", err);
+            }
+        };
+
+        quakeTermWs.onclose = () => {
+            quakeSessionId = null;
         };
 
         setTimeout(() => {
-            if (quakeFitAddon) {
-                try { quakeFitAddon.fit(); } catch (e) {}
-            }
+            fitQuakeTerminal();
             if (quakeTermObj) quakeTermObj.focus();
         }, 150);
 
-    } catch(err) {
+    } catch (err) {
         console.error("Failed to init Quake terminal:", err);
     }
 }
