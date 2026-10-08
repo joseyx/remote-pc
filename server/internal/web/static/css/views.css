@@ -1,0 +1,283 @@
+/* ==========================================
+   Preview IFrame, Git Diff & Obsidian Vault
+   ========================================== */
+
+/* Web Preview Tab */
+.preview-bar {
+    background-color: var(--bg-card);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.preview-address-input {
+    flex: 1;
+    background-color: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    color: var(--text-main);
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.preview-frame {
+    flex: 1;
+    border: none;
+    background-color: #ffffff;
+    width: 100%;
+    height: 100%;
+}
+
+/* Git & Diff Tab */
+.git-layout {
+    flex: 1;
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+}
+
+.git-sidebar {
+    width: 280px;
+    background-color: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.git-sidebar-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.git-files-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.git-file-item {
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-family: monospace;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+}
+
+.git-file-item:hover {
+    background-color: var(--bg-elevated);
+    color: var(--text-main);
+}
+
+.git-file-item.active {
+    background-color: var(--bg-elevated);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+}
+
+.git-status-badge {
+    font-size: 10px;
+    font-weight: bold;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.git-diff-viewer {
+    flex: 1;
+    padding: 14px;
+    overflow-y: auto;
+    background-color: #0b0f19;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.diff-add {
+    color: #4ade80;
+    background-color: rgba(74, 222, 128, 0.1);
+    display: block;
+    padding: 1px 4px;
+}
+
+.diff-del {
+    color: #f87171;
+    background-color: rgba(248, 113, 113, 0.1);
+    display: block;
+    padding: 1px 4px;
+}
+
+.diff-header {
+    color: #38bdf8;
+    font-weight: bold;
+    display: block;
+    margin-top: 6px;
+}
+
+/* Obsidian Tab */
+.obsidian-layout {
+    flex: 1;
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+}
+
+.obsidian-sidebar {
+    width: 300px;
+    background-color: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.obsidian-search-box {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.obsidian-input {
+    background-color: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    color: var(--text-main);
+    font-size: 12px;
+    width: 100%;
+}
+
+.obsidian-notes-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.obsidian-note-item {
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    transition: all 0.15s ease;
+}
+
+.obsidian-note-item:hover {
+    background-color: var(--bg-elevated);
+}
+
+.obsidian-note-item.active {
+    background-color: var(--bg-elevated);
+    border-left: 3px solid var(--accent);
+}
+
+.obsidian-note-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.obsidian-note-path {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.obsidian-editor-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--bg-base);
+}
+
+.obsidian-editor-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--bg-surface);
+    flex-shrink: 0;
+}
+
+.obsidian-markdown-body {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    line-height: 1.7;
+    font-size: 14px;
+    color: #e2e8f0;
+}
+
+.obsidian-markdown-body h1, .obsidian-markdown-body h2, .obsidian-markdown-body h3 {
+    color: #f8fafc;
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 4px;
+}
+
+.obsidian-markdown-body pre {
+    background-color: #0b0f19;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.obsidian-markdown-body code {
+    background-color: rgba(255, 255, 255, 0.08);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #38bdf8;
+}
+
+.obsidian-raw-textarea {
+    flex: 1;
+    background-color: #0b0f19;
+    color: var(--text-main);
+    border: none;
+    padding: 18px;
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+}

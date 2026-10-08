@@ -1,0 +1,17 @@
+/* ==========================================
+   Responsive & Mobile Adjustments
+   ========================================== */
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+    .app-container {
+        flex-direction: column;
+    }
+    .sidebar {
+        width: 100%;
+        height: 40vh;
+    }
+    .main-workspace {
+        height: 60vh;
+    }
+}

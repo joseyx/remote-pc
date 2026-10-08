@@ -1,0 +1,301 @@
+/* ==========================================
+   Terminal View, Split Screen, Context Menu & Quake
+   ========================================== */
+
+/* Terminal Tab View */
+.term-subtabs-bar {
+    background-color: var(--bg-card);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 6px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 12px;
+    overflow-x: auto;
+}
+
+.term-subtabs {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    overflow-x: auto;
+    min-width: 0;
+    flex: 1;
+}
+
+.term-subtab-btn {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+    position: relative;
+    user-select: none;
+    opacity: 0.82;
+}
+
+.term-subtab-btn:hover {
+    color: var(--text-main);
+    border-color: var(--border-muted);
+    opacity: 1;
+}
+
+.term-subtab-btn.active {
+    background: linear-gradient(180deg, rgba(56, 189, 248, 0.18) 0%, rgba(30, 41, 59, 0.95) 100%);
+    color: #ffffff;
+    font-weight: 700;
+    border-color: var(--accent);
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.35), inset 0 -3px 0 var(--accent);
+    opacity: 1;
+}
+
+.term-active-pill {
+    color: var(--accent);
+    font-size: 8px;
+    margin-right: -2px;
+    animation: pulseGlow 2s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { opacity: 0.7; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.2); }
+}
+
+.term-subtab-rename-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    opacity: 0.6;
+    margin-left: 2px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+
+.term-subtab-btn:hover .term-subtab-rename-btn {
+    display: inline-flex;
+}
+
+.term-subtab-rename-btn:hover {
+    opacity: 1;
+    transform: scale(1.2);
+    color: var(--accent);
+}
+
+.term-subtab-close {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-left: 2px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+
+.term-subtab-btn:hover .term-subtab-close {
+    display: inline-flex;
+}
+
+.term-subtab-close:hover {
+    background-color: rgba(244, 63, 94, 0.25);
+    color: var(--red);
+}
+
+.term-container {
+    flex: 1;
+    padding: 0;
+    background-color: #0d1117;
+    overflow: hidden;
+    display: flex;
+    position: relative;
+}
+
+.term-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+}
+
+.term-pane-header {
+    background: #161b22;
+    padding: 4px 10px;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+
+/* Split Resizer (Draggable Gutter) */
+.split-resizer {
+    flex-shrink: 0;
+    z-index: 20;
+    background-color: var(--border-subtle);
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    position: relative;
+}
+
+.split-resizer::after {
+    content: '';
+    position: absolute;
+    z-index: 21;
+}
+
+.split-resizer.horizontal {
+    width: 6px;
+    cursor: col-resize;
+}
+
+.split-resizer.horizontal::after {
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    right: -3px;
+}
+
+.split-resizer.vertical {
+    height: 6px;
+    cursor: row-resize;
+}
+
+.split-resizer.vertical::after {
+    left: 0;
+    right: 0;
+    top: -3px;
+    bottom: -3px;
+}
+
+.split-resizer:hover,
+.split-resizer.dragging {
+    background-color: var(--accent) !important;
+    box-shadow: 0 0 10px var(--accent-glow) !important;
+}
+
+/* Custom Context Menu */
+.custom-context-menu {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.85);
+    z-index: 500;
+    min-width: 220px;
+    padding: 4px;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ctx-item {
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.12s ease;
+    width: 100%;
+}
+
+.ctx-item:hover {
+    background-color: var(--bg-elevated);
+    color: var(--accent);
+}
+
+.ctx-item.danger:hover {
+    background-color: rgba(244, 63, 94, 0.18);
+    color: var(--red);
+}
+
+.ctx-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 3px 0;
+}
+
+/* Terminal In-Buffer Search Bar */
+.term-search-bar {
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-sm);
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 35;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+}
+
+.term-search-bar input {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-main);
+    padding: 4px 8px;
+    font-size: 11px;
+    width: 170px;
+    outline: none;
+}
+
+.term-search-bar input:focus {
+    border-color: var(--accent);
+}
+
+
+/* Quake Terminal Dropdown (F12) */
+#quake-terminal-container {
+    position: fixed;
+    top: -55vh;
+    left: 0;
+    right: 0;
+    height: 46vh;
+    background: rgba(10, 15, 29, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 2px solid var(--accent);
+    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.92);
+    z-index: 2500;
+    display: flex;
+    flex-direction: column;
+    transition: top 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#quake-terminal-container.open {
+    top: 0;
+}
+
+.quake-header {
+    padding: 8px 16px;
+    background: rgba(15, 23, 42, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+}

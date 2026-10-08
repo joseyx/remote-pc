@@ -1,0 +1,263 @@
+/* ==========================================
+   Universal Dialogs, Command Palette, Modals & Stats
+   ========================================== */
+
+/* Command Palette Modal (Ctrl+K) */
+.cmd-palette-content {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-md);
+    width: 100%;
+    max-width: 580px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalFadeIn 0.15s ease-out;
+    max-height: 80vh;
+}
+
+.cmd-palette-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background-color: var(--bg-card);
+}
+
+.cmd-palette-icon {
+    font-size: 16px;
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.cmd-palette-header input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-main);
+    font-size: 14px;
+}
+
+.cmd-palette-esc {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.cmd-palette-list {
+    overflow-y: auto;
+    max-height: 420px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cmd-palette-category {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim);
+    padding: 6px 8px 3px;
+}
+
+.cmd-palette-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.12s ease;
+    color: var(--text-main);
+    font-size: 13px;
+    border: 1px solid transparent;
+}
+
+.cmd-palette-item:hover,
+.cmd-palette-item.selected {
+    background-color: var(--bg-elevated);
+    border-color: var(--border-muted);
+    color: var(--accent);
+}
+
+.cmd-palette-item-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cmd-palette-shortcut {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+.term-mobile-bar {
+    background-color: var(--bg-surface);
+    border-top: 1px solid var(--border-subtle);
+    padding: 6px 10px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+
+/* Modals */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-box {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 580px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+}
+
+.modal-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-body {
+    padding: 18px;
+    overflow-y: auto;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.modal-footer {
+    padding: 12px 18px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.form-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.form-control {
+    background-color: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    color: var(--text-main);
+    font-size: 13px;
+}
+
+.form-control:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.form-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+
+/* Floating System Stats Window */
+#modal-sys-stats {
+    position: fixed;
+    z-index: 1000;
+    width: 580px;
+    max-width: calc(100vw - 20px);
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.82), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+    transition: box-shadow 0.2s ease, opacity 0.15s ease;
+}
+
+#modal-sys-stats.open {
+    display: flex;
+}
+
+#modal-sys-stats.is-dragging {
+    opacity: 0.92;
+    box-shadow: 0 28px 60px rgba(0, 0, 0, 0.92), 0 0 0 2px var(--accent);
+}
+
+.float-window-header {
+    padding: 10px 14px;
+    background: rgba(30, 41, 59, 0.78);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: grab;
+}
+
+.float-window-header:active {
+    cursor: grabbing;
+}
+
+.float-window-drag-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.drag-dots {
+    color: var(--text-dim);
+    font-size: 15px;
+    letter-spacing: -1px;
+    line-height: 1;
+    user-select: none;
+}

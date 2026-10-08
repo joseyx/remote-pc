@@ -1,0 +1,169 @@
+/* ==========================================
+   Base Theme, Typography, Buttons & Scrollbars
+   ========================================== */
+
+:root {
+    --bg-base: #0a0e17;
+    --bg-surface: #111827;
+    --bg-card: #182234;
+    --bg-elevated: #1e293b;
+    --bg-hover: #26334d;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-muted: rgba(255, 255, 255, 0.12);
+    --border-active: rgba(59, 130, 246, 0.5);
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-dim: #64748b;
+    --accent: #38bdf8;
+    --accent-glow: rgba(56, 189, 248, 0.25);
+    --green: #10b981;
+    --green-glow: rgba(16, 185, 129, 0.2);
+    --red: #f43f5e;
+    --amber: #f59e0b;
+    --purple: #a855f7;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --sidebar-width: 320px;
+}
+
+html, :root {
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+    scrollbar-width: thin;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--bg-base);
+    color: var(--text-main);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* General Buttons */
+.btn {
+    background-color: var(--bg-elevated);
+    color: var(--text-main);
+    border: 1px solid var(--border-subtle);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--border-muted);
+    transform: translateY(-1px);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #0284c7, #0369a1);
+    border-color: #38bdf8;
+    color: white;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #0369a1, #0284c7);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #059669, #047857);
+    border-color: #34d399;
+    color: white;
+}
+
+.btn-danger {
+    background-color: rgba(244, 63, 94, 0.15);
+    color: var(--red);
+    border-color: rgba(244, 63, 94, 0.3);
+}
+
+.btn-danger:hover {
+    background-color: rgba(244, 63, 94, 0.25);
+    border-color: var(--red);
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+
+/* Custom Dark Scrollbars across app and xterm */
+::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(13, 17, 23, 0.4);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #30363d;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #58a6ff;
+}
+
+/* XTerm Specific Viewport Scrollbar Override */
+.xterm .xterm-viewport {
+    background-color: transparent !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(148, 163, 184, 0.3) transparent !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar {
+    width: 6px !important;
+    height: 6px !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.28) !important;
+    border-radius: 3px !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(56, 189, 248, 0.6) !important;
+}
+
+
+/* Toast */
+#toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background-color: var(--bg-elevated);
+    color: var(--text-main);
+    border: 1px solid var(--accent);
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    display: none;
+    z-index: 300;
+}
