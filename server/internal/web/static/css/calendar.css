@@ -582,12 +582,66 @@
     gap: 6px;
 }
 
-.handoff-detail-section-content {
+.handoff-detail-section-content,
+.handoff-markdown-body {
     font-size: 13px;
     line-height: 1.6;
     color: var(--text-main);
-    white-space: pre-wrap;
     word-break: break-word;
+}
+
+.handoff-markdown-body ol,
+.handoff-detail-section-content ol {
+    margin: 6px 0;
+    padding-left: 22px;
+    list-style-type: decimal;
+}
+
+.handoff-markdown-body ul,
+.handoff-detail-section-content ul {
+    margin: 6px 0;
+    padding-left: 20px;
+    list-style-type: disc;
+}
+
+.handoff-markdown-body li,
+.handoff-detail-section-content li {
+    margin-bottom: 6px;
+    line-height: 1.55;
+    color: #e2e8f0;
+}
+
+.handoff-markdown-body li::marker,
+.handoff-detail-section-content li::marker {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.handoff-markdown-body p,
+.handoff-detail-section-content p {
+    margin: 0 0 6px 0;
+}
+
+.handoff-markdown-body p:last-child,
+.handoff-detail-section-content p:last-child {
+    margin-bottom: 0;
+}
+
+.handoff-markdown-body code,
+.handoff-detail-section-content code {
+    background: rgba(255, 255, 255, 0.08);
+    color: #38bdf8;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.handoff-markdown-body strong,
+.handoff-detail-section-content strong {
+    color: #f8fafc;
+    font-weight: 600;
 }
 
 /* Empty State */

@@ -85,11 +85,11 @@ TOOLS = [
             "properties": {
                 "summary": {
                     "type": "string",
-                    "description": "Qué se logró hoy (tickets, archivos modificados, bugs corregidos, features implementadas y pruebas que pasaron)."
+                    "description": "Qué se logró hoy formateado en Markdown estructurado (usa viñetas con saltos de línea '- ...', backticks para `commits/tickets` y negritas; NO un solo párrafo continuo)."
                 },
                 "pending": {
                     "type": "string",
-                    "description": "Qué queda pendiente para continuar mañana (próximos pasos técnicos claros, commits por hacer, pruebas pendientes)."
+                    "description": "Qué queda pendiente para continuar mañana formateado en Markdown (usa lista numerada con saltos de línea '1. ...\\n2. ...' o checkboxes '- [ ] ...'; NUNCA un párrafo corrido)."
                 },
                 "status": {
                     "type": "string",

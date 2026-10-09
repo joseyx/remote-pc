@@ -257,6 +257,30 @@ function renderHandoffsList() {
     `;
 }
 
+function formatHandoffMarkdown(text) {
+    if (!text) return '';
+    let processed = String(text).trim();
+
+    // 1. Normalize enumerated lists written inline: "1) Item... 2) Item..." or "1. Item... 2. Item..." -> "1. Item...\n2. Item..."
+    processed = processed.replace(/^(\d+)[\)\.]\s+/, '$1. ');
+    processed = processed.replace(/([^\n])\s+(\d+)[\)\.]\s+([A-Za-zÁ-ÿ0-9¿¡])/g, '$1\n$2. $3');
+
+    // 2. Normalize inline bullet points: "item • item" -> "item\n- item"
+    processed = processed.replace(/([^\n])\s+[•\*]\s+([A-Za-zÁ-ÿ0-9¿¡])/g, '$1\n- $2');
+    processed = processed.replace(/^[•\*]\s+/, '- ');
+
+    // 3. Render using marked
+    if (typeof marked !== 'undefined') {
+        try {
+            return marked.parse(processed);
+        } catch (e) {
+            console.warn("Markdown parse error:", e);
+        }
+    }
+
+    return escapeHtml(processed).replace(/\n/g, '<br/>');
+}
+
 function renderHandoffCardHtml(h) {
     let statusClass = 'in_progress';
     let statusText = '🟡 En Progreso';
@@ -292,11 +316,11 @@ function renderHandoffCardHtml(h) {
         `;
     }
 
-    let summaryText = escapeHtml(h.summary || '');
-    let pendingText = escapeHtml(h.pending || '');
+    let summaryContent = h.summary || '';
+    let pendingContent = h.pending || '';
     if (!calAllHandoffsExpanded) {
-        if (summaryText.length > 200) summaryText = summaryText.slice(0, 197) + '...';
-        if (pendingText.length > 200) pendingText = pendingText.slice(0, 197) + '...';
+        if (summaryContent.length > 280) summaryContent = summaryContent.slice(0, 277) + '...';
+        if (pendingContent.length > 280) pendingContent = pendingContent.slice(0, 277) + '...';
     }
 
     return `
@@ -315,19 +339,19 @@ function renderHandoffCardHtml(h) {
                 ${h.summary ? `
                     <div class="handoff-section-row">
                         <span class="handoff-section-label">✓ Lo logrado hoy:</span>
-                        <span>${summaryText}</span>
+                        <div class="handoff-markdown-body" style="flex: 1;">${formatHandoffMarkdown(summaryContent)}</div>
                     </div>
                 ` : ''}
                 ${h.pending ? `
                     <div class="handoff-section-row">
                         <span class="handoff-section-label" style="color: var(--accent);">⏳ Pendiente para mañana:</span>
-                        <strong style="color: var(--text-main);">${pendingText}</strong>
+                        <div class="handoff-markdown-body" style="flex: 1; color: var(--text-main);">${formatHandoffMarkdown(pendingContent)}</div>
                     </div>
                 ` : ''}
                 ${h.blockers ? `
                     <div class="handoff-section-row">
                         <span class="handoff-section-label" style="color: var(--red);">⛔ Puntos de atención:</span>
-                        <span style="color: #fb7185;">${escapeHtml(h.blockers)}</span>
+                        <div class="handoff-markdown-body" style="flex: 1; color: #fb7185;">${formatHandoffMarkdown(h.blockers)}</div>
                     </div>
                 ` : ''}
                 ${gitBar}
@@ -436,13 +460,13 @@ function openHandoffDetail(id) {
         statusEl.textContent = statusText;
     }
 
-    if (summaryEl) summaryEl.textContent = h.summary || 'Sin descripción de lo completado.';
-    if (pendingEl) pendingEl.textContent = h.pending || 'Sin tareas pendientes registradas.';
+    if (summaryEl) summaryEl.innerHTML = formatHandoffMarkdown(h.summary || '*Sin descripción de lo completado.*');
+    if (pendingEl) pendingEl.innerHTML = formatHandoffMarkdown(h.pending || '*Sin tareas pendientes registradas.*');
 
     if (blockersCont && blockersEl) {
         if (h.blockers && h.blockers.trim()) {
             blockersCont.style.display = 'block';
-            blockersEl.textContent = h.blockers;
+            blockersEl.innerHTML = formatHandoffMarkdown(h.blockers);
         } else {
             blockersCont.style.display = 'none';
         }

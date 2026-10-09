@@ -196,6 +196,16 @@ func (m *Manager) AddHandoff(item HandoffItem, workDir string) (*HandoffItem, er
 	return &item, nil
 }
 
+func indentLines(text string, indent string) string {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			lines[i] = indent + l
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m *Manager) renderHandoffBlock(item HandoffItem) string {
 	statusEmoji := "🟡 En Progreso"
 	switch item.Status {
@@ -217,10 +227,18 @@ func (m *Manager) renderHandoffBlock(item HandoffItem) string {
 	block.WriteString(fmt.Sprintf("\n### %s | %s (%s)\n", item.TaskName, agentIcon, item.Time))
 	block.WriteString(fmt.Sprintf("- **Estado:** %s\n", statusEmoji))
 	if item.Summary != "" {
-		block.WriteString(fmt.Sprintf("- **Lo completado hoy:** %s\n", item.Summary))
+		if strings.Contains(item.Summary, "\n") {
+			block.WriteString("- **Lo completado hoy:**\n" + indentLines(item.Summary, "  ") + "\n")
+		} else {
+			block.WriteString(fmt.Sprintf("- **Lo completado hoy:** %s\n", item.Summary))
+		}
 	}
 	if item.Pending != "" {
-		block.WriteString(fmt.Sprintf("- **Pendiente para mañana:** %s\n", item.Pending))
+		if strings.Contains(item.Pending, "\n") {
+			block.WriteString("- **Pendiente para mañana:**\n" + indentLines(item.Pending, "  ") + "\n")
+		} else {
+			block.WriteString(fmt.Sprintf("- **Pendiente para mañana:** %s\n", item.Pending))
+		}
 	}
 	if item.Blockers != "" {
 		block.WriteString(fmt.Sprintf("- **Bloqueos / Atención:** %s\n", item.Blockers))
