@@ -870,6 +870,7 @@ func (s *Server) handleCalendarHandoff(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Date     string `json:"date"`
 		BubbleID string `json:"bubbleId"`
+		WorkDir  string `json:"workDir"`
 		TaskName string `json:"taskName"`
 		Agent    string `json:"agent"`
 		Status   string `json:"status"`
@@ -890,6 +891,9 @@ func (s *Server) handleCalendarHandoff(w http.ResponseWriter, r *http.Request) {
 				body.TaskName = b.Name
 			}
 		}
+	}
+	if workDir == "" && body.WorkDir != "" {
+		workDir = body.WorkDir
 	}
 
 	item := calendar.HandoffItem{
