@@ -868,9 +868,12 @@
                     </div>
                 </div>
 
-                <div style="margin-bottom: 12px; display: flex; justify-content: flex-end;">
-                    <button class="btn btn-sm btn-ghost" type="button" onclick="requestAgentSummaryForHandoff()" style="color: var(--accent); font-size: 11px;">
-                        🤖 Pedir resumen al agente en terminal
+                <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
+                    <span style="font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 6px;">
+                        <span>✨</span> Borrador automático generado con Git y Terminal
+                    </span>
+                    <button class="btn btn-sm" id="btn-handoff-autofill" type="button" onclick="autoFillHandoffDraft()" style="color: var(--accent); border-color: rgba(56,189,248,0.4); font-size: 11px; padding: 3px 10px;">
+                        ⚡ Regenerar Borrador
                     </button>
                 </div>
 
@@ -918,6 +921,11 @@
                     <label class="form-label">Tareas activas con terminales hoy:</label>
                     <div id="eod-active-tasks-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
                         <!-- Injected dynamically -->
+                    </div>
+                    <div style="margin-top: 8px; display: flex; justify-content: flex-end;">
+                        <button class="btn btn-sm btn-primary" id="eod-autosave-all-btn" onclick="autoSaveAllActiveHandoffs()" style="background: linear-gradient(135deg, #0284c7, #6366f1); font-size: 11px; padding: 4px 10px;">
+                            ⚡ Auto-guardar Handoff de todas las tareas activas
+                        </button>
                     </div>
                 </div>
 

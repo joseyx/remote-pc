@@ -52,6 +52,19 @@ type StandupSummary struct {
 	PendingItems  []HandoffItem `json:"pendingItems"`
 }
 
+type HandoffDraft struct {
+	BubbleID   string `json:"bubbleId"`
+	TaskName   string `json:"taskName"`
+	Agent      string `json:"agent"`
+	Status     string `json:"status"` // "in_progress", "completed", "blocked"
+	Summary    string `json:"summary"`
+	Pending    string `json:"pending"`
+	Blockers   string `json:"blockers"`
+	Branch     string `json:"branch"`
+	LastCommit string `json:"lastCommit"`
+	DirtyFiles int    `json:"dirtyFiles"`
+}
+
 type Manager struct {
 	mu        sync.RWMutex
 	notesDir  string
@@ -361,3 +374,120 @@ func (m *Manager) GetStandup(referenceDate ...string) (*StandupSummary, error) {
 		PendingItems:  pending,
 	}, nil
 }
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\r`)
+
+func cleanTerminalAnsi(input string) string {
+	cleaned := ansiRegex.ReplaceAllString(input, "")
+	return strings.TrimSpace(cleaned)
+}
+
+// GenerateDraft builds an intelligent, automated handoff proposal based on Git changes and terminal activity
+func (m *Manager) GenerateDraft(bubbleID, bubbleName, workDir, agentRole, terminalSnippet string) (*HandoffDraft, error) {
+	draft := &HandoffDraft{
+		BubbleID: bubbleID,
+		TaskName: bubbleName,
+		Agent:    "claude",
+		Status:   "in_progress",
+	}
+
+	if agentRole == "agy" {
+		draft.Agent = "agy"
+	} else if agentRole == "developer" {
+		draft.Agent = "developer"
+	} else if agentRole == "claude" {
+		draft.Agent = "claude"
+	}
+
+	var branch string
+	var commits []git.CommitInfo
+	var status *git.StatusResult
+
+	if workDir != "" {
+		if b, err := git.GetBranch(workDir); err == nil && b != "" {
+			branch = b
+			draft.Branch = b
+		}
+		if logs, err := git.GetRecentLog(workDir, 5); err == nil && len(logs) > 0 {
+			commits = logs
+			draft.LastCommit = fmt.Sprintf("%s (%s)", logs[0].Hash, logs[0].Message)
+		}
+		if st, err := git.GetStatus(workDir); err == nil && st != nil {
+			status = st
+			draft.DirtyFiles = len(st.Changes)
+		}
+	}
+
+	// Status determination
+	if draft.DirtyFiles > 0 {
+		draft.Status = "in_progress"
+	} else if len(commits) > 0 {
+		draft.Status = "completed"
+	}
+
+	// Build Summary
+	var sumParts []string
+	if len(commits) > 0 {
+		var commitLines []string
+		for i, c := range commits {
+			if i >= 3 {
+				break
+			}
+			commitLines = append(commitLines, fmt.Sprintf("• %s (%s)", c.Message, c.Hash))
+		}
+		sumParts = append(sumParts, "Commits recientes:\n"+strings.Join(commitLines, "\n"))
+	}
+
+	if status != nil && len(status.Changes) > 0 {
+		var fileNames []string
+		for i, ch := range status.Changes {
+			if i >= 4 {
+				fileNames = append(fileNames, fmt.Sprintf("... y %d más", len(status.Changes)-4))
+				break
+			}
+			fileNames = append(fileNames, filepath.Base(ch.Path))
+		}
+		sumParts = append(sumParts, fmt.Sprintf("Archivos modificados (%d): %s", len(status.Changes), strings.Join(fileNames, ", ")))
+	}
+
+	// Look at terminal snippet if available
+	cleanedTerm := cleanTerminalAnsi(terminalSnippet)
+	if cleanedTerm != "" {
+		lines := strings.Split(cleanedTerm, "\n")
+		var meaningful []string
+		for i := len(lines) - 1; i >= 0 && len(meaningful) < 3; i-- {
+			l := strings.TrimSpace(lines[i])
+			if len(l) > 15 && !strings.HasPrefix(l, "PS ") && !strings.HasPrefix(l, "C:\\") && !strings.Contains(l, "webpack") && !strings.Contains(l, "node_modules") {
+				meaningful = append([]string{l}, meaningful...)
+			}
+		}
+		if len(meaningful) > 0 {
+			sumParts = append(sumParts, "Última actividad en consola:\n• "+strings.Join(meaningful, "\n• "))
+		}
+	}
+
+	if len(sumParts) == 0 {
+		if branch != "" {
+			draft.Summary = "Avance general en la rama " + branch
+		} else {
+			draft.Summary = "Avance general en la tarea " + bubbleName
+		}
+	} else {
+		draft.Summary = strings.Join(sumParts, "\n\n")
+	}
+
+	// Build Pending
+	var pendParts []string
+	if draft.DirtyFiles > 0 {
+		pendParts = append(pendParts, fmt.Sprintf("• Revisar y commitear %d archivos pendientes de cambios locales.", draft.DirtyFiles))
+	}
+	if branch != "" && branch != "main" && branch != "master" {
+		pendParts = append(pendParts, fmt.Sprintf("• Continuar desarrollo y pruebas en la rama '%s'.", branch))
+	} else {
+		pendParts = append(pendParts, "• Continuar con el siguiente ticket o integración.")
+	}
+	draft.Pending = strings.Join(pendParts, "\n")
+
+	return draft, nil
+}
+

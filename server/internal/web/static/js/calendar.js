@@ -423,20 +423,14 @@ function openHandoffModalForActive() {
         `).join('');
     }
 
-    // Preset agent based on active terminal session role
-    const agentSelect = document.getElementById('handoff-agent-select');
-    if (agentSelect && activeBubbleSession) {
-        if (activeBubbleSession.role === 'agy') agentSelect.value = 'agy';
-        else if (activeBubbleSession.role === 'claude') agentSelect.value = 'claude';
-        else agentSelect.value = 'developer';
-    }
-
-    document.getElementById('handoff-summary-input').value = '';
-    document.getElementById('handoff-pending-input').value = '';
-    document.getElementById('handoff-blockers-input').value = '';
-
     const modal = document.getElementById('modal-handoff');
     if (modal) modal.classList.add('open');
+
+    // Automatically generate and pre-fill draft from Git and agent terminal
+    const targetBubbleId = (currentBubble && currentBubble.id) || (bubbleSelect ? bubbleSelect.value : '');
+    if (targetBubbleId) {
+        autoFillHandoffDraft(targetBubbleId);
+    }
 }
 
 function closeHandoffModal() {
@@ -445,27 +439,57 @@ function closeHandoffModal() {
 }
 
 function onHandoffBubbleChange() {
-    // Can adapt presets if needed
+    const bubbleSelect = document.getElementById('handoff-bubble-select');
+    if (!bubbleSelect) return;
+    document.getElementById('handoff-summary-input').value = '';
+    document.getElementById('handoff-pending-input').value = '';
+    document.getElementById('handoff-blockers-input').value = '';
+    autoFillHandoffDraft(bubbleSelect.value);
 }
 
-function requestAgentSummaryForHandoff() {
-    // Find active terminal session in selected bubble
-    const bubbleId = document.getElementById('handoff-bubble-select').value;
-    const bSessions = allSessions.filter(s => s.bubbleId === bubbleId && s.isRunning);
-    const agentSess = bSessions.find(s => s.role === 'claude' || s.role === 'agy') || bSessions[0];
+async function autoFillHandoffDraft(bubbleId) {
+    if (!bubbleId) {
+        const bubbleSelect = document.getElementById('handoff-bubble-select');
+        if (bubbleSelect) bubbleId = bubbleSelect.value;
+    }
+    if (!bubbleId) return;
 
-    if (!agentSess) {
-        showToast("No hay ninguna terminal activa en esa tarea para solicitar el resumen.");
-        return;
+    const summaryEl = document.getElementById('handoff-summary-input');
+    const pendingEl = document.getElementById('handoff-pending-input');
+    const blockersEl = document.getElementById('handoff-blockers-input');
+    const agentSelect = document.getElementById('handoff-agent-select');
+    const statusSelect = document.getElementById('handoff-status-select');
+    const autoBtn = document.getElementById('btn-handoff-autofill');
+
+    if (summaryEl) summaryEl.placeholder = "⚡ Analizando Git y terminal del agente...";
+    if (pendingEl) pendingEl.placeholder = "⚡ Analizando cambios pendientes...";
+    if (autoBtn) {
+        autoBtn.disabled = true;
+        autoBtn.innerHTML = '⚡ Analizando Git & Agente...';
     }
 
-    // Send prompt to the terminal socket if connected or notify
-    const prompt = "Por favor genera un resumen de cierre de jornada (handoff): 1) Estado del ticket, 2) Lo completado hoy, 3) Lo pendiente para mañana.\r";
-    if (ws && ws.readyState === WebSocket.OPEN && currentSessionId === agentSess.id) {
-        ws.send(new TextEncoder().encode(prompt));
-        showToast("Prompt de handoff enviado a la terminal activa.");
-    } else {
-        showToast(`Abre la terminal de ${agentSess.name} y pide al agente el resumen de fin de día.`);
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(`/api/calendar/handoff/draft?bubbleId=${encodeURIComponent(bubbleId)}`, { headers });
+        if (res.ok) {
+            const draft = await res.json();
+            if (summaryEl) summaryEl.value = draft.summary || '';
+            if (pendingEl) pendingEl.value = draft.pending || '';
+            if (blockersEl) blockersEl.value = draft.blockers || '';
+            if (agentSelect && draft.agent) agentSelect.value = draft.agent;
+            if (statusSelect && draft.status) statusSelect.value = draft.status;
+            showToast("✨ Borrador generado automáticamente de Git y la terminal");
+        }
+    } catch (e) {
+        console.warn("Could not load auto draft:", e);
+    } finally {
+        if (summaryEl) summaryEl.placeholder = "Ej. Se implementó la lógica de cálculo de mora y se actualizaron los modelos Java...";
+        if (pendingEl) pendingEl.placeholder = "Ej. Ejecutar migraciones Liquibase, escribir pruebas unitarias de mora y conectar endpoint...";
+        if (autoBtn) {
+            autoBtn.disabled = false;
+            autoBtn.innerHTML = '⚡ Auto-completar desde Git & Agente';
+        }
     }
 }
 
@@ -587,6 +611,59 @@ async function disconnectVpnFromEod() {
     } catch (e) {
         showToast("Error al desconectar VPN: " + e);
     }
+}
+
+async function autoSaveAllActiveHandoffs() {
+    const activeBubblesWithTerms = allBubbles.filter(b => {
+        const terms = allSessions.filter(s => s.bubbleId === b.id && s.isRunning);
+        return terms.length > 0;
+    });
+
+    if (activeBubblesWithTerms.length === 0) {
+        showToast("No hay tareas con terminales activas hoy");
+        return;
+    }
+
+    const btn = document.getElementById('eod-autosave-all-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⚡ Guardando handoffs...';
+    }
+
+    let savedCount = 0;
+    const token = serverInfo ? serverInfo.authToken : '';
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+    };
+
+    const targetDate = calSelectedDate || getTodayFormatted();
+
+    for (const b of activeBubblesWithTerms) {
+        try {
+            const res = await fetch('/api/calendar/handoff/auto', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    bubbleId: b.id,
+                    date: targetDate
+                })
+            });
+            if (res.ok) savedCount++;
+        } catch(e) {}
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '⚡ Auto-guardar Handoff de todas';
+    }
+
+    showToast(`Se registraron ${savedCount} handoffs automáticamente en el calendario`);
+    closeEndOfDayModal();
+    await fetchCalendarNote(targetDate);
+    await fetchCalendarMonth(calCurrentYear, calCurrentMonth);
+    await fetchCalendarStandup();
+    switchWorkspaceTab('calendar');
 }
 
 function finishEndOfDayFlow() {

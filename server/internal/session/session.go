@@ -458,6 +458,12 @@ func (s *Session) Resize(cols, rows uint16) error {
 	return s.pty.Resize(cols, rows)
 }
 
+func (s *Session) GetHistory() []byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.buffer.Bytes()
+}
+
 func (s *Session) Subscribe() (chan []byte, []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

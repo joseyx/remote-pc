@@ -105,6 +105,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/calendar/note", s.withAuth(s.handleCalendarGetNote))
 	mux.HandleFunc("PUT /api/calendar/note", s.withAuth(s.handleCalendarSaveNote))
 	mux.HandleFunc("POST /api/calendar/handoff", s.withAuth(s.handleCalendarHandoff))
+	mux.HandleFunc("GET /api/calendar/handoff/draft", s.withAuth(s.handleCalendarHandoffDraft))
+	mux.HandleFunc("POST /api/calendar/handoff/auto", s.withAuth(s.handleCalendarHandoffAuto))
 	mux.HandleFunc("GET /api/calendar/standup", s.withAuth(s.handleCalendarStandup))
 
 	// Embedded Desktop Web Dashboard
@@ -919,6 +921,147 @@ func (s *Server) handleCalendarStandup(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(standup)
+}
+
+func (s *Server) handleCalendarHandoffDraft(w http.ResponseWriter, r *http.Request) {
+	bubbleID := r.URL.Query().Get("bubbleId")
+	workDir := ""
+	bubbleName := "Tarea General"
+	agentRole := "claude"
+	terminalSnippet := ""
+
+	if bubbleID != "" {
+		if b, ok := s.bubbleMgr.GetBubble(bubbleID); ok && b != nil {
+			workDir = b.Path
+			bubbleName = b.Name
+		}
+	} else {
+		// Pick first active running bubble
+		for _, sess := range s.manager.ListSessions() {
+			if sess.BubbleID != "" && sess.IsRunning {
+				if b, ok := s.bubbleMgr.GetBubble(sess.BubbleID); ok && b != nil {
+					bubbleID = b.ID
+					workDir = b.Path
+					bubbleName = b.Name
+					agentRole = sess.Role
+					break
+				}
+			}
+		}
+	}
+
+	// Look up active session in this bubble
+	for _, sessInfo := range s.manager.ListSessions() {
+		if sessInfo.BubbleID == bubbleID && sessInfo.IsRunning {
+			if sessInfo.Role == "claude" || sessInfo.Role == "agy" {
+				agentRole = sessInfo.Role
+			}
+			if sess, ok := s.manager.GetSession(sessInfo.ID); ok && sess != nil {
+				hist := sess.GetHistory()
+				if len(hist) > 0 {
+					tailLen := 3000
+					if len(hist) < tailLen {
+						tailLen = len(hist)
+					}
+					terminalSnippet = string(hist[len(hist)-tailLen:])
+				}
+			}
+			break
+		}
+	}
+
+	draft, err := s.calendarMgr.GenerateDraft(bubbleID, bubbleName, workDir, agentRole, terminalSnippet)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(draft)
+}
+
+func (s *Server) handleCalendarHandoffAuto(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		BubbleID string `json:"bubbleId"`
+		Date     string `json:"date"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	bubbleID := body.BubbleID
+	workDir := ""
+	bubbleName := "Tarea General"
+	agentRole := "claude"
+	terminalSnippet := ""
+
+	if bubbleID != "" {
+		if b, ok := s.bubbleMgr.GetBubble(bubbleID); ok && b != nil {
+			workDir = b.Path
+			bubbleName = b.Name
+		}
+	} else {
+		for _, sess := range s.manager.ListSessions() {
+			if sess.BubbleID != "" && sess.IsRunning {
+				if b, ok := s.bubbleMgr.GetBubble(sess.BubbleID); ok && b != nil {
+					bubbleID = b.ID
+					workDir = b.Path
+					bubbleName = b.Name
+					agentRole = sess.Role
+					break
+				}
+			}
+		}
+	}
+
+	for _, sessInfo := range s.manager.ListSessions() {
+		if sessInfo.BubbleID == bubbleID && sessInfo.IsRunning {
+			if sessInfo.Role == "claude" || sessInfo.Role == "agy" {
+				agentRole = sessInfo.Role
+			}
+			if sess, ok := s.manager.GetSession(sessInfo.ID); ok && sess != nil {
+				hist := sess.GetHistory()
+				if len(hist) > 0 {
+					tailLen := 3000
+					if len(hist) < tailLen {
+						tailLen = len(hist)
+					}
+					terminalSnippet = string(hist[len(hist)-tailLen:])
+				}
+			}
+			break
+		}
+	}
+
+	draft, err := s.calendarMgr.GenerateDraft(bubbleID, bubbleName, workDir, agentRole, terminalSnippet)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	date := body.Date
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+
+	item := calendar.HandoffItem{
+		Date:     date,
+		BubbleID: draft.BubbleID,
+		TaskName: draft.TaskName,
+		Agent:    draft.Agent,
+		Status:   draft.Status,
+		Summary:  draft.Summary,
+		Pending:  draft.Pending,
+		Blockers: draft.Blockers,
+	}
+
+	created, err := s.calendarMgr.AddHandoff(item, workDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(created)
 }
 
 // Helpers

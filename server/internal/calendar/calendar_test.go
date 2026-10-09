@@ -106,4 +106,17 @@ func TestCalendarManager(t *testing.T) {
 	if standup.PendingItems[0].Pending != handoff.Pending {
 		t.Errorf("expected pending text %q, got %q", handoff.Pending, standup.PendingItems[0].Pending)
 	}
+
+	// 6. Test GenerateDraft
+	draft, err := mgr.GenerateDraft("aditum-tar-842", "Aditum (TAR-842)", "", "claude", "\x1b[32mCompleted task 123\x1b[0m\nNext step is testing")
+	if err != nil {
+		t.Fatalf("GenerateDraft failed: %v", err)
+	}
+	if draft.Agent != "claude" {
+		t.Errorf("expected agent claude, got %s", draft.Agent)
+	}
+	if !strings.Contains(draft.Summary, "Completed task 123") {
+		t.Errorf("expected summary to contain terminal text, got: %s", draft.Summary)
+	}
 }
+
