@@ -104,6 +104,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/calendar/month", s.withAuth(s.handleCalendarMonth))
 	mux.HandleFunc("GET /api/calendar/note", s.withAuth(s.handleCalendarGetNote))
 	mux.HandleFunc("PUT /api/calendar/note", s.withAuth(s.handleCalendarSaveNote))
+	mux.HandleFunc("POST /api/calendar/todo", s.withAuth(s.handleCalendarAddTodo))
+	mux.HandleFunc("POST /api/calendar/note/append", s.withAuth(s.handleCalendarAppendNote))
 	mux.HandleFunc("POST /api/calendar/handoff", s.withAuth(s.handleCalendarHandoff))
 	mux.HandleFunc("PUT /api/calendar/handoff", s.withAuth(s.handleCalendarHandoffUpdate))
 	mux.HandleFunc("DELETE /api/calendar/handoff", s.withAuth(s.handleCalendarHandoffDelete))
@@ -866,6 +868,43 @@ func (s *Server) handleCalendarSaveNote(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved", "date": body.Date})
+}
+
+func (s *Server) handleCalendarAddTodo(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Date    string `json:"date"`
+		Text    string `json:"text"`
+		Checked bool   `json:"checked"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Text) == "" {
+		http.Error(w, "invalid request body: text is required", http.StatusBadRequest)
+		return
+	}
+	note, err := s.calendarMgr.AddDailyTodo(body.Date, body.Text, body.Checked)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(note)
+}
+
+func (s *Server) handleCalendarAppendNote(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Date string `json:"date"`
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Text) == "" {
+		http.Error(w, "invalid request body: text is required", http.StatusBadRequest)
+		return
+	}
+	note, err := s.calendarMgr.AppendDailyNote(body.Date, body.Text)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(note)
 }
 
 func (s *Server) handleCalendarHandoff(w http.ResponseWriter, r *http.Request) {

@@ -157,6 +157,74 @@ func (m *Manager) SaveDayNote(date string, content string) error {
 	return nil
 }
 
+// AddDailyTodo appends or inserts a checklist item into the "Notas Generales" section of the daily note
+func (m *Manager) AddDailyTodo(date string, text string, checked bool) (*DayNote, error) {
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+	note, err := m.GetDayNote(date)
+	if err != nil {
+		return nil, err
+	}
+
+	checkbox := "- [ ] "
+	if checked {
+		checkbox = "- [x] "
+	}
+	todoLine := checkbox + strings.TrimSpace(text)
+
+	content := note.Content
+	targetHeader := "## 📌 Notas Generales"
+
+	if idx := strings.Index(content, targetHeader); idx != -1 {
+		rest := content[idx+len(targetHeader):]
+		trimmedRest := strings.TrimLeft(rest, "\r\n ")
+		if strings.HasPrefix(trimmedRest, "- [ ]") && (len(trimmedRest) == 5 || trimmedRest[5] == '\r' || trimmedRest[5] == '\n') {
+			content = content[:idx+len(targetHeader)] + "\n" + todoLine + trimmedRest[5:]
+		} else {
+			content = content[:idx+len(targetHeader)] + "\n" + todoLine + rest
+		}
+	} else {
+		content = content + "\n\n" + targetHeader + "\n" + todoLine + "\n"
+	}
+
+	if err := m.SaveDayNote(date, content); err != nil {
+		return nil, err
+	}
+	return m.GetDayNote(date)
+}
+
+// AppendDailyNote appends text/notes under the "Notas Generales" section
+func (m *Manager) AppendDailyNote(date string, text string) (*DayNote, error) {
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+	note, err := m.GetDayNote(date)
+	if err != nil {
+		return nil, err
+	}
+
+	trimmedText := strings.TrimSpace(text)
+	if trimmedText == "" {
+		return note, nil
+	}
+
+	content := note.Content
+	targetHeader := "## 📌 Notas Generales"
+
+	if idx := strings.Index(content, targetHeader); idx != -1 {
+		rest := content[idx+len(targetHeader):]
+		content = content[:idx+len(targetHeader)] + "\n" + trimmedText + rest
+	} else {
+		content = content + "\n\n" + targetHeader + "\n" + trimmedText + "\n"
+	}
+
+	if err := m.SaveDayNote(date, content); err != nil {
+		return nil, err
+	}
+	return m.GetDayNote(date)
+}
+
 // AddHandoff records a structured end-of-day handoff and updates the daily note markdown
 func (m *Manager) AddHandoff(item HandoffItem, workDir string) (*HandoffItem, error) {
 	m.mu.Lock()

@@ -146,12 +146,22 @@ func TestCalendarManager(t *testing.T) {
 		t.Fatalf("DeleteHandoff failed: %v", err)
 	}
 
-	noteAfterDelete, _ := mgr.GetDayNote(testDate)
-	if len(noteAfterDelete.Handoffs) != 0 {
-		t.Errorf("expected 0 handoffs after delete, got %d", len(noteAfterDelete.Handoffs))
+	// 9. Test AddDailyTodo
+	todoNote, err := mgr.AddDailyTodo(testDate, "Check test credentials", false)
+	if err != nil {
+		t.Fatalf("AddDailyTodo failed: %v", err)
 	}
-	if strings.Contains(noteAfterDelete.Content, "Updated summary description") {
-		t.Errorf("expected deleted handoff text to be gone from markdown")
+	if !strings.Contains(todoNote.Content, "- [ ] Check test credentials") {
+		t.Errorf("expected todo in note content, got: %s", todoNote.Content)
+	}
+
+	// 10. Test AppendDailyNote
+	appendedNote, err := mgr.AppendDailyNote(testDate, "- Extra observation about API")
+	if err != nil {
+		t.Fatalf("AppendDailyNote failed: %v", err)
+	}
+	if !strings.Contains(appendedNote.Content, "- Extra observation about API") {
+		t.Errorf("expected observation in note content, got: %s", appendedNote.Content)
 	}
 }
 

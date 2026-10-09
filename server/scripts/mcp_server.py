@@ -198,6 +198,129 @@ TOOLS = [
             },
             "required": ["id"]
         }
+    },
+    {
+        "name": "add_daily_todo",
+        "description": (
+            "Agrega una tarea o ítem accionable (con checkbox [ ] o [x]) a la sección de Notas Generales "
+            "del Calendario de Remote PC para el día de hoy (o una fecha específica). "
+            "Ideal cuando el usuario pide anotar un pendiente rápido o marcar una micro-tarea como lista."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Texto del to-do o tarea."
+                },
+                "checked": {
+                    "type": "boolean",
+                    "description": "Si la tarea ya está completada (true genera '- [x]', false genera '- [ ]'; por defecto false)."
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Fecha YYYY-MM-DD (opcional; por defecto hoy)."
+                }
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "append_daily_note",
+        "description": (
+            "Anexa texto, notas libres, comandos o apuntes a la nota diaria del Calendario de Remote PC "
+            "sin crear un bloque de handoff."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Texto o markdown a anexar a la nota diaria."
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Fecha YYYY-MM-DD (opcional; por defecto hoy)."
+                }
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "list_workspace_bubbles",
+        "description": (
+            "Lista todos los workspace bubbles y entornos de tareas (Aditum, Brif, etc.) configurados en Remote PC "
+            "con su estado, rama Git actual, puerto de desarrollo y ruta."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workspace": {
+                    "type": "string",
+                    "enum": ["all", "aditum", "brif"],
+                    "description": "Filtrar por espacio de trabajo (por defecto 'all')."
+                },
+                "scan": {
+                    "type": "boolean",
+                    "description": "Reescanear el sistema de archivos para descubrir nuevos worktrees (por defecto true)."
+                }
+            }
+        }
+    },
+    {
+        "name": "get_bubble_context",
+        "description": (
+            "Obtiene el contexto detallado de una tarea o bubble de Remote PC: rama activa, status de Git, "
+            "archivos modificados, puerto dev asignado y schema de base de datos. "
+            "Si se omite 'bubble_id', se auto-detecta según el directorio actual."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "bubble_id": {
+                    "type": "string",
+                    "description": "ID del bubble o nombre de tarea (opcional; se auto-detecta del directorio actual)."
+                }
+            }
+        }
+    },
+    {
+        "name": "create_workspace_bubble",
+        "description": (
+            "Crea un nuevo workspace bubble y entorno de trabajo (git worktree aislado, branch y configuración) "
+            "directamente desde el agente. Soporta espacios como Aditum y Brif."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workspace": {
+                    "type": "string",
+                    "enum": ["aditum", "brif"],
+                    "description": "Espacio de trabajo donde crear la tarea ('aditum' o 'brif')."
+                },
+                "task_id": {
+                    "type": "string",
+                    "description": "Identificador del ticket o tarea (ej: 'TAR-1150' para Aditum, o 'dialogos-mx' para Brif)."
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Nombre legible para la tarea (opcional; por defecto igual a task_id)."
+                },
+                "base_branch": {
+                    "type": "string",
+                    "description": "Rama base para crear el worktree (opcional; ej: 'development')."
+                },
+                "use_slim": {
+                    "type": "boolean",
+                    "description": "Solo para Aditum: usar seed ligera de base de datos (por defecto true)."
+                },
+                "is_worktree": {
+                    "type": "boolean",
+                    "description": "Crear como git worktree aislado (true) o branch lineal en el repo principal (false). Por defecto true."
+                }
+            },
+            "required": ["workspace", "task_id"]
+        }
     }
 ]
 
@@ -347,6 +470,179 @@ def handle_delete_daily_handoff(args):
         return f"Error al eliminar handoff: {err}"
     return f"✓ **Handoff eliminado exitosamente** (ID: {handoff_id})"
 
+def handle_add_daily_todo(args):
+    text = args.get("text", "").strip()
+    if not text:
+        return "Error: Se requiere el parámetro 'text' con la descripción del to-do."
+    date = args.get("date", "")
+    checked = bool(args.get("checked", False))
+
+    payload = {
+        "text": text,
+        "checked": checked,
+        "date": date
+    }
+    res, err = api_request("/api/calendar/todo", method="POST", body=payload)
+    if err:
+        return f"Error al agregar to-do en Remote PC: {err}"
+
+    box = "[x]" if checked else "[ ]"
+    return (
+        f"✓ **To-do registrado en la nota diaria ({res.get('date')})**\n"
+        f"- {box} {text}"
+    )
+
+def handle_append_daily_note(args):
+    text = args.get("text", "").strip()
+    if not text:
+        return "Error: Se requiere el parámetro 'text' para anexar a la nota diaria."
+    date = args.get("date", "")
+
+    payload = {
+        "text": text,
+        "date": date
+    }
+    res, err = api_request("/api/calendar/note/append", method="POST", body=payload)
+    if err:
+        return f"Error al anexar texto en la nota diaria: {err}"
+
+    return f"✓ **Nota diaria actualizada exitosamente ({res.get('date')})**"
+
+def handle_list_workspace_bubbles(args):
+    workspace = (args.get("workspace") or "all").lower()
+    scan = args.get("scan", True)
+    query = "?scan=true" if scan else ""
+
+    bubbles, err = api_request(f"/api/bubbles{query}")
+    if err:
+        return f"Error al listar bubbles: {err}"
+
+    if not bubbles or not isinstance(bubbles, list):
+        return "No hay workspace bubbles registrados en Remote PC."
+
+    if workspace != "all":
+        bubbles = [b for b in bubbles if (b.get("workspace") or "").lower() == workspace]
+
+    if not bubbles:
+        return f"No se encontraron workspace bubbles para el espacio '{workspace}'."
+
+    lines = [f"🌐 **Workspace Bubbles en Remote PC ({len(bubbles)} encontrados)**:"]
+    for b in bubbles:
+        status_icon = "🟢" if b.get("status") == "running" or b.get("devRunning") else "⚪"
+        ws_tag = f"[{b.get('workspace', 'general').upper()}]"
+        name = b.get("name") or b.get("id")
+        branch = b.get("branch") or "sin rama"
+        port_info = f" | Puerto :{b.get('port')}" if b.get("port") else ""
+        schema_info = f" | DB: `{b.get('dbSchema')}`" if b.get("dbSchema") else ""
+        worktree_badge = " (Worktree)" if b.get("isWorktree") else ""
+
+        lines.append(f"\n- {status_icon} **{name}** {ws_tag}{worktree_badge}")
+        lines.append(f"  - **ID:** `{b.get('id')}` | **Rama:** `{branch}`{port_info}{schema_info}")
+        lines.append(f"  - **Ruta:** `{b.get('path')}`")
+
+    return "\n".join(lines)
+
+def handle_get_bubble_context(args):
+    bubble_id = args.get("bubble_id", "").strip()
+    bubbles, err = api_request("/api/bubbles")
+    if err:
+        return f"Error al consultar bubbles: {err}"
+
+    matched = None
+    if bubble_id:
+        for b in (bubbles or []):
+            if b.get("id") == bubble_id or bubble_id.lower() in (b.get("name") or "").lower():
+                matched = b
+                break
+    else:
+        cwd = os.getcwd()
+        cwd_norm = os.path.normpath(cwd).lower()
+        for b in (bubbles or []):
+            b_path = os.path.normpath(b.get("path", "")).lower()
+            if b_path and (cwd_norm == b_path or cwd_norm.startswith(b_path)):
+                matched = b
+                break
+
+    if not matched:
+        available = ", ".join([f"`{b.get('id')}`" for b in (bubbles or [])[:10]])
+        return (
+            "No se pudo determinar el bubble actual a partir del directorio ni del parámetro 'bubble_id'.\n"
+            f"Bubbles disponibles: {available}"
+        )
+
+    b_id = matched.get("id")
+    git_st, _ = api_request(f"/api/bubbles/{b_id}/git/status")
+
+    lines = [
+        f"🎯 **Contexto del Bubble:** `{matched.get('name')}` (`{b_id}`)",
+        f"- **Espacio:** {matched.get('workspace', '').upper()}",
+        f"- **Ruta de trabajo:** `{matched.get('path')}`",
+        f"- **Puerto dev:** {matched.get('port') or 'No asignado'}",
+    ]
+    if matched.get("dbSchema"):
+        lines.append(f"- **Esquema DB:** `{matched.get('dbSchema')}`")
+    if matched.get("priority"):
+        lines.append(f"- **Prioridad:** {matched.get('priority')}")
+
+    if git_st and isinstance(git_st, dict):
+        branch = git_st.get("branch") or matched.get("branch")
+        is_dirty = git_st.get("isDirty", False)
+        ahead = git_st.get("ahead", 0)
+        behind = git_st.get("behind", 0)
+        changes = git_st.get("changes", [])
+
+        lines.append("\n**Estado Git:**")
+        lines.append(f"- **Rama:** `{branch}`")
+        lines.append(f"- **Commits:** Ahead: {ahead} | Behind: {behind}")
+        lines.append(f"- **Estado de trabajo:** {'⚠️ Cambios sin commitear' if is_dirty else '✨ Directorio limpio'}")
+
+        if changes:
+            lines.append(f"- **Archivos modificados ({len(changes)}):**")
+            for c in changes[:8]:
+                st_flag = c.get("status", "M")
+                staged = " (staged)" if c.get("staged") else ""
+                lines.append(f"  - `[{st_flag}]` {c.get('path')}{staged}")
+            if len(changes) > 8:
+                lines.append(f"  - ... y {len(changes) - 8} archivo(s) más")
+    else:
+        lines.append(f"- **Rama actual:** `{matched.get('branch')}`")
+
+    return "\n".join(lines)
+
+def handle_create_workspace_bubble(args):
+    workspace = (args.get("workspace") or "").strip().lower()
+    task_id = (args.get("task_id") or "").strip()
+    if not workspace or not task_id:
+        return "Error: Se requieren 'workspace' ('aditum' o 'brif') y 'task_id' (ej: 'TAR-1150')."
+
+    payload = {
+        "workspace": workspace,
+        "taskId": task_id,
+        "name": args.get("name") or task_id,
+        "baseBranch": args.get("base_branch", ""),
+        "useSlim": args.get("use_slim", True),
+        "isWorktree": args.get("is_worktree", True)
+    }
+
+    res, err = api_request("/api/bubbles", method="POST", body=payload)
+    if err:
+        return f"Error al crear bubble en Remote PC: {err}"
+
+    lines = [
+        "🎉 **Workspace Bubble creado y configurado exitosamente**",
+        f"- **Tarea:** {res.get('name') or task_id}",
+        f"- **ID:** `{res.get('id')}`",
+        f"- **Espacio:** {res.get('workspace', '').upper()}",
+        f"- **Ruta:** `{res.get('path')}`",
+        f"- **Rama:** `{res.get('branch')}`",
+    ]
+    if res.get("port"):
+        lines.append(f"- **Puerto dev:** {res.get('port')}")
+    if res.get("dbSchema"):
+        lines.append(f"- **Esquema DB:** `{res.get('dbSchema')}`")
+
+    return "\n".join(lines)
+
 def execute_tool(name, arguments):
     if name == "save_daily_handoff":
         return handle_save_daily_handoff(arguments or {})
@@ -358,6 +654,16 @@ def execute_tool(name, arguments):
         return handle_update_daily_handoff(arguments or {})
     elif name == "delete_daily_handoff":
         return handle_delete_daily_handoff(arguments or {})
+    elif name == "add_daily_todo":
+        return handle_add_daily_todo(arguments or {})
+    elif name == "append_daily_note":
+        return handle_append_daily_note(arguments or {})
+    elif name == "list_workspace_bubbles":
+        return handle_list_workspace_bubbles(arguments or {})
+    elif name == "get_bubble_context":
+        return handle_get_bubble_context(arguments or {})
+    elif name == "create_workspace_bubble":
+        return handle_create_workspace_bubble(arguments or {})
     else:
         raise ValueError(f"Herramienta desconocida: {name}")
 
