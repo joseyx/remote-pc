@@ -107,6 +107,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/calendar/handoff", s.withAuth(s.handleCalendarHandoff))
 	mux.HandleFunc("GET /api/calendar/handoff/draft", s.withAuth(s.handleCalendarHandoffDraft))
 	mux.HandleFunc("POST /api/calendar/handoff/auto", s.withAuth(s.handleCalendarHandoffAuto))
+	mux.HandleFunc("POST /api/calendar/handoff/prompt-agent", s.withAuth(s.handleCalendarHandoffPromptAgent))
 	mux.HandleFunc("GET /api/calendar/standup", s.withAuth(s.handleCalendarStandup))
 
 	// Embedded Desktop Web Dashboard
@@ -1064,5 +1065,65 @@ func (s *Server) handleCalendarHandoffAuto(w http.ResponseWriter, r *http.Reques
 	_ = json.NewEncoder(w).Encode(created)
 }
 
+func (s *Server) handleCalendarHandoffPromptAgent(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		BubbleID string `json:"bubbleId"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	bubbleID := body.BubbleID
+	if bubbleID == "" {
+		http.Error(w, `{"error": "bubbleId is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Find running session for this bubble
+	var targetSession *session.Session
+	var targetSessionInfo *session.SessionInfo
+
+	for _, sessInfo := range s.manager.ListSessions() {
+		if sessInfo.BubbleID == bubbleID && sessInfo.IsRunning {
+			if sessInfo.Role == "claude" || sessInfo.Role == "agy" {
+				if sess, ok := s.manager.GetSession(sessInfo.ID); ok && sess != nil {
+					targetSession = sess
+					targetSessionInfo = sessInfo
+					break
+				}
+			} else if targetSession == nil {
+				if sess, ok := s.manager.GetSession(sessInfo.ID); ok && sess != nil {
+					targetSession = sess
+					targetSessionInfo = sessInfo
+				}
+			}
+		}
+	}
+
+	if targetSession == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": "No hay ninguna terminal activa en esta tarea para solicitar el resumen.",
+		})
+		return
+	}
+
+	// Prompt the agent in its terminal
+	agentPrompt := "\r\nPor favor redacta el resumen de cierre de jornada (handoff) de esta tarea con tu analisis y guardalo ejecutando el comando: remotepc-handoff --status in_progress --summary \"<lo completado>\" --pending \"<lo pendiente>\"\r\n"
+
+	if err := targetSession.WriteInput([]byte(agentPrompt)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":      "prompted",
+		"sessionId":   targetSessionInfo.ID,
+		"sessionName": targetSessionInfo.Name,
+		"agent":       targetSessionInfo.Role,
+	})
+}
+
 // Helpers
 var _ = fs.ErrNotExist
+

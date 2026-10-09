@@ -868,12 +868,26 @@
                     </div>
                 </div>
 
-                <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 8px 12px;">
-                    <span style="font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 6px;">
-                        <span>✨</span> Borrador automático generado con Git y Terminal
-                    </span>
-                    <button class="btn btn-sm" id="btn-handoff-autofill" type="button" onclick="autoFillHandoffDraft()" style="color: var(--accent); border-color: rgba(56,189,248,0.4); font-size: 11px; padding: 3px 10px;">
-                        ⚡ Regenerar Borrador
+                <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: var(--radius-sm); padding: 10px 12px;">
+                        <div>
+                            <div style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                                <span>🤖</span> Redacción por el Agente en Terminal
+                            </div>
+                            <div style="font-size: 10px; color: var(--text-dim);">Pide a Claude / AGY que analice el ticket y redacte su propio resumen</div>
+                        </div>
+                        <button class="btn btn-sm btn-primary" id="btn-handoff-prompt-agent" type="button" onclick="requestAgentRedactHandoff()" style="font-size: 11px; padding: 5px 12px;">
+                            🤖 Redactar en Terminal
+                        </button>
+                    </div>
+
+                    <div id="handoff-agent-live-status" style="display: none; background: var(--bg-base); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 8px 10px;"></div>
+                </div>
+
+                <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 11px; color: var(--text-dim);">O edita / guarda el borrador capturado:</span>
+                    <button class="btn btn-sm" id="btn-handoff-autofill" type="button" onclick="autoFillHandoffDraft()" style="color: var(--accent); border-color: rgba(56,189,248,0.3); font-size: 10px; padding: 2px 8px;">
+                        ⚡ Refrescar Borrador
                     </button>
                 </div>
 

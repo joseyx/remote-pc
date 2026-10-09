@@ -488,7 +488,87 @@ async function autoFillHandoffDraft(bubbleId) {
         if (pendingEl) pendingEl.placeholder = "Ej. Ejecutar migraciones Liquibase, escribir pruebas unitarias de mora y conectar endpoint...";
         if (autoBtn) {
             autoBtn.disabled = false;
-            autoBtn.innerHTML = '⚡ Auto-completar desde Git & Agente';
+            autoBtn.innerHTML = '⚡ Refrescar Borrador';
+        }
+    }
+}
+
+async function requestAgentRedactHandoff() {
+    const bubbleSelect = document.getElementById('handoff-bubble-select');
+    const bubbleId = bubbleSelect ? bubbleSelect.value : (currentBubble ? currentBubble.id : '');
+    if (!bubbleId) {
+        showToast("Selecciona una tarea primero.");
+        return;
+    }
+
+    const btn = document.getElementById('btn-handoff-prompt-agent');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '📨 Enviando a la terminal...';
+    }
+
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        };
+        const res = await fetch('/api/calendar/handoff/prompt-agent', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ bubbleId })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            const agentName = data.agent === 'agy' ? 'Antigravity CLI' : 'Claude Code';
+            showToast(`📨 Instrucción enviada a ${agentName} (${data.sessionName}).`);
+
+            const statusBox = document.getElementById('handoff-agent-live-status');
+            if (statusBox) {
+                statusBox.style.display = 'block';
+                statusBox.innerHTML = `
+                    <div style="font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 8px;">
+                        <span>🤖</span>
+                        <span><strong>${agentName}</strong> está redactando y guardando el resumen en la terminal... Puedes cambiar a la terminal para verlo en vivo o esperar aquí.</span>
+                    </div>
+                `;
+            }
+
+            // Poll for completion
+            const targetDate = calSelectedDate || getTodayFormatted();
+            const initialCount = (calCurrentNote && calCurrentNote.handoffs) ? calCurrentNote.handoffs.length : 0;
+            let attempts = 0;
+            const poller = setInterval(async () => {
+                attempts++;
+                try {
+                    const noteRes = await fetch(`/api/calendar/note?date=${targetDate}`, { headers });
+                    if (noteRes.ok) {
+                        const noteData = await noteRes.json();
+                        if (noteData && noteData.handoffs && noteData.handoffs.length > initialCount) {
+                            clearInterval(poller);
+                            showToast(`✅ ¡${agentName} guardó el handoff exitosamente!`);
+                            closeHandoffModal();
+                            await fetchCalendarNote(targetDate);
+                            await fetchCalendarMonth(calCurrentYear, calCurrentMonth);
+                            await fetchCalendarStandup();
+                            return;
+                        }
+                    }
+                } catch(e) {}
+                if (attempts >= 40) clearInterval(poller);
+            }, 2500);
+
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            appAlert(errData.error || "No hay una terminal de agente activa en esa tarea.", "Aviso", "ℹ️");
+        }
+    } catch(e) {
+        showToast("Error de conexión: " + e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '🤖 Redactar en Terminal';
         }
     }
 }
