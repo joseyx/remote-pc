@@ -78,7 +78,7 @@ type SystemStats struct {
 	CheckedAt    time.Time     `json:"checkedAt"`
 }
 
-func GetStats() SystemStats {
+func GetStats(includeTop ...bool) SystemStats {
 	var mem memoryStatusEx
 	mem.Length = uint32(unsafe.Sizeof(mem))
 	_, _, _ = procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&mem)))
@@ -105,6 +105,11 @@ func GetStats() SystemStats {
 		checkService("flower", "Flower Dashboard", 5555),
 	}
 
+	var top []ProcessInfo
+	if len(includeTop) > 0 && includeTop[0] {
+		top = GetTopProcesses(5)
+	}
+
 	return SystemStats{
 		Memory: MemoryStats{
 			TotalGB:     math.Round(totalGB*10) / 10,
@@ -116,7 +121,7 @@ func GetStats() SystemStats {
 			PagePercent: pagePct,
 		},
 		Services:     services,
-		TopProcesses: GetTopProcesses(5),
+		TopProcesses: top,
 		CheckedAt:    time.Now(),
 	}
 }

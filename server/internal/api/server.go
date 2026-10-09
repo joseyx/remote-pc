@@ -146,7 +146,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSystemStats(w http.ResponseWriter, r *http.Request) {
-	stats := system.GetStats()
+	withTop := r.URL.Query().Get("top") == "true"
+	stats := system.GetStats(withTop)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)
 }
@@ -521,6 +522,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		defer close(done)
 		for data := range ch {
 			if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+				_ = conn.Close() // Ensure conn.ReadMessage() unblocks immediately
 				return
 			}
 		}

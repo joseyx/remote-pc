@@ -220,7 +220,10 @@ const MAX_RAM_HISTORY = 30;
 
 async function fetchSystemStats(force = false) {
     try {
-        const res = await fetch('/api/system/stats');
+        const modal = document.getElementById('modal-sys-stats');
+        const isModalOpen = modal && modal.classList.contains('open') && modal.style.display !== 'none';
+        const url = (isModalOpen || force) ? '/api/system/stats?top=true' : '/api/system/stats';
+        const res = await fetch(url);
         if (!res.ok) return;
         const stats = await res.json();
         updateSystemStatsUI(stats);

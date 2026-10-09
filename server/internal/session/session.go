@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,6 +63,7 @@ type Session struct {
 	mu        sync.RWMutex
 	buffer    *ringBuffer
 	listeners map[chan []byte]struct{}
+	onWrite   func()
 }
 
 // ringBuffer stores recent terminal history up to maxSize
@@ -130,6 +132,7 @@ type Manager struct {
 	maxHistoryKB int
 	statePath    string
 	stopTicker   chan struct{}
+	dirty        atomic.Bool
 }
 
 func NewManager(maxHistoryKB int, statePath ...string) *Manager {
@@ -146,14 +149,16 @@ func NewManager(maxHistoryKB int, statePath ...string) *Manager {
 		stopTicker:   make(chan struct{}),
 	}
 
-	// Periodic buffer flush every 15 seconds
+	// Periodic buffer flush every 15 seconds (only when dirty to eliminate disk thrashing)
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				_ = m.SaveState()
+				if m.dirty.Swap(false) {
+					_ = m.SaveState()
+				}
 			case <-m.stopTicker:
 				return
 			}
@@ -198,10 +203,12 @@ func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string,
 		pty:       p,
 		buffer:    newRingBuffer(m.maxHistoryKB * 1024),
 		listeners: make(map[chan []byte]struct{}),
+		onWrite:   func() { m.dirty.Store(true) },
 	}
 
 	m.mu.Lock()
 	m.sessions[s.ID] = s
+	m.dirty.Store(true)
 	_ = m.saveStateLocked()
 	m.mu.Unlock()
 
@@ -223,6 +230,7 @@ func (m *Manager) RenameSession(id, newName string) error {
 	s.mu.Lock()
 	s.Name = newName
 	s.mu.Unlock()
+	m.dirty.Store(true)
 	_ = m.saveStateLocked()
 	return nil
 }
@@ -236,6 +244,7 @@ func (m *Manager) DeleteBubbleSessions(bubbleID string) {
 			_ = s.Close()
 		}
 	}
+	m.dirty.Store(true)
 	_ = m.saveStateLocked()
 }
 
@@ -343,7 +352,16 @@ func (m *Manager) RestoreSessions() error {
 			cmd = "powershell.exe"
 		}
 
-		p, err := pty.Start(cmd, st.Cwd, cols, rows)
+		// Prevent auto-spawning heavy interactive AI agents (Claude Code, Antigravity)
+		// and their massive nested MCP process trees (Playwright, Chrome DevTools, etc.) on server boot.
+		// Instead, restore as a clean shell in the same workspace directory, preserving 100% of the history buffer.
+		isAgent := st.Role == "claude" || st.Role == "agy" || cmd == "claude" || cmd == "agy"
+		launchCmd := cmd
+		if isAgent {
+			launchCmd = "powershell.exe"
+		}
+
+		p, err := pty.Start(launchCmd, st.Cwd, cols, rows)
 		if err != nil {
 			log.Printf("[Session Restore] Could not restart PTY for session %s: %v", st.ID, err)
 			continue
@@ -354,8 +372,12 @@ func (m *Manager) RestoreSessions() error {
 			bufBytes, _ := base64.StdEncoding.DecodeString(st.BufferB64)
 			if len(bufBytes) > 0 {
 				ring.Write(bufBytes)
-				ring.Write([]byte("\r\n\x1b[36m--- [Sesión restaurada tras reiniciar Remote PC] ---\x1b[0m\r\n"))
 			}
+		}
+		if isAgent {
+			ring.Write([]byte("\r\n\x1b[36m--- [Sesión restaurada. Escribe 'claude' para iniciar el agente cuando lo necesites] ---\x1b[0m\r\n"))
+		} else {
+			ring.Write([]byte("\r\n\x1b[36m--- [Sesión restaurada tras reiniciar Remote PC] ---\x1b[0m\r\n"))
 		}
 
 		s := &Session{
@@ -373,6 +395,7 @@ func (m *Manager) RestoreSessions() error {
 			pty:       p,
 			buffer:    ring,
 			listeners: make(map[chan []byte]struct{}),
+			onWrite:   func() { m.dirty.Store(true) },
 		}
 
 		m.sessions[s.ID] = s
@@ -398,6 +421,9 @@ func (s *Session) readLoop() {
 
 			// Append to history buffer
 			s.buffer.Write(data)
+			if s.onWrite != nil {
+				s.onWrite()
+			}
 
 			// Broadcast to all active listeners (WebSocket connections)
 			s.mu.RLock()
@@ -540,6 +566,7 @@ func (m *Manager) DeleteSession(id string) error {
 		return errors.New("session not found")
 	}
 	delete(m.sessions, id)
+	m.dirty.Store(true)
 	_ = m.saveStateLocked()
 	m.mu.Unlock()
 
