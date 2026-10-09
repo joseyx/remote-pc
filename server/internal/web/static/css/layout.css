@@ -218,6 +218,7 @@ header {
     flex-direction: column;
     overflow: hidden;
     position: relative;
+    min-height: 0;
 }
 
 .tab-pane {
@@ -225,6 +226,7 @@ header {
     display: none;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
 }
 

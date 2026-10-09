@@ -118,5 +118,40 @@ func TestCalendarManager(t *testing.T) {
 	if !strings.Contains(draft.Summary, "Completed task 123") {
 		t.Errorf("expected summary to contain terminal text, got: %s", draft.Summary)
 	}
+
+	// 7. Test UpdateHandoff
+	updatedData := *created
+	updatedData.Summary = "Updated summary description"
+	updatedData.Status = "completed"
+	updatedRes, err := mgr.UpdateHandoff(updatedData)
+	if err != nil {
+		t.Fatalf("UpdateHandoff failed: %v", err)
+	}
+	if updatedRes.Summary != "Updated summary description" {
+		t.Errorf("expected updated summary, got: %s", updatedRes.Summary)
+	}
+	if updatedRes.Status != "completed" {
+		t.Errorf("expected status completed, got: %s", updatedRes.Status)
+	}
+
+	// Check markdown reflects update
+	noteAfterUpdate, _ := mgr.GetDayNote(testDate)
+	if !strings.Contains(noteAfterUpdate.Content, "Updated summary description") {
+		t.Errorf("expected updated text in markdown note")
+	}
+
+	// 8. Test DeleteHandoff
+	err = mgr.DeleteHandoff(testDate, created.ID)
+	if err != nil {
+		t.Fatalf("DeleteHandoff failed: %v", err)
+	}
+
+	noteAfterDelete, _ := mgr.GetDayNote(testDate)
+	if len(noteAfterDelete.Handoffs) != 0 {
+		t.Errorf("expected 0 handoffs after delete, got %d", len(noteAfterDelete.Handoffs))
+	}
+	if strings.Contains(noteAfterDelete.Content, "Updated summary description") {
+		t.Errorf("expected deleted handoff text to be gone from markdown")
+	}
 }
 

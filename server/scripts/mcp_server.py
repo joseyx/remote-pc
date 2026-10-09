@@ -143,6 +143,61 @@ TOOLS = [
                 }
             }
         }
+    },
+    {
+        "name": "update_daily_handoff",
+        "description": (
+            "Modifica o actualiza un handoff existente en el Calendario de Remote PC. "
+            "Si no se proporciona id, busca automáticamente el handoff correspondiente al proyecto o tarea actual de hoy."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "ID del handoff a actualizar (opcional si se puede auto-detectar por la tarea actual)."
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Nuevo resumen de lo completado hoy."
+                },
+                "pending": {
+                    "type": "string",
+                    "description": "Nuevas tareas pendientes para mañana."
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["in_progress", "completed", "blocked"],
+                    "description": "Nuevo estado de la tarea."
+                },
+                "blockers": {
+                    "type": "string",
+                    "description": "Puntos de atención o bloqueos."
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Fecha YYYY-MM-DD (opcional; por defecto hoy)."
+                }
+            }
+        }
+    },
+    {
+        "name": "delete_daily_handoff",
+        "description": "Elimina un handoff registrado del Calendario de Remote PC.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "ID del handoff a eliminar."
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Fecha YYYY-MM-DD del handoff (opcional)."
+                }
+            },
+            "required": ["id"]
+        }
     }
 ]
 
@@ -238,6 +293,60 @@ def handle_get_today_note(args):
     handoffs = res.get("handoffs", [])
     return f"📅 **Nota Diaria ({res.get('date')})**:\n\n{content}\n\n*Handoffs registrados:* {len(handoffs)}"
 
+def handle_update_daily_handoff(args):
+    handoff_id = args.get("id")
+    date = args.get("date", "")
+
+    if not handoff_id:
+        note_res, _ = api_request(f"/api/calendar/note?date={date}" if date else "/api/calendar/note")
+        if note_res and note_res.get("handoffs"):
+            handoffs = note_res["handoffs"]
+            cwd_name = os.path.basename(os.getcwd()).lower()
+            matched = None
+            for h in handoffs:
+                t_name = (h.get("taskName") or "").lower()
+                if cwd_name in t_name or t_name in cwd_name:
+                    matched = h
+                    break
+            if not matched and len(handoffs) == 1:
+                matched = handoffs[0]
+            if matched:
+                handoff_id = matched.get("id")
+                if not date:
+                    date = matched.get("date")
+
+    if not handoff_id:
+        return "Error: No se encontró el ID del handoff a actualizar. Especifica el parámetro 'id'."
+
+    payload = {
+        "id": handoff_id,
+        "date": date
+    }
+    for field in ["summary", "pending", "status", "blockers"]:
+        if field in args:
+            payload[field] = args[field]
+    if "task_name" in args:
+        payload["taskName"] = args["task_name"]
+
+    res, err = api_request("/api/calendar/handoff", method="PUT", body=payload)
+    if err:
+        return f"Error al actualizar handoff: {err}"
+    return f"✓ **Handoff actualizado correctamente** (Tarea: {res.get('taskName')}, Estado: {res.get('status')})"
+
+def handle_delete_daily_handoff(args):
+    handoff_id = args.get("id")
+    date = args.get("date", "")
+    if not handoff_id:
+        return "Error: Se requiere el parámetro 'id' para eliminar el handoff."
+
+    query = f"?id={handoff_id}"
+    if date:
+        query += f"&date={date}"
+    res, err = api_request(f"/api/calendar/handoff{query}", method="DELETE")
+    if err:
+        return f"Error al eliminar handoff: {err}"
+    return f"✓ **Handoff eliminado exitosamente** (ID: {handoff_id})"
+
 def execute_tool(name, arguments):
     if name == "save_daily_handoff":
         return handle_save_daily_handoff(arguments or {})
@@ -245,6 +354,10 @@ def execute_tool(name, arguments):
         return handle_get_standup_pending(arguments or {})
     elif name == "get_today_note":
         return handle_get_today_note(arguments or {})
+    elif name == "update_daily_handoff":
+        return handle_update_daily_handoff(arguments or {})
+    elif name == "delete_daily_handoff":
+        return handle_delete_daily_handoff(arguments or {})
     else:
         raise ValueError(f"Herramienta desconocida: {name}")
 

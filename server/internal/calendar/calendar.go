@@ -191,17 +191,12 @@ func (m *Manager) AddHandoff(item HandoffItem, workDir string) (*HandoffItem, er
 	// Append to registry
 	m.handoffs[item.Date] = append(m.handoffs[item.Date], item)
 	_ = m.saveState()
+	m.syncNoteMarkdown(item.Date)
 
-	// Append to markdown file
-	filePath := m.getNoteFilePath(item.Date)
-	existingContent := ""
-	if data, err := os.ReadFile(filePath); err == nil {
-		existingContent = string(data)
-	} else {
-		existingContent = fmt.Sprintf("# 📅 Diario de Trabajo - %s\n\n## 📌 Notas Generales\n- [ ] \n\n## 🌙 Handoffs de Tareas & Agentes\n", item.Date)
-	}
+	return &item, nil
+}
 
-	// Build markdown block for this handoff
+func (m *Manager) renderHandoffBlock(item HandoffItem) string {
 	statusEmoji := "🟡 En Progreso"
 	switch item.Status {
 	case "completed":
@@ -242,14 +237,159 @@ func (m *Manager) AddHandoff(item HandoffItem, workDir string) (*HandoffItem, er
 		}
 		block.WriteString(gitInfo + "\n")
 	}
+	return block.String()
+}
 
-	if !strings.Contains(existingContent, "## 🌙 Handoffs de Tareas & Agentes") {
-		existingContent += "\n\n## 🌙 Handoffs de Tareas & Agentes\n"
+func (m *Manager) syncNoteMarkdown(date string) {
+	filePath := m.getNoteFilePath(date)
+	existingContent := ""
+	if data, err := os.ReadFile(filePath); err == nil {
+		existingContent = string(data)
+	} else {
+		existingContent = fmt.Sprintf("# 📅 Diario de Trabajo - %s\n\n## 📌 Notas Generales\n- [ ] \n\n## 🌙 Handoffs de Tareas & Agentes\n", date)
 	}
-	updatedContent := existingContent + block.String()
-	_ = os.WriteFile(filePath, []byte(updatedContent), 0644)
 
-	return &item, nil
+	separator := "## 🌙 Handoffs de Tareas & Agentes"
+	baseContent := existingContent
+	if idx := strings.Index(existingContent, separator); idx != -1 {
+		baseContent = strings.TrimRight(existingContent[:idx], " \r\n") + "\n\n"
+	} else {
+		baseContent = strings.TrimRight(existingContent, " \r\n") + "\n\n"
+	}
+
+	var sb strings.Builder
+	sb.WriteString(baseContent)
+	sb.WriteString(separator + "\n")
+
+	items := m.handoffs[date]
+	for _, it := range items {
+		sb.WriteString(m.renderHandoffBlock(it))
+	}
+
+	_ = os.WriteFile(filePath, []byte(sb.String()), 0644)
+}
+
+// UpdateHandoff modifies an existing handoff entry and updates the daily note
+func (m *Manager) UpdateHandoff(item HandoffItem) (*HandoffItem, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	targetDate := item.Date
+	if targetDate == "" {
+		for d, list := range m.handoffs {
+			for _, h := range list {
+				if h.ID == item.ID {
+					targetDate = d
+					break
+				}
+			}
+			if targetDate != "" {
+				break
+			}
+		}
+	}
+
+	if targetDate == "" {
+		return nil, fmt.Errorf("handoff with id %s not found", item.ID)
+	}
+
+	items, ok := m.handoffs[targetDate]
+	if !ok || len(items) == 0 {
+		return nil, fmt.Errorf("no handoffs found for date %s", targetDate)
+	}
+
+	foundIdx := -1
+	for i, h := range items {
+		if h.ID == item.ID {
+			foundIdx = i
+			break
+		}
+	}
+	if foundIdx == -1 {
+		return nil, fmt.Errorf("handoff with id %s not found in date %s", item.ID, targetDate)
+	}
+
+	target := &items[foundIdx]
+	if item.TaskName != "" {
+		target.TaskName = item.TaskName
+	}
+	if item.Agent != "" {
+		target.Agent = item.Agent
+	}
+	if item.Status != "" {
+		target.Status = item.Status
+	}
+	target.Summary = item.Summary
+	target.Pending = item.Pending
+	target.Blockers = item.Blockers
+	if item.Time != "" {
+		target.Time = item.Time
+	}
+	if item.Branch != "" {
+		target.Branch = item.Branch
+	}
+	if item.LastCommit != "" {
+		target.LastCommit = item.LastCommit
+	}
+	if item.DirtyFiles != 0 {
+		target.DirtyFiles = item.DirtyFiles
+	}
+
+	_ = m.saveState()
+	m.syncNoteMarkdown(targetDate)
+
+	res := *target
+	return &res, nil
+}
+
+// DeleteHandoff removes a handoff entry by ID and updates the daily note
+func (m *Manager) DeleteHandoff(date string, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	targetDate := date
+	if targetDate == "" {
+		for d, list := range m.handoffs {
+			for _, h := range list {
+				if h.ID == id {
+					targetDate = d
+					break
+				}
+			}
+			if targetDate != "" {
+				break
+			}
+		}
+	}
+
+	if targetDate == "" {
+		return fmt.Errorf("handoff with id %s not found", id)
+	}
+
+	items, ok := m.handoffs[targetDate]
+	if !ok || len(items) == 0 {
+		return fmt.Errorf("no handoffs found for date %s", targetDate)
+	}
+
+	newItems := make([]HandoffItem, 0, len(items))
+	found := false
+	for _, h := range items {
+		if h.ID == id {
+			found = true
+			continue
+		}
+		newItems = append(newItems, h)
+	}
+
+	if !found {
+		return fmt.Errorf("handoff with id %s not found in date %s", id, targetDate)
+	}
+
+	m.handoffs[targetDate] = newItems
+	_ = m.saveState()
+	m.syncNoteMarkdown(targetDate)
+
+	return nil
 }
 
 // GetMonthSummary returns days with notes or handoffs for the specified year and month

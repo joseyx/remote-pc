@@ -9,6 +9,7 @@
     flex: 1;
     display: flex;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
     background-color: var(--bg-base);
 }
@@ -183,6 +184,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
     background-color: var(--bg-base);
 }
@@ -202,8 +204,24 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
-    padding: 18px 22px;
-    gap: 18px;
+    min-height: 0;
+    padding: 16px 20px;
+    gap: 16px;
+    scroll-behavior: smooth;
+}
+
+.calendar-main-content::-webkit-scrollbar {
+    width: 8px;
+}
+.calendar-main-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+.calendar-main-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+}
+.calendar-main-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.28);
 }
 
 .calendar-note-card {
@@ -213,6 +231,13 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.calendar-note-card.collapsed .calendar-rendered-body,
+.calendar-note-card.collapsed .calendar-raw-editor {
+    display: none !important;
 }
 
 .calendar-note-card-header {
@@ -222,6 +247,22 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    cursor: default;
+}
+
+.btn-card-toggle {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.btn-card-toggle:hover {
+    color: var(--text-main);
+    background: var(--bg-elevated);
 }
 
 .calendar-raw-editor {
@@ -243,6 +284,16 @@
     font-size: 13.5px;
     line-height: 1.7;
     color: #e2e8f0;
+    max-height: 380px;
+    overflow-y: auto;
+}
+
+.calendar-rendered-body::-webkit-scrollbar {
+    width: 6px;
+}
+.calendar-rendered-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
 }
 
 .calendar-rendered-body h1, .calendar-rendered-body h2, .calendar-rendered-body h3 {
@@ -258,11 +309,68 @@
     margin: 6px 0;
 }
 
+/* Handoffs Toolbar (Search, Filter, Count) */
+.handoffs-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+}
+
+.handoffs-search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.handoffs-search-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-main);
+    font-size: 12px;
+    width: 100%;
+}
+
+.handoffs-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.handoffs-filter-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.handoffs-filter-btn.active, .handoffs-filter-btn:hover {
+    color: var(--text-main);
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.12);
+}
+
 /* Handoff Cards List */
 .handoff-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    max-height: none;
 }
 
 .handoff-card {
@@ -270,7 +378,7 @@
     border: 1px solid var(--border-subtle);
     border-left: 4px solid var(--accent);
     border-radius: var(--radius-sm);
-    padding: 14px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -282,10 +390,19 @@
     box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
 
+.handoff-card.status-completed {
+    border-left-color: var(--green);
+}
+
+.handoff-card.status-blocked {
+    border-left-color: var(--red);
+}
+
 .handoff-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    cursor: pointer;
 }
 
 .handoff-card-title {
@@ -317,6 +434,12 @@
     background: rgba(168, 85, 247, 0.15);
     color: #c084fc;
     border-color: rgba(168, 85, 247, 0.3);
+}
+
+.handoff-agent-pill.dev {
+    background: rgba(148, 163, 184, 0.15);
+    color: #cbd5e1;
+    border-color: rgba(148, 163, 184, 0.3);
 }
 
 .handoff-status-pill {
@@ -354,7 +477,7 @@
 
 .handoff-section-row {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: flex-start;
 }
 
@@ -369,13 +492,102 @@
     background-color: var(--bg-base);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
-    padding: 6px 10px;
+    padding: 5px 10px;
     font-size: 11px;
     font-family: monospace;
     color: var(--text-dim);
     display: flex;
     align-items: center;
     gap: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Handoff Actions Row & Buttons */
+.handoff-actions-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.handoff-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-handoff-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-handoff-action:hover {
+    background: var(--bg-elevated);
+    color: var(--text-main);
+    border-color: var(--border-muted);
+}
+
+.btn-handoff-action.danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.btn-handoff-action.primary {
+    background: rgba(56, 189, 248, 0.1);
+    color: var(--accent);
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.btn-handoff-action.primary:hover {
+    background: rgba(56, 189, 248, 0.2);
+    color: #fff;
+}
+
+/* Detail Modal Styles */
+.handoff-detail-box {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.handoff-detail-section {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+}
+
+.handoff-detail-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.handoff-detail-section-content {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* Empty State */

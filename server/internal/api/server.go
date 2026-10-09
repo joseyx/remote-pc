@@ -105,6 +105,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/calendar/note", s.withAuth(s.handleCalendarGetNote))
 	mux.HandleFunc("PUT /api/calendar/note", s.withAuth(s.handleCalendarSaveNote))
 	mux.HandleFunc("POST /api/calendar/handoff", s.withAuth(s.handleCalendarHandoff))
+	mux.HandleFunc("PUT /api/calendar/handoff", s.withAuth(s.handleCalendarHandoffUpdate))
+	mux.HandleFunc("DELETE /api/calendar/handoff", s.withAuth(s.handleCalendarHandoffDelete))
 	mux.HandleFunc("GET /api/calendar/handoff/draft", s.withAuth(s.handleCalendarHandoffDraft))
 	mux.HandleFunc("POST /api/calendar/handoff/auto", s.withAuth(s.handleCalendarHandoffAuto))
 	mux.HandleFunc("POST /api/calendar/handoff/prompt-agent", s.withAuth(s.handleCalendarHandoffPromptAgent))
@@ -915,6 +917,61 @@ func (s *Server) handleCalendarHandoff(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(created)
+}
+
+func (s *Server) handleCalendarHandoffUpdate(w http.ResponseWriter, r *http.Request) {
+	var item calendar.HandoffItem
+	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if item.ID == "" {
+		http.Error(w, "missing handoff id", http.StatusBadRequest)
+		return
+	}
+
+	updated, err := s.calendarMgr.UpdateHandoff(item)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+func (s *Server) handleCalendarHandoffDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	date := r.URL.Query().Get("date")
+
+	if id == "" {
+		var body struct {
+			ID   string `json:"id"`
+			Date string `json:"date"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			id = body.ID
+			if date == "" {
+				date = body.Date
+			}
+		}
+	}
+
+	if id == "" {
+		http.Error(w, "missing handoff id", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.calendarMgr.DeleteHandoff(date, id); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"deleted": true,
+		"id":      id,
+	})
 }
 
 func (s *Server) handleCalendarStandup(w http.ResponseWriter, r *http.Request) {

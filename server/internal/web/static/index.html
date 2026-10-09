@@ -528,10 +528,15 @@
 
                                 <div class="calendar-main-content">
                                     <!-- Daily Markdown Note Card -->
-                                    <div class="calendar-note-card">
+                                    <div class="calendar-note-card" id="cal-note-card">
                                         <div class="calendar-note-card-header">
-                                            <span style="font-size: 12px; font-weight: 600; color: var(--text-main);">📌 Notas del Día (Markdown)</span>
-                                            <span style="font-size: 11px; color: var(--text-dim);" id="cal-note-status">Visualización</span>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <span style="font-size: 12px; font-weight: 600; color: var(--text-main);">📌 Notas del Día (Markdown)</span>
+                                                <span style="font-size: 11px; color: var(--text-dim);" id="cal-note-status">Visualización</span>
+                                            </div>
+                                            <button class="btn-card-toggle" id="btn-toggle-notes" onclick="toggleCalendarNotesCollapse()" title="Ocultar o mostrar notas para dar más espacio a los handoffs">
+                                                🔼 Ocultar Notas
+                                            </button>
                                         </div>
                                         <div class="calendar-rendered-body" id="cal-rendered-note">
                                             <!-- Rendered markdown -->
@@ -540,10 +545,33 @@
                                     </div>
 
                                     <!-- Structured Handoffs Card -->
-                                    <div class="calendar-note-card">
+                                    <div class="calendar-note-card" id="cal-handoffs-card">
                                         <div class="calendar-note-card-header">
-                                            <span style="font-size: 12px; font-weight: 600; color: var(--text-main);">🌙 Cierres de Tarea &amp; Handoffs Registrados</span>
-                                            <span id="cal-handoffs-count-badge" style="font-size: 11px; color: var(--accent);">0 registrados</span>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <span style="font-size: 12px; font-weight: 600; color: var(--text-main);">🌙 Cierres de Tarea &amp; Handoffs Registrados</span>
+                                                <span id="cal-handoffs-count-badge" style="font-size: 11px; color: var(--accent);">0 registrados</span>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 6px;">
+                                                <button class="btn btn-sm btn-ghost" onclick="toggleAllHandoffsExpand(true)" style="font-size: 11px; padding: 2px 7px;" title="Ver todos detallados">
+                                                    👁️ Expandir todos
+                                                </button>
+                                                <button class="btn btn-sm btn-ghost" onclick="toggleAllHandoffsExpand(false)" style="font-size: 11px; padding: 2px 7px;" title="Ver versión compacta">
+                                                    📦 Compactar
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <!-- Search & Filter Toolbar -->
+                                        <div class="handoffs-toolbar">
+                                            <div class="handoffs-search-box">
+                                                <span style="font-size: 12px; color: var(--text-dim);">🔍</span>
+                                                <input type="text" id="handoffs-search-input" class="handoffs-search-input" placeholder="Buscar tarea, commit o palabras clave..." oninput="filterHandoffsList()" />
+                                            </div>
+                                            <div class="handoffs-filter-group">
+                                                <button class="handoffs-filter-btn active" data-filter="all" onclick="setHandoffStatusFilter('all', this)">Todos</button>
+                                                <button class="handoffs-filter-btn" data-filter="in_progress" onclick="setHandoffStatusFilter('in_progress', this)">🟡 En Progreso</button>
+                                                <button class="handoffs-filter-btn" data-filter="completed" onclick="setHandoffStatusFilter('completed', this)">🟢 Completados</button>
+                                                <button class="handoffs-filter-btn" data-filter="blocked" onclick="setHandoffStatusFilter('blocked', this)">🔴 Bloqueados</button>
+                                            </div>
                                         </div>
                                         <div style="padding: 14px;" id="cal-handoffs-container">
                                             <div style="color: var(--text-dim); font-size: 12px; text-align: center; padding: 12px;">
@@ -914,6 +942,132 @@
                 <button class="btn" onclick="closeHandoffModal()">Cancelar</button>
                 <button class="btn btn-primary" onclick="submitHandoffForm()">
                     💾 Guardar Handoff en Calendario
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: VISTA DETALLADA DE HANDOFF -->
+    <div id="modal-handoff-detail" class="modal-overlay" onclick="if(event.target === this) closeHandoffDetailModal()">
+        <div class="modal-box" style="max-width: 620px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <h3 id="handoff-detail-title">💼 Detalle de Handoff</h3>
+                    <span id="handoff-detail-time-badge" style="font-size: 11px; color: var(--text-dim);"></span>
+                </div>
+                <button class="btn btn-sm" onclick="closeHandoffDetailModal()">✕</button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div class="handoff-detail-header-badges">
+                    <span id="handoff-detail-agent-pill" class="handoff-agent-pill">🤖 Claude Code</span>
+                    <span id="handoff-detail-status-pill" class="handoff-status-pill in_progress">🟡 En Progreso</span>
+                    <span id="handoff-detail-date-badge" style="font-size: 11px; color: var(--text-dim); margin-left: auto;"></span>
+                </div>
+
+                <div class="handoff-detail-section">
+                    <div class="handoff-detail-section-title" style="color: var(--green);">
+                        <span>✓</span> Lo que se logró hoy
+                    </div>
+                    <div id="handoff-detail-summary" class="handoff-detail-section-content"></div>
+                </div>
+
+                <div class="handoff-detail-section">
+                    <div class="handoff-detail-section-title" style="color: var(--accent);">
+                        <span>⏳</span> Lo que queda pendiente para mañana
+                    </div>
+                    <div id="handoff-detail-pending" class="handoff-detail-section-content"></div>
+                </div>
+
+                <div id="handoff-detail-blockers-container" class="handoff-detail-section" style="display: none; border-color: rgba(244, 63, 94, 0.3);">
+                    <div class="handoff-detail-section-title" style="color: var(--red);">
+                        <span>⛔</span> Puntos de atención / Bloqueos
+                    </div>
+                    <div id="handoff-detail-blockers" class="handoff-detail-section-content" style="color: #fb7185;"></div>
+                </div>
+
+                <div id="handoff-detail-git-container" class="handoff-detail-section" style="display: none;">
+                    <div class="handoff-detail-section-title" style="color: var(--text-muted);">
+                        <span>🌿</span> Git Snapshot Capturado
+                    </div>
+                    <div id="handoff-detail-git" class="handoff-detail-section-content" style="font-family: monospace; font-size: 12px;"></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-sm" onclick="deleteCurrentHandoffFromDetail()" style="color: #f87171; border-color: rgba(239, 68, 68, 0.3);">
+                        🗑️ Eliminar
+                    </button>
+                    <button class="btn btn-sm" onclick="editCurrentHandoffFromDetail()">
+                        ✏️ Modificar
+                    </button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-sm btn-ghost" onclick="copyCurrentHandoffText()" title="Copiar texto resumen">
+                        📋 Copiar
+                    </button>
+                    <button id="btn-handoff-detail-resume" class="btn btn-sm btn-primary" onclick="resumeCurrentHandoffFromDetail()">
+                        ▶ Retomar Tarea
+                    </button>
+                    <button class="btn btn-sm" onclick="closeHandoffDetailModal()">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: MODIFICAR HANDOFF -->
+    <div id="modal-handoff-edit" class="modal-overlay" onclick="if(event.target === this) closeEditHandoffModal()">
+        <div class="modal-box" style="max-width: 540px;">
+            <div class="modal-header">
+                <h3 id="edit-handoff-modal-title">✏️ Modificar Handoff</h3>
+                <button class="btn btn-sm" onclick="closeEditHandoffModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-handoff-id" />
+                <input type="hidden" id="edit-handoff-date" />
+
+                <div class="form-group">
+                    <label class="form-label">Tarea / Ticket</label>
+                    <input type="text" id="edit-handoff-taskname" class="form-control" />
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label">Agente / Responsable</label>
+                        <select id="edit-handoff-agent" class="form-control">
+                            <option value="claude">🤖 Claude Code</option>
+                            <option value="agy">🚀 Antigravity CLI</option>
+                            <option value="developer">👤 Desarrollador</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Estado de la Tarea</label>
+                        <select id="edit-handoff-status" class="form-control">
+                            <option value="in_progress">🟡 En Progreso</option>
+                            <option value="completed">🟢 Completado</option>
+                            <option value="blocked">🔴 Bloqueado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">¿Qué se logró hoy? (Completado)</label>
+                    <textarea id="edit-handoff-summary" class="form-control" rows="3" style="resize: vertical;"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">¿Qué queda pendiente para mañana?</label>
+                    <textarea id="edit-handoff-pending" class="form-control" rows="3" style="resize: vertical;"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bloqueos o Puntos de Atención (Opcional)</label>
+                    <input type="text" id="edit-handoff-blockers" class="form-control" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeEditHandoffModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="submitEditHandoffForm()">
+                    💾 Guardar Cambios
                 </button>
             </div>
         </div>

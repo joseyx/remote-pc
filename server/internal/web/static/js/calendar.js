@@ -11,6 +11,11 @@ let calSelectedDate = getTodayFormatted(); // YYYY-MM-DD
 let calMonthSummary = [];
 let calActiveNote = null;
 let isCalEditing = false;
+let calHandoffStatusFilter = 'all';
+let calHandoffSearchQuery = '';
+let calCurrentDetailHandoff = null;
+let calNotesCollapsed = false;
+let calAllHandoffsExpanded = false;
 
 function getTodayFormatted() {
     const d = new Date();
@@ -176,10 +181,9 @@ function reloadCalendarNote() {
 }
 
 function renderCalendarNote(note) {
+    calActiveNote = note;
     const renderedEl = document.getElementById('cal-rendered-note');
     const rawEl = document.getElementById('cal-raw-editor');
-    const handoffsEl = document.getElementById('cal-handoffs-container');
-    const countBadge = document.getElementById('cal-handoffs-count-badge');
 
     if (rawEl) rawEl.value = note.content || '';
 
@@ -191,38 +195,80 @@ function renderCalendarNote(note) {
         }
     }
 
-    // Render structured handoffs
-    const handoffs = note.handoffs || [];
+    renderHandoffsList();
+}
+
+function renderHandoffsList() {
+    const handoffsEl = document.getElementById('cal-handoffs-container');
+    const countBadge = document.getElementById('cal-handoffs-count-badge');
+    const allHandoffs = (calActiveNote && calActiveNote.handoffs) ? calActiveNote.handoffs : [];
+
+    // Filter by status & search query
+    let filtered = allHandoffs.filter(h => {
+        if (calHandoffStatusFilter !== 'all' && h.status !== calHandoffStatusFilter) {
+            return false;
+        }
+        if (calHandoffSearchQuery) {
+            const q = calHandoffSearchQuery.toLowerCase();
+            const matchTask = (h.taskName || '').toLowerCase().includes(q);
+            const matchSummary = (h.summary || '').toLowerCase().includes(q);
+            const matchPending = (h.pending || '').toLowerCase().includes(q);
+            const matchBlockers = (h.blockers || '').toLowerCase().includes(q);
+            const matchBranch = (h.branch || '').toLowerCase().includes(q);
+            const matchCommit = (h.lastCommit || '').toLowerCase().includes(q);
+            if (!matchTask && !matchSummary && !matchPending && !matchBlockers && !matchBranch && !matchCommit) {
+                return false;
+            }
+        }
+        return true;
+    });
+
     if (countBadge) {
-        countBadge.textContent = `${handoffs.length} registrado${handoffs.length === 1 ? '' : 's'}`;
+        if (calHandoffStatusFilter !== 'all' || calHandoffSearchQuery) {
+            countBadge.textContent = `${filtered.length} de ${allHandoffs.length} registrados`;
+        } else {
+            countBadge.textContent = `${allHandoffs.length} registrado${allHandoffs.length === 1 ? '' : 's'}`;
+        }
     }
 
-    if (handoffsEl) {
-        if (handoffs.length === 0) {
+    if (!handoffsEl) return;
+
+    if (filtered.length === 0) {
+        if (allHandoffs.length === 0) {
             handoffsEl.innerHTML = `
-                <div style="color: var(--text-dim); font-size: 12px; text-align: center; padding: 18px;">
+                <div style="color: var(--text-dim); font-size: 12px; text-align: center; padding: 24px;">
                     No hay handoffs registrados para este día. Pulsa "🌙 + Nuevo Handoff" para agregar uno.
                 </div>
             `;
         } else {
             handoffsEl.innerHTML = `
-                <div class="handoff-list">
-                    ${handoffs.map(h => renderHandoffCardHtml(h)).join('')}
+                <div style="color: var(--text-dim); font-size: 12px; text-align: center; padding: 24px;">
+                    No se encontraron handoffs que coincidan con el filtro o búsqueda actual.
                 </div>
             `;
         }
+        return;
     }
+
+    handoffsEl.innerHTML = `
+        <div class="handoff-list">
+            ${filtered.map(h => renderHandoffCardHtml(h)).join('')}
+        </div>
+    `;
 }
 
 function renderHandoffCardHtml(h) {
     let statusClass = 'in_progress';
     let statusText = '🟡 En Progreso';
+    let cardStatusClass = 'status-in_progress';
     if (h.status === 'completed') {
         statusClass = 'completed';
         statusText = '🟢 Completado';
+        cardStatusClass = 'status-completed';
     } else if (h.status === 'blocked') {
         statusClass = 'blocked';
         statusText = '🔴 Bloqueado';
+        cardStatusClass = 'status-blocked';
     }
 
     let agentIcon = '🤖 Claude Code';
@@ -232,6 +278,7 @@ function renderHandoffCardHtml(h) {
         agentClass = 'agy';
     } else if (h.agent === 'developer') {
         agentIcon = '👤 Desarrollador';
+        agentClass = 'dev';
     }
 
     let gitBar = '';
@@ -245,9 +292,16 @@ function renderHandoffCardHtml(h) {
         `;
     }
 
+    let summaryText = escapeHtml(h.summary || '');
+    let pendingText = escapeHtml(h.pending || '');
+    if (!calAllHandoffsExpanded) {
+        if (summaryText.length > 200) summaryText = summaryText.slice(0, 197) + '...';
+        if (pendingText.length > 200) pendingText = pendingText.slice(0, 197) + '...';
+    }
+
     return `
-        <div class="handoff-card">
-            <div class="handoff-card-header">
+        <div class="handoff-card ${cardStatusClass}" id="card-handoff-${h.id}">
+            <div class="handoff-card-header" onclick="openHandoffDetail('${h.id}')" title="Clic para abrir vista detallada">
                 <div class="handoff-card-title">
                     <span>💼 ${escapeHtml(h.taskName || 'Tarea')}</span>
                     <span style="font-size: 11px; font-weight: normal; color: var(--text-dim);">(${escapeHtml(h.time || '')})</span>
@@ -261,13 +315,13 @@ function renderHandoffCardHtml(h) {
                 ${h.summary ? `
                     <div class="handoff-section-row">
                         <span class="handoff-section-label">✓ Lo logrado hoy:</span>
-                        <span>${escapeHtml(h.summary)}</span>
+                        <span>${summaryText}</span>
                     </div>
                 ` : ''}
                 ${h.pending ? `
                     <div class="handoff-section-row">
                         <span class="handoff-section-label" style="color: var(--accent);">⏳ Pendiente para mañana:</span>
-                        <strong style="color: var(--text-main);">${escapeHtml(h.pending)}</strong>
+                        <strong style="color: var(--text-main);">${pendingText}</strong>
                     </div>
                 ` : ''}
                 ${h.blockers ? `
@@ -278,13 +332,297 @@ function renderHandoffCardHtml(h) {
                 ` : ''}
                 ${gitBar}
             </div>
-            <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
-                <button class="btn btn-sm btn-ghost" onclick="resumeTaskFromHandoff('${escapeHtml(h.bubbleId || '')}', '${escapeHtml(h.taskName || '')}', '${escapeHtml(h.pending || '')}')" style="font-size: 11px; color: var(--accent);">
-                    ▶ Retomar esta Tarea
-                </button>
+            <div class="handoff-actions-row">
+                <div class="handoff-action-buttons">
+                    <button class="btn-handoff-action primary" onclick="event.stopPropagation(); openHandoffDetail('${h.id}')" title="Ver detalle completo">
+                        🔍 Ver Detalle
+                    </button>
+                    <button class="btn-handoff-action" onclick="event.stopPropagation(); openEditHandoffModal('${h.id}')" title="Modificar este handoff">
+                        ✏️ Modificar
+                    </button>
+                    <button class="btn-handoff-action danger" onclick="event.stopPropagation(); confirmDeleteHandoff('${h.id}', '${escapeHtml(h.taskName || '')}')" title="Eliminar handoff">
+                        🗑️ Eliminar
+                    </button>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); resumeTaskFromHandoff('${escapeHtml(h.bubbleId || '')}', '${escapeHtml(h.taskName || '')}', '${escapeHtml(h.pending || '')}')" style="font-size: 11px; color: var(--accent);">
+                        ▶ Retomar esta Tarea
+                    </button>
+                </div>
             </div>
         </div>
     `;
+}
+
+function filterHandoffsList() {
+    const input = document.getElementById('handoffs-search-input');
+    calHandoffSearchQuery = input ? input.value.trim() : '';
+    renderHandoffsList();
+}
+
+function setHandoffStatusFilter(status, btn) {
+    calHandoffStatusFilter = status;
+    document.querySelectorAll('.handoffs-filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    renderHandoffsList();
+}
+
+function toggleAllHandoffsExpand(expand) {
+    calAllHandoffsExpanded = expand;
+    renderHandoffsList();
+}
+
+function toggleCalendarNotesCollapse() {
+    calNotesCollapsed = !calNotesCollapsed;
+    const card = document.getElementById('cal-note-card');
+    const btn = document.getElementById('btn-toggle-notes');
+    if (card) {
+        card.classList.toggle('collapsed', calNotesCollapsed);
+    }
+    if (btn) {
+        btn.textContent = calNotesCollapsed ? '🔽 Mostrar Notas' : '🔼 Ocultar Notas';
+    }
+}
+
+// ================= HANDOFF DETAIL MODAL =================
+function openHandoffDetail(id) {
+    if (!calActiveNote || !calActiveNote.handoffs) return;
+    const h = calActiveNote.handoffs.find(it => it.id === id);
+    if (!h) return;
+
+    calCurrentDetailHandoff = h;
+
+    const titleEl = document.getElementById('handoff-detail-title');
+    const timeEl = document.getElementById('handoff-detail-time-badge');
+    const agentEl = document.getElementById('handoff-detail-agent-pill');
+    const statusEl = document.getElementById('handoff-detail-status-pill');
+    const dateEl = document.getElementById('handoff-detail-date-badge');
+    const summaryEl = document.getElementById('handoff-detail-summary');
+    const pendingEl = document.getElementById('handoff-detail-pending');
+    const blockersCont = document.getElementById('handoff-detail-blockers-container');
+    const blockersEl = document.getElementById('handoff-detail-blockers');
+    const gitCont = document.getElementById('handoff-detail-git-container');
+    const gitEl = document.getElementById('handoff-detail-git');
+
+    if (titleEl) titleEl.textContent = `💼 ${h.taskName || 'Tarea'}`;
+    if (timeEl) timeEl.textContent = `(${h.time || ''})`;
+    if (dateEl) dateEl.textContent = `Fecha: ${h.date || calSelectedDate}`;
+
+    if (agentEl) {
+        let agentText = '🤖 Claude Code';
+        let agentClass = '';
+        if (h.agent === 'agy') {
+            agentText = '🚀 Antigravity CLI';
+            agentClass = 'agy';
+        } else if (h.agent === 'developer') {
+            agentText = '👤 Desarrollador';
+            agentClass = 'dev';
+        }
+        agentEl.className = `handoff-agent-pill ${agentClass}`;
+        agentEl.textContent = agentText;
+    }
+
+    if (statusEl) {
+        let statusText = '🟡 En Progreso';
+        let statusClass = 'in_progress';
+        if (h.status === 'completed') {
+            statusText = '🟢 Completado';
+            statusClass = 'completed';
+        } else if (h.status === 'blocked') {
+            statusText = '🔴 Bloqueado';
+            statusClass = 'blocked';
+        }
+        statusEl.className = `handoff-status-pill ${statusClass}`;
+        statusEl.textContent = statusText;
+    }
+
+    if (summaryEl) summaryEl.textContent = h.summary || 'Sin descripción de lo completado.';
+    if (pendingEl) pendingEl.textContent = h.pending || 'Sin tareas pendientes registradas.';
+
+    if (blockersCont && blockersEl) {
+        if (h.blockers && h.blockers.trim()) {
+            blockersCont.style.display = 'block';
+            blockersEl.textContent = h.blockers;
+        } else {
+            blockersCont.style.display = 'none';
+        }
+    }
+
+    if (gitCont && gitEl) {
+        if (h.branch || h.lastCommit) {
+            gitCont.style.display = 'block';
+            let gitLines = [];
+            if (h.branch) gitLines.push(`• Rama activa: ${h.branch}`);
+            if (h.lastCommit) gitLines.push(`• Último commit: ${h.lastCommit}`);
+            if (h.dirtyFiles > 0) gitLines.push(`• Archivos sin commitear: ${h.dirtyFiles}`);
+            else gitLines.push(`• Árbol de trabajo: Limpio`);
+            gitEl.textContent = gitLines.join('\n');
+        } else {
+            gitCont.style.display = 'none';
+        }
+    }
+
+    const modal = document.getElementById('modal-handoff-detail');
+    if (modal) modal.classList.add('open');
+}
+
+function closeHandoffDetailModal() {
+    const modal = document.getElementById('modal-handoff-detail');
+    if (modal) modal.classList.remove('open');
+}
+
+function copyCurrentHandoffText() {
+    if (!calCurrentDetailHandoff) return;
+    const h = calCurrentDetailHandoff;
+    let text = `*Handoff: ${h.taskName}* (${h.date} ${h.time})\n`;
+    text += `Estado: ${h.status === 'completed' ? 'Completado' : h.status === 'blocked' ? 'Bloqueado' : 'En Progreso'}\n\n`;
+    if (h.summary) text += `*Logrado hoy:*\n${h.summary}\n\n`;
+    if (h.pending) text += `*Pendiente para mañana:*\n${h.pending}\n\n`;
+    if (h.blockers) text += `*Bloqueos:*\n${h.blockers}\n\n`;
+    if (h.branch) text += `*Git:* Rama ${h.branch} | Commit ${h.lastCommit || 'HEAD'}\n`;
+
+    navigator.clipboard.writeText(text).then(() => {
+        showToast("📋 Handoff copiado al portapapeles");
+    }).catch(() => {
+        showToast("No se pudo copiar al portapapeles");
+    });
+}
+
+function resumeCurrentHandoffFromDetail() {
+    if (!calCurrentDetailHandoff) return;
+    const h = calCurrentDetailHandoff;
+    closeHandoffDetailModal();
+    resumeTaskFromHandoff(h.bubbleId || '', h.taskName || '', h.pending || '');
+}
+
+function editCurrentHandoffFromDetail() {
+    if (!calCurrentDetailHandoff) return;
+    const id = calCurrentDetailHandoff.id;
+    closeHandoffDetailModal();
+    openEditHandoffModal(id);
+}
+
+function deleteCurrentHandoffFromDetail() {
+    if (!calCurrentDetailHandoff) return;
+    const id = calCurrentDetailHandoff.id;
+    const taskName = calCurrentDetailHandoff.taskName;
+    closeHandoffDetailModal();
+    confirmDeleteHandoff(id, taskName);
+}
+
+// ================= HANDOFF EDIT MODAL =================
+function openEditHandoffModal(id) {
+    if (!calActiveNote || !calActiveNote.handoffs) return;
+    const h = calActiveNote.handoffs.find(it => it.id === id);
+    if (!h) return;
+
+    document.getElementById('edit-handoff-id').value = h.id;
+    document.getElementById('edit-handoff-date').value = h.date || calSelectedDate;
+    document.getElementById('edit-handoff-taskname').value = h.taskName || '';
+    document.getElementById('edit-handoff-agent').value = h.agent || 'claude';
+    document.getElementById('edit-handoff-status').value = h.status || 'in_progress';
+    document.getElementById('edit-handoff-summary').value = h.summary || '';
+    document.getElementById('edit-handoff-pending').value = h.pending || '';
+    document.getElementById('edit-handoff-blockers').value = h.blockers || '';
+
+    const titleEl = document.getElementById('edit-handoff-modal-title');
+    if (titleEl) titleEl.textContent = `✏️ Modificar Handoff - ${h.taskName || 'Tarea'}`;
+
+    const modal = document.getElementById('modal-handoff-edit');
+    if (modal) modal.classList.add('open');
+}
+
+function closeEditHandoffModal() {
+    const modal = document.getElementById('modal-handoff-edit');
+    if (modal) modal.classList.remove('open');
+}
+
+async function submitEditHandoffForm() {
+    const id = document.getElementById('edit-handoff-id').value;
+    const date = document.getElementById('edit-handoff-date').value || calSelectedDate;
+    const taskName = document.getElementById('edit-handoff-taskname').value.trim();
+    const agent = document.getElementById('edit-handoff-agent').value;
+    const status = document.getElementById('edit-handoff-status').value;
+    const summary = document.getElementById('edit-handoff-summary').value.trim();
+    const pending = document.getElementById('edit-handoff-pending').value.trim();
+    const blockers = document.getElementById('edit-handoff-blockers').value.trim();
+
+    if (!summary && !pending) {
+        appAlert("Por favor ingresa al menos lo completado hoy o lo pendiente para mañana.", "Campos Requeridos", "⚠️");
+        return;
+    }
+
+    const payload = {
+        id,
+        date,
+        taskName: taskName || 'Tarea',
+        agent,
+        status,
+        summary,
+        pending,
+        blockers
+    };
+
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        };
+        const res = await fetch('/api/calendar/handoff', {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            showToast("✅ Handoff modificado exitosamente");
+            closeEditHandoffModal();
+            await fetchCalendarNote(date);
+            await fetchCalendarMonth(calCurrentYear, calCurrentMonth);
+            await fetchCalendarStandup();
+        } else {
+            appAlert("Error al actualizar handoff: " + (await res.text()), "Error", "❌");
+        }
+    } catch (e) {
+        appAlert("Error de conexión: " + e, "Error", "❌");
+    }
+}
+
+// ================= HANDOFF DELETE ACTION =================
+async function confirmDeleteHandoff(id, taskName) {
+    const ok = await appConfirm(
+        `¿Estás seguro de que deseas eliminar este registro de handoff de la tarea "${taskName}"?\n\nEsta acción actualizará las notas diarias y el registro de standup.`,
+        "Eliminar Handoff",
+        "Eliminar",
+        "Cancelar",
+        true,
+        "🗑️"
+    );
+    if (!ok) return;
+
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        };
+        const res = await fetch(`/api/calendar/handoff?id=${encodeURIComponent(id)}&date=${encodeURIComponent(calSelectedDate)}`, {
+            method: 'DELETE',
+            headers
+        });
+
+        if (res.ok) {
+            showToast("🗑️ Handoff eliminado correctamente");
+            await fetchCalendarNote(calSelectedDate);
+            await fetchCalendarMonth(calCurrentYear, calCurrentMonth);
+            await fetchCalendarStandup();
+        } else {
+            appAlert("Error al eliminar handoff: " + (await res.text()), "Error", "❌");
+        }
+    } catch (e) {
+        appAlert("Error de conexión: " + e, "Error", "❌");
+    }
 }
 
 function toggleCalendarEditMode() {
