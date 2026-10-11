@@ -42,7 +42,41 @@ def get_remote_pc_config():
                 pass
     return {"port": "8080", "authToken": ""}
 
-def api_request(path, method="GET", body=None):
+def ensure_server_running(port):
+    exe_paths = [
+        os.path.join(ROOT_DIR, "remotepc-server.exe"),
+        os.path.join(SERVER_DIR, "remotepc-server.exe"),
+        r"C:\Users\Jose\Documents\Personal Projects\Remote PC\remotepc-server.exe",
+        os.path.expanduser(r"~\Documents\Personal Projects\Remote PC\remotepc-server.exe"),
+    ]
+    for exe in exe_paths:
+        if os.path.exists(exe):
+            try:
+                import subprocess
+                subprocess.Popen(
+                    [exe, "-no-open"],
+                    cwd=os.path.dirname(exe),
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                )
+                import time
+                url = f"http://127.0.0.1:{port}/api/health"
+                for _ in range(15):
+                    time.sleep(0.2)
+                    try:
+                        req = urllib.request.Request(url, method="GET")
+                        with urllib.request.urlopen(req, timeout=1) as resp:
+                            return True
+                    except Exception:
+                        pass
+                return False
+            except Exception:
+                pass
+    return False
+
+def api_request(path, method="GET", body=None, retried=False):
     cfg = get_remote_pc_config()
     port = cfg.get("port", "8080")
     token = cfg.get("authToken", "")
@@ -68,7 +102,15 @@ def api_request(path, method="GET", body=None):
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode("utf-8")
         return None, f"HTTP {e.code}: {err_msg}"
+    except urllib.error.URLError as e:
+        if not retried:
+            if ensure_server_running(port):
+                return api_request(path, method=method, body=body, retried=True)
+        return None, f"Error conectando con Remote PC en {url}: {e}. Asegúrate de que remotepc-server esté en ejecución."
     except Exception as e:
+        if not retried and ("10061" in str(e) or "refused" in str(e).lower()):
+            if ensure_server_running(port):
+                return api_request(path, method=method, body=body, retried=True)
         return None, f"Error conectando con Remote PC en {url}: {e}"
 
 # Tool Definitions
