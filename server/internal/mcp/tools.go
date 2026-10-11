@@ -278,10 +278,15 @@ func getClientConfig() clientConfig {
 	userProfile := os.Getenv("USERPROFILE")
 
 	paths := []string{
+		filepath.Join("data", "server.config.json"),
+		filepath.Join(exeDir, "data", "server.config.json"),
 		filepath.Join(exeDir, "server.config.json"),
+		filepath.Join(localApp, "RemotePC", "data", "server.config.json"),
 		filepath.Join(localApp, "RemotePC", "server.config.json"),
+		filepath.Join(userProfile, "Documents", "Personal Projects", "Remote PC", "data", "server.config.json"),
 		filepath.Join(userProfile, "Documents", "Personal Projects", "Remote PC", "server.config.json"),
 		filepath.Join(userProfile, "Documents", "Personal Projects", "Remote PC", "server", "server.config.json"),
+		"server.config.json",
 	}
 
 	for _, p := range paths {

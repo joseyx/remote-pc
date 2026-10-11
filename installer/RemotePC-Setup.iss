@@ -39,8 +39,8 @@ Name: "setupmcp"; Description: "Configurar servidor MCP para Claude Code CLI y C
 [Files]
 ; Ejecutable principal
 Source: "..\server\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; Archivo de configuración (solo si no existe para no sobreescribir tokens de sesiones previas)
-Source: "..\server\server.config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
+; Archivo de configuracion de ejemplo
+Source: "..\server.config.json.example"; DestDir: "{app}"; Flags: ignoreversion
 ; Scripts y utilidades opcionales
 Source: "..\server\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Documentación

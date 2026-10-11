@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"path/filepath"
 )
 
 type Config struct {
@@ -14,17 +15,66 @@ type Config struct {
 	Host         string `json:"host"`
 	DefaultShell string `json:"defaultShell"`
 	MaxHistoryKB int    `json:"maxHistoryKB"`
+	DataDir      string `json:"-"`
+}
+
+// GetDataDir determines the central storage folder for runtime data (notes, metadata, state)
+func GetDataDir() string {
+	if envDir := os.Getenv("REMOTE_PC_DATA_DIR"); envDir != "" {
+		_ = os.MkdirAll(envDir, 0755)
+		return envDir
+	}
+
+	exePath, _ := os.Executable()
+	exeDir := filepath.Dir(exePath)
+
+	// Search order for data directory:
+	// 1. "data" in current working directory
+	// 2. "data" in executable directory
+	// 3. "../data" (if binary is in server/ or bin/)
+	candidates := []string{
+		"data",
+		filepath.Join(exeDir, "data"),
+		filepath.Join(exeDir, "..", "data"),
+	}
+
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && fi.IsDir() {
+			return filepath.Clean(c)
+		}
+	}
+
+	// Create "data" in current directory if none exists
+	_ = os.MkdirAll("data", 0755)
+	return "data"
 }
 
 func LoadConfig() *Config {
+	dataDir := GetDataDir()
+
 	cfg := &Config{
 		Port:         "8080",
 		Host:         "0.0.0.0",
 		DefaultShell: "powershell.exe",
 		MaxHistoryKB: 2048, // 2 MB ring buffer per session
+		DataDir:      dataDir,
 	}
 
-	configPath := "server.config.json"
+	configPath := filepath.Join(dataDir, "server.config.json")
+	// If config doesn't exist in dataDir, check root/exeDir as fallback
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fallbackPaths := []string{
+			"server.config.json",
+			filepath.Join(filepath.Dir(dataDir), "server.config.json"),
+		}
+		for _, fp := range fallbackPaths {
+			if _, err := os.Stat(fp); err == nil {
+				configPath = fp
+				break
+			}
+		}
+	}
+
 	// Load existing persistent configuration if available
 	if data, err := os.ReadFile(configPath); err == nil {
 		_ = json.Unmarshal(data, cfg)
@@ -59,9 +109,10 @@ func LoadConfig() *Config {
 		cfg.AuthToken = hex.EncodeToString(bytes)
 	}
 
-	// Persist configuration to disk
+	// Persist configuration to disk in dataDir
+	savePath := filepath.Join(dataDir, "server.config.json")
 	if data, err := json.MarshalIndent(cfg, "", "  "); err == nil {
-		_ = os.WriteFile(configPath, data, 0644)
+		_ = os.WriteFile(savePath, data, 0644)
 	}
 
 	return cfg

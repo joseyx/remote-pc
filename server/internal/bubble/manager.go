@@ -30,12 +30,19 @@ type Manager struct {
 	metadata   map[string]BubbleMeta
 }
 
-func NewManager() *Manager {
+func NewManager(dataDir ...string) *Manager {
+	metaPath := "bubbles_metadata.json"
+	if len(dataDir) > 0 && dataDir[0] != "" {
+		metaPath = filepath.Join(dataDir[0], "bubbles_metadata.json")
+	} else if fi, err := os.Stat(filepath.Join("data", "bubbles_metadata.json")); err == nil && !fi.IsDir() {
+		metaPath = filepath.Join("data", "bubbles_metadata.json")
+	}
+
 	m := &Manager{
 		workspaces: make(map[WorkspaceType]WorkspaceInfo),
 		bubbles:    make(map[string]*Bubble),
 		devCmds:    make(map[string]*exec.Cmd),
-		metaPath:   "bubbles_metadata.json",
+		metaPath:   metaPath,
 		metadata:   make(map[string]BubbleMeta),
 	}
 	m.loadMetadata()
@@ -114,6 +121,9 @@ func (m *Manager) loadMetadata() {
 		return
 	}
 	data, err := os.ReadFile(m.metaPath)
+	if err != nil && m.metaPath != "bubbles_metadata.json" {
+		data, err = os.ReadFile("bubbles_metadata.json")
+	}
 	if err != nil {
 		return
 	}

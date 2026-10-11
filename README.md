@@ -122,39 +122,45 @@ flowchart TD
 
 ## 📁 Estructura del Repositorio
 
-```
+```text
 Remote PC/
-├── server/                     # Servidor Daemon en Go
-│   ├── cmd/server/             # Punto de entrada (main.go)
+├── server/                     # Servidor Daemon & MCP en Go
+│   ├── cmd/server/             # Punto de entrada CLI, Daemon y MCP (main.go)
 │   ├── internal/
 │   │   ├── api/                # Enrutador HTTP REST y WebSocket
 │   │   ├── bubble/             # Gestor de Bubbles, Worktrees y Dev Servers
-│   │   ├── config/             # Carga y persistencia de configuración
+│   │   ├── calendar/           # Calendario de Handoffs, Daily Notes y Standup
+│   │   ├── config/             # Carga y resolución central de datos (data/)
 │   │   ├── git/                # Helpers de Git (status, diff, branch, log)
+│   │   ├── installer/          # Registro de Windows (PATH), accesos directos y uninstaller
+│   │   ├── mcp/                # Servidor MCP JSON-RPC 2.0 nativo (10 herramientas)
 │   │   ├── obsidian/           # Búsqueda y lectura de Vaults de Obsidian
 │   │   ├── pty/                # Windows ConPTY API (CreatePseudoConsole)
-│   │   ├── session/            # Gestor de procesos, buffer circular y clientes
+│   │   ├── session/            # Gestor de terminales, buffer circular y persistencia
 │   │   ├── vpn/                # Integración con Windscribe CLI
 │   │   └── web/                # Dashboard Web embebido (HTML/CSS/JS + xterm.js + marked)
+│   ├── scripts/                # Scripts auxiliares en Python (fallback MCP y CLI)
 │   └── README.md
 ├── android/                    # Cliente Nativo Android (Kotlin + Compose)
 │   ├── app/src/main/java/com/remotepc/app/
-│   │   ├── data/
-│   │   │   ├── model/          # Modelos de Sesión, VPN y Directorios
-
-│   │   │   └── network/        # ApiClient, WebSocket y AppConfig
-│   │   ├── ui/
-│   │   │   ├── components/     # Barra de atajos para Claude Code
-│   │   │   ├── dialogs/        # Diálogo para crear sesiones y selector de carpetas
-│   │   │   ├── sessions/       # Pantalla principal y tarjeta de VPN interactiva
-│   │   │   ├── settings/       # Pantalla de configuración y prueba de conexión
-│   │   │   ├── terminal/       # Vista de terminal con scroll interactivo
-│   │   │   └── theme/          # Paleta de colores Dark Terminal
+│   │   ├── data/               # Modelos de Sesión, VPN y Red (WebSocket/OkHttp)
+│   │   ├── ui/                 # Interfaz Compose (Terminal, Atajos Claude, VPN Card)
 │   │   └── AndroidManifest.xml
 │   ├── build.gradle.kts
 │   └── README.md
+├── installer/                  # Definición del Instalador Gráfico
+│   └── RemotePC-Setup.iss      # Script Inno Setup 6 (asistente de instalación por usuario)
+├── scripts/                    # Scripts de Automatización y Developer Experience
+│   ├── build-installer.ps1     # Compila el binario y empaqueta dist/RemotePC-Setup.exe
+│   └── clean.ps1               # Limpieza de temporales, builds y logs
+├── data/                       # [IGNORADO EN GIT] Almacenamiento central de runtime
+│   ├── calendar_notes/         # Notas markdown diarias y handoffs_registry.json
+│   ├── bubbles_metadata.json   # Metadatos, prioridades y orden de bubbles
+│   ├── sessions_state.json     # Historial persistente de terminales
+│   └── server.config.json      # Configuración de puerto y token de la máquina
+├── dist/                       # [IGNORADO EN GIT] Instalador empaquetado (RemotePC-Setup.exe)
 ├── start-server.bat            # Script de inicio rápido en Windows
-├── server.config.json.example  # Plantilla de configuración del servidor
+├── server.config.json.example  # Plantilla de configuración de ejemplo
 ├── .gitignore
 └── README.md
 ```

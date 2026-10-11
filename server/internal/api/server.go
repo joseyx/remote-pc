@@ -44,13 +44,17 @@ type Server struct {
 }
 
 func NewServer(cfg *config.Config, manager *session.Manager) *Server {
+	dataDir := cfg.DataDir
+	if dataDir == "" {
+		dataDir = config.GetDataDir()
+	}
 	return &Server{
 		cfg:         cfg,
 		manager:     manager,
 		vpnMgr:      vpn.NewManager(),
-		bubbleMgr:   bubble.NewManager(),
+		bubbleMgr:   bubble.NewManager(dataDir),
 		obsidianMgr: obsidian.NewManager(),
-		calendarMgr: calendar.NewManager(),
+		calendarMgr: calendar.NewManager(filepath.Join(dataDir, "calendar_notes")),
 		startedAt:   time.Now(),
 	}
 }

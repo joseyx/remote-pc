@@ -3,6 +3,8 @@
 
 $ErrorActionPreference = "Stop"
 
+$rootDir = Split-Path -Parent $PSScriptRoot
+
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host "       Remote PC - Build & Installer Packaging       " -ForegroundColor Cyan
 Write-Host "=====================================================" -ForegroundColor Cyan
@@ -39,7 +41,8 @@ Write-Host "[1/4] Compilador Inno Setup encontrado: $isccPath" -ForegroundColor 
 
 # 2. Compile Go binary
 Write-Host "[2/4] Compilando remotepc-server.exe (Go con optimizaciones -s -w)..." -ForegroundColor Yellow
-Push-Location "$PSScriptRoot\server"
+$serverDir = Join-Path $rootDir "server"
+Push-Location $serverDir
 try {
     go build -ldflags="-s -w" -o remotepc-server.exe ./cmd/server
     if ($LASTEXITCODE -ne 0) {
@@ -49,19 +52,19 @@ try {
     Pop-Location
 }
 
-# Copy to root directory for local project convenience
-Copy-Item "$PSScriptRoot\server\remotepc-server.exe" -Destination "$PSScriptRoot\remotepc-server.exe" -Force
+# Copy to root directory for local convenience
+Copy-Item (Join-Path $serverDir "remotepc-server.exe") -Destination (Join-Path $rootDir "remotepc-server.exe") -Force
 Write-Host "      [OK] Binario compilado exitosamente." -ForegroundColor Green
 
 # 3. Create dist output directory
-$distDir = "$PSScriptRoot\dist"
+$distDir = Join-Path $rootDir "dist"
 if (-not (Test-Path $distDir)) {
     New-Item -ItemType Directory -Path $distDir | Out-Null
 }
 
 # 4. Compile Inno Setup Script
 Write-Host "[3/4] Compilando instalador con Inno Setup..." -ForegroundColor Yellow
-$issPath = "$PSScriptRoot\installer\RemotePC-Setup.iss"
+$issPath = Join-Path $rootDir "installer\RemotePC-Setup.iss"
 
 & "$isccPath" "$issPath"
 if ($LASTEXITCODE -ne 0) {
@@ -70,7 +73,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 5. Summary
-$setupExe = "$distDir\RemotePC-Setup.exe"
+$setupExe = Join-Path $distDir "RemotePC-Setup.exe"
 if (Test-Path $setupExe) {
     $item = Get-Item $setupExe
     $hash = (Get-FileHash $setupExe -Algorithm SHA256).Hash

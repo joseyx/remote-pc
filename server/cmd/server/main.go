@@ -102,7 +102,13 @@ func main() {
 	shouldOpen := *openFlag && !*noOpenFlag
 
 	cfg := config.LoadConfig()
-	manager := session.NewManager(cfg.MaxHistoryKB, "sessions_state.json")
+	sessionsFile := filepath.Join(cfg.DataDir, "sessions_state.json")
+	if _, err := os.Stat(sessionsFile); os.IsNotExist(err) {
+		if _, err := os.Stat("sessions_state.json"); err == nil {
+			sessionsFile = "sessions_state.json"
+		}
+	}
+	manager := session.NewManager(cfg.MaxHistoryKB, sessionsFile)
 	if err := manager.RestoreSessions(); err != nil {
 		log.Printf("Warning: failed to restore previous sessions: %v", err)
 	}

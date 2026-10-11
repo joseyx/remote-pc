@@ -78,6 +78,8 @@ func NewManager(notesDir ...string) *Manager {
 	dir := "calendar_notes"
 	if len(notesDir) > 0 && notesDir[0] != "" {
 		dir = notesDir[0]
+	} else if fi, err := os.Stat(filepath.Join("data", "calendar_notes")); err == nil && fi.IsDir() {
+		dir = filepath.Join("data", "calendar_notes")
 	}
 
 	_ = os.MkdirAll(dir, 0755)
@@ -93,6 +95,9 @@ func NewManager(notesDir ...string) *Manager {
 
 func (m *Manager) loadState() {
 	data, err := os.ReadFile(m.stateFile)
+	if err != nil && m.stateFile != filepath.Join("calendar_notes", "handoffs_registry.json") {
+		data, err = os.ReadFile(filepath.Join("calendar_notes", "handoffs_registry.json"))
+	}
 	if err != nil {
 		return
 	}
