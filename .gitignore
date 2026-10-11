@@ -5,6 +5,7 @@ server/remotepc-server.exe
 *.dll
 *.so
 *.dylib
+dist/
 
 # Local Configuration (contains user auth token)
 server.config.json

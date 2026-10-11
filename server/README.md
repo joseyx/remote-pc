@@ -16,9 +16,60 @@ Servidor daemon de alto rendimiento para Windows que permite crear y administrar
 ## Requisitos
 
 - Windows 10 (versión 1809 o superior) o Windows 11.
-- Go 1.22+.
+- Inno Setup 6 (opcional, solo para compilar el instalador gráfico).
+- Go 1.22+ (para compilar desde código fuente).
 
-## Ejecución
+## Instalador para Usuarios (`RemotePC-Setup.exe`)
+
+Para desplegar Remote PC en cualquier computadora sin necesidad de instalar Go ni Python:
+1. Ejecuta el instalador gráfico `dist\RemotePC-Setup.exe`.
+2. El asistente permite:
+   - Instalar por usuario en `%LOCALAPPDATA%\RemotePC` (no requiere permisos de Administrador).
+   - Agregar automáticamente al `PATH` del usuario.
+   - Configurar el servidor MCP para **Claude Code CLI** y **Claude Desktop** de forma desatendida.
+   - Crear acceso directo en el Escritorio y Menú Inicio.
+
+### Generar el Instalador
+Para recompilar el binario y empaquetar el instalador con Inno Setup:
+```powershell
+.\build-installer.ps1
+```
+Generará `dist\RemotePC-Setup.exe` optimizado con compresión LZMA2.
+
+## Comandos CLI de `remotepc-server.exe`
+
+El binario compilado incluye herramientas de autoservicio para terminal:
+
+| Comando | Descripción |
+| :--- | :--- |
+| `remotepc-server` | Inicia el servidor daemon y la interfaz web en segundo plano |
+| `remotepc-server mcp` | Ejecuta el servidor MCP JSON-RPC 2.0 por stdio (utilizado por Claude) |
+| `remotepc-server setup-mcp` | Configura el servidor MCP en Claude Code y Claude Desktop para el usuario actual |
+| `remotepc-server uninstall-mcp` | Remueve la configuración MCP de Claude Code y Claude Desktop |
+| `remotepc-server add-path` | Agrega el directorio del binario al `PATH` de Windows del usuario |
+| `remotepc-server remove-path` | Remueve el directorio del binario del `PATH` del usuario |
+| `remotepc-server install` | Autoinstalación completa (PATH + MCP + Acceso directo) |
+| `remotepc-server uninstall` | Desinstalación limpia de entorno y MCP |
+| `remotepc-server version` | Muestra la versión actual |
+| `remotepc-server help` | Muestra la ayuda de comandos |
+
+## Servidor MCP Nativo (Model Context Protocol)
+
+Remote PC implementa el protocolo MCP directamente en Go, permitiendo a Claude Code y Claude Desktop interactuar con:
+- `save_daily_handoff`: Registra cierres de jornada y avances diarios directamente en el Calendario.
+- `get_standup_pending`: Consulta pendientes del día anterior o de fechas específicas.
+- `get_today_note`: Consulta notas y tareas del día.
+- `update_daily_handoff`: Edita un handoff existente.
+- `delete_daily_handoff`: Elimina un handoff.
+- `add_daily_todo`: Agrega tareas accionables con checkboxes `[ ]` o `[x]`.
+- `append_daily_note`: Anexa notas libres a la bitácora del día.
+- `list_workspace_bubbles`: Consulta todos los entornos de trabajo y branches activos.
+- `get_bubble_context`: Obtiene el estado Git, commits y puerto asignado de la tarea actual.
+- `create_workspace_bubble`: Crea un nuevo worktree y branch aislado para una tarea (Aditum, Brif).
+
+Si el servidor daemon no está en ejecución cuando Claude invoca una herramienta MCP, `remotepc-server mcp` inicia automáticamente el servicio en segundo plano sin bloquear al agente.
+
+## Ejecución Manual
 
 ### Modo directo
 ```powershell
