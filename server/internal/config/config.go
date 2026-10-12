@@ -103,7 +103,93 @@ func GetDataDir() string {
 		targetDir = filepath.Join(exeDir, "data")
 	}
 	_ = os.MkdirAll(targetDir, 0755)
+	if !hasData(targetDir) {
+		migrateExistingData(targetDir, hasData)
+	}
 	return filepath.Clean(targetDir)
+}
+
+func migrateExistingData(targetDir string, hasData func(string) bool) {
+	var searchDirs []string
+
+	// 1. Check directories in user PATH
+	pathEnv := os.Getenv("PATH")
+	for _, p := range filepath.SplitList(pathEnv) {
+		if p != "" {
+			searchDirs = append(searchDirs, filepath.Join(p, "data"))
+			searchDirs = append(searchDirs, filepath.Join(p, "..", "data"))
+		}
+	}
+
+	// 2. Check Claude Desktop config for existing orbit/remotepc binary directory
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		claudeCfg := filepath.Join(appData, "Claude", "claude_desktop_config.json")
+		if data, err := os.ReadFile(claudeCfg); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.Contains(line, "orbit") || strings.Contains(line, "remotepc") {
+					cleanLine := strings.ReplaceAll(line, `\\`, `/`)
+					for _, part := range strings.Fields(cleanLine) {
+						part = strings.Trim(part, `",:[]{} `)
+						if strings.HasSuffix(strings.ToLower(part), ".exe") {
+							dir := filepath.Dir(part)
+							searchDirs = append(searchDirs, filepath.Join(dir, "data"))
+							searchDirs = append(searchDirs, filepath.Join(dir, "..", "data"))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Check common user locations
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		searchDirs = append(searchDirs,
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "data"),
+			filepath.Join(home, "Documents", "Remote PC", "data"),
+			filepath.Join(home, "Documents", "Orbit", "data"),
+		)
+	}
+
+	// Find first source that has real data
+	var sourceDir string
+	for _, s := range searchDirs {
+		cleanS := filepath.Clean(s)
+		if cleanS != filepath.Clean(targetDir) && hasData(cleanS) {
+			sourceDir = cleanS
+			break
+		}
+	}
+
+	if sourceDir == "" {
+		return
+	}
+
+	// Copy data from sourceDir to targetDir
+	_ = copyDir(sourceDir, targetDir)
+}
+
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return nil
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+		if _, err := os.Stat(target); os.IsNotExist(err) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			_ = os.WriteFile(target, data, info.Mode())
+		}
+		return nil
+	})
 }
 
 func LoadConfig() *Config {

@@ -80,3 +80,41 @@ func TestGetDataDirEnvVar(t *testing.T) {
 	}
 }
 
+func TestCopyDir(t *testing.T) {
+	srcDir, err := os.MkdirTemp("", "orbit-copydir-src-*")
+	if err != nil {
+		t.Fatalf("failed to create src dir: %v", err)
+	}
+	defer os.RemoveAll(srcDir)
+
+	dstDir, err := os.MkdirTemp("", "orbit-copydir-dst-*")
+	if err != nil {
+		t.Fatalf("failed to create dst dir: %v", err)
+	}
+	defer os.RemoveAll(dstDir)
+
+	subDir := filepath.Join(srcDir, "calendar_notes")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("failed to create sub dir: %v", err)
+	}
+
+	testFile := filepath.Join(subDir, "handoffs_registry.json")
+	if err := os.WriteFile(testFile, []byte(`{"test":true}`), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	if err := copyDir(srcDir, dstDir); err != nil {
+		t.Fatalf("copyDir failed: %v", err)
+	}
+
+	targetFile := filepath.Join(dstDir, "calendar_notes", "handoffs_registry.json")
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatalf("expected copied file at %s: %v", targetFile, err)
+	}
+	if string(data) != `{"test":true}` {
+		t.Errorf("expected content %s, got %s", `{"test":true}`, string(data))
+	}
+}
+
+
