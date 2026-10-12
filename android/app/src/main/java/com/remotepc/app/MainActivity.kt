@@ -19,9 +19,31 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+        handleOrbitIntent(intent)
         setContent {
             RemotePCTheme {
                 AppNavigation()
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleOrbitIntent(intent)
+    }
+
+    private fun handleOrbitIntent(intent: android.content.Intent?) {
+        intent?.data?.let { uri ->
+            if (uri.scheme == "orbit") {
+                val host = uri.host
+                val port = if (uri.port != -1) uri.port.toString() else "8080"
+                val token = uri.getQueryParameter("token") ?: ""
+                if (!host.isNullOrBlank()) {
+                    val config = com.remotepc.app.data.network.AppConfig(this)
+                    config.host = host
+                    config.port = port
+                    config.token = token
+                }
             }
         }
     }

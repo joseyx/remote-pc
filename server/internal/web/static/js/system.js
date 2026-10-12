@@ -188,26 +188,142 @@ async function toggleVPN(action = 'toggle') {
     }
 }
 
-// Pair Modal
-function openPairModal() {
-    document.getElementById('modal-pair').classList.add('open');
+// Pair Modal & QR Generation
+let currentQRCode = null;
+
+async function openPairModal() {
+    if (!serverInfo) {
+        await fetchServerInfo();
+    }
+    setupPairIpOptions();
+    updatePairQR();
+    const modal = document.getElementById('modal-pair');
+    if (modal) modal.classList.add('open');
 }
 
 function closePairModal() {
-    document.getElementById('modal-pair').classList.remove('open');
+    const modal = document.getElementById('modal-pair');
+    if (modal) modal.classList.remove('open');
+}
+
+function setupPairIpOptions() {
+    const select = document.getElementById('pair-ip-select');
+    if (!select || !serverInfo) return;
+
+    const previousVal = select.value;
+    select.innerHTML = '';
+
+    const ipSet = new Set();
+    const candidates = [];
+
+    // Current browser hostname if not localhost
+    const curHost = window.location.hostname;
+    if (curHost && curHost !== 'localhost' && curHost !== '127.0.0.1' && curHost !== '::1') {
+        candidates.push({ ip: curHost, label: `Host Actual (${curHost})` });
+        ipSet.add(curHost);
+    }
+
+    // Server detected LAN IPs
+    if (Array.isArray(serverInfo.lanIps)) {
+        for (const ip of serverInfo.lanIps) {
+            if (!ip || ipSet.has(ip)) continue;
+            ipSet.add(ip);
+            let label = `LAN: ${ip}`;
+            if (ip.startsWith('100.')) {
+                label = `Tailscale VPN: ${ip}`;
+            } else if (ip.startsWith('192.168.')) {
+                label = `Wi-Fi / Red Local: ${ip}`;
+            } else if (ip.startsWith('10.') || ip.startsWith('172.')) {
+                label = `Red Privada: ${ip}`;
+            }
+            candidates.push({ ip, label });
+        }
+    }
+
+    // Localhost fallback if set is empty
+    if (candidates.length === 0) {
+        candidates.push({ ip: curHost || '127.0.0.1', label: `Localhost: ${curHost || '127.0.0.1'}` });
+    }
+
+    for (const c of candidates) {
+        const opt = document.createElement('option');
+        opt.value = c.ip;
+        opt.textContent = c.label;
+        select.appendChild(opt);
+    }
+
+    if (previousVal && ipSet.has(previousVal)) {
+        select.value = previousVal;
+    }
+}
+
+function getPairUri() {
+    if (!serverInfo) return '';
+    const select = document.getElementById('pair-ip-select');
+    const host = (select && select.value) ? select.value : ((serverInfo.lanIps && serverInfo.lanIps[0]) || window.location.hostname);
+    const port = serverInfo.port || '8080';
+    const token = serverInfo.authToken || '';
+    return token ? `orbit://${host}:${port}?token=${encodeURIComponent(token)}` : `orbit://${host}:${port}`;
+}
+
+function updatePairQR() {
+    if (!serverInfo) return;
+    const select = document.getElementById('pair-ip-select');
+    const host = (select && select.value) ? select.value : ((serverInfo.lanIps && serverInfo.lanIps[0]) || window.location.hostname);
+    const port = serverInfo.port || '8080';
+    const token = serverInfo.authToken || '';
+
+    // Update manual text display
+    const elIp = document.getElementById('pair-ip');
+    const elPort = document.getElementById('pair-port');
+    const elToken = document.getElementById('pair-token');
+    if (elIp) elIp.textContent = host;
+    if (elPort) elPort.textContent = port;
+    if (elToken) elToken.textContent = token || '(ninguno)';
+
+    const uri = getPairUri();
+    const container = document.getElementById('pair-qr-canvas');
+    if (!container) return;
+
+    container.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+        try {
+            new QRCode(container, {
+                text: uri,
+                width: 200,
+                height: 200,
+                colorDark: '#0f172a',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        } catch (e) {
+            console.error('Error rendering QR code:', e);
+            container.innerHTML = `<span style="color:red; font-size:12px;">Error al generar QR: ${e.message}</span>`;
+        }
+    } else {
+        container.innerHTML = `<span style="color:var(--text-dim); font-size:12px;">Biblioteca QR no cargada</span>`;
+    }
+}
+
+function copyPairUri() {
+    const uri = getPairUri();
+    if (!uri) return;
+    navigator.clipboard.writeText(uri);
+    showToast("Enlace orbit:// copiado!");
 }
 
 function copyToken() {
     if (!serverInfo) return;
-    navigator.clipboard.writeText(serverInfo.authToken);
+    navigator.clipboard.writeText(serverInfo.authToken || '');
     showToast("Token de autenticación copiado!");
 }
 
 function copyFullConfig() {
     if (!serverInfo) return;
-    const primaryIp = (serverInfo.lanIps && serverInfo.lanIps.length > 0) ? serverInfo.lanIps[0] : window.location.hostname;
+    const select = document.getElementById('pair-ip-select');
+    const host = (select && select.value) ? select.value : ((serverInfo.lanIps && serverInfo.lanIps[0]) || window.location.hostname);
     const config = {
-        host: primaryIp,
+        host: host,
         port: serverInfo.port || "8080",
         token: serverInfo.authToken || ""
     };

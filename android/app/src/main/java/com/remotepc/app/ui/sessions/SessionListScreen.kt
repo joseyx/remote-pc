@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
@@ -180,7 +181,7 @@ fun SessionListScreen(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Remote PC Sessions", color = TerminalText, fontWeight = FontWeight.Bold)
+                        Text("Orbit Sessions", color = TerminalText, fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
@@ -229,11 +230,25 @@ fun SessionListScreen(
                     }
                     errorMessage != null -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(20.dp)
+                            ) {
                                 Text(text = errorMessage ?: "", color = TerminalRed, fontSize = 14.sp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                IconButton(onClick = { refreshSessions() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = TerminalAccent)
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Button(
+                                    onClick = onOpenSettings,
+                                    colors = ButtonDefaults.buttonColors(containerColor = TerminalAccent)
+                                ) {
+                                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Pair / Scan QR", color = TerminalSurface)
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedButton(onClick = { refreshSessions() }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Retry", modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Retry Connection")
                                 }
                             }
                         }

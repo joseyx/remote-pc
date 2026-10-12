@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orbit - Developer Cockpit & Workspace Hub</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
     <!-- Vendor Stylesheets -->
     <link rel="stylesheet" href="xterm.css">
@@ -840,27 +841,52 @@
     </div>
 
     <!-- MODAL: PAIR ANDROID APP -->
-    <div id="modal-pair" class="modal-overlay">
-        <div class="modal-box">
+    <div id="modal-pair" class="modal-overlay" onclick="if(event.target === this) closePairModal()">
+        <div class="modal-box" style="max-width: 440px;">
             <div class="modal-header">
-                <h3>📱 Emparejar Teléfono (App Android)</h3>
+                <h3>📱 Emparejar Orbit Mobile</h3>
                 <button class="btn btn-sm" onclick="closePairModal()">✕</button>
             </div>
             <div class="modal-body" style="text-align: center;">
                 <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
-                    Introduce estos datos en la pantalla de <strong>Settings</strong> de tu app Orbit Mobile:
+                    Escanea este código QR con la app móvil <strong>Orbit</strong> para conectarte al instante:
                 </p>
-                <div style="background-color: var(--bg-base); padding: 14px; border-radius: var(--radius-md); text-align: left; font-family: monospace; font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
-                    <div><span style="color: var(--text-dim);">IP de la PC:</span> <strong id="pair-ip" style="color: var(--accent);">--</strong></div>
-                    <div><span style="color: var(--text-dim);">Puerto:</span> <strong id="pair-port" style="color: var(--green);">8080</strong></div>
-                    <div><span style="color: var(--text-dim);">Token Auth:</span> <strong id="pair-token" style="color: var(--amber); word-break: break-all;">--</strong></div>
+
+                <!-- IP Selector -->
+                <div style="margin-bottom: 14px; text-align: left;">
+                    <label class="form-label" style="font-size: 11px; margin-bottom: 4px; display: block; color: var(--text-dim);">Interfaz de Red / IP:</label>
+                    <select id="pair-ip-select" class="form-control" onchange="updatePairQR()" style="width: 100%; font-size: 12px; font-family: monospace;">
+                        <!-- Injected dynamically with LAN & VPN IPs -->
+                    </select>
                 </div>
-                <div style="margin-top: 16px;">
-                    <button class="btn btn-primary" onclick="copyFullConfig()">Copiar Configuración JSON</button>
+
+                <!-- QR Code Box -->
+                <div style="display: flex; justify-content: center; align-items: center; margin: 16px 0;">
+                    <div style="background: #ffffff; padding: 14px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.35); display: inline-flex; justify-content: center; align-items: center;">
+                        <div id="pair-qr-canvas" style="display: flex; justify-content: center; align-items: center; min-width: 200px; min-height: 200px;"></div>
+                    </div>
                 </div>
+
+                <!-- Action Buttons -->
+                <div style="display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-sm btn-primary" onclick="copyPairUri()">🔗 Copiar Enlace orbit://</button>
+                    <button class="btn btn-sm" onclick="copyFullConfig()">📋 Copiar JSON</button>
+                </div>
+
+                <!-- Manual Connection Details Collapsible -->
+                <details style="margin-top: 16px; text-align: left; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px;">
+                    <summary style="cursor: pointer; color: var(--text-muted); font-weight: 500;">
+                        ⚙️ Detalles de conexión manual
+                    </summary>
+                    <div style="margin-top: 10px; font-family: monospace; display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+                        <div><span style="color: var(--text-dim);">Host:</span> <strong id="pair-ip" style="color: var(--accent);">--</strong></div>
+                        <div><span style="color: var(--text-dim);">Puerto:</span> <strong id="pair-port" style="color: var(--green);">8080</strong></div>
+                        <div><span style="color: var(--text-dim);">Token:</span> <strong id="pair-token" style="color: var(--amber); word-break: break-all;">--</strong></div>
+                    </div>
+                </details>
             </div>
             <div class="modal-footer">
-                <button class="btn" onclick="closePairModal()">Listo</button>
+                <button class="btn btn-sm" onclick="closePairModal()">Cerrar</button>
             </div>
         </div>
     </div>
@@ -1406,6 +1432,7 @@
     <script src="xterm-addon-fit.js"></script>
     <script src="xterm-addon-search.js"></script>
     <script src="marked.min.js"></script>
+    <script src="js/qrcode.min.js"></script>
 
     <!-- Application Modular Scripts -->
     <script src="js/state.js"></script>
