@@ -863,3 +863,102 @@ function pollServerRestart() {
     }, 1500);
 }
 
+// ==========================================
+// Orbit Doctor Diagnostic UI
+// ==========================================
+
+async function openDoctorModal() {
+    const modal = document.getElementById('modal-doctor');
+    if (!modal) return;
+    modal.classList.add('open');
+    await loadDoctorDiagnostics();
+}
+
+function closeDoctorModal() {
+    const modal = document.getElementById('modal-doctor');
+    if (modal) modal.classList.remove('open');
+}
+
+async function loadDoctorDiagnostics() {
+    const listEl = document.getElementById('doctor-checks-list');
+    const summaryText = document.getElementById('doctor-summary-text');
+    const timeEl = document.getElementById('doctor-timestamp');
+
+    if (summaryText) summaryText.textContent = 'Ejecutando diagnóstico...';
+    if (listEl) {
+        listEl.innerHTML = '<div style="font-size: 12px; color: var(--text-dim); text-align: center; padding: 20px;">Analizando subsistemas del entorno...</div>';
+    }
+
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/system/doctor', { headers });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const report = await res.json();
+
+        if (timeEl && report.timestamp) {
+            timeEl.textContent = 'Ejecutado: ' + new Date(report.timestamp).toLocaleTimeString();
+        }
+
+        if (summaryText) {
+            if (report.errors === 0 && report.warnings === 0) {
+                summaryText.innerHTML = `<span style="color: #34d399;">✓ ${report.passed} verificaciones superadas al 100%</span> · Orbit listo`;
+            } else if (report.errors === 0) {
+                summaryText.innerHTML = `<span style="color: #34d399;">✓ ${report.passed} superadas</span> · <span style="color: #fbbf24;">${report.warnings} aviso(s)</span> · 0 errores`;
+            } else {
+                summaryText.innerHTML = `<span style="color: #ef4444;">✗ ${report.errors} error(es)</span> · <span style="color: #fbbf24;">${report.warnings} aviso(s)</span> · ${report.passed} superadas`;
+            }
+        }
+
+        if (listEl && report.items) {
+            listEl.innerHTML = '';
+            report.items.forEach(it => {
+                const card = document.createElement('div');
+                card.style.cssText = 'background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;';
+
+                let badgeHtml = '';
+                if (it.status === 'ok') {
+                    badgeHtml = '<span style="background: rgba(52, 211, 153, 0.15); color: #34d399; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">✓ OK</span>';
+                } else if (it.status === 'warning') {
+                    badgeHtml = '<span style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">! AVISO</span>';
+                } else {
+                    badgeHtml = '<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">✗ ERROR</span>';
+                }
+
+                let detailsHtml = '';
+                if (it.details) {
+                    detailsHtml = `<div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">${escapeHtml(it.details)}</div>`;
+                }
+
+                let remediationHtml = '';
+                if (it.remediation) {
+                    remediationHtml = `<div style="font-size: 11px; color: #60a5fa; background: rgba(59, 130, 246, 0.08); border-left: 2px solid #60a5fa; padding: 4px 8px; border-radius: 2px; margin-top: 4px;">💡 <strong>Sugerencia:</strong> ${escapeHtml(it.remediation)}</div>`;
+                }
+
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">${escapeHtml(it.category || 'General')}</span>
+                            <span style="color: var(--border-subtle);">·</span>
+                            <strong style="font-size: 13px; color: var(--text-main);">${escapeHtml(it.name)}</strong>
+                        </div>
+                        ${badgeHtml}
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted);">${escapeHtml(it.message)}</div>
+                    ${detailsHtml}
+                    ${remediationHtml}
+                `;
+                listEl.appendChild(card);
+            });
+        }
+
+    } catch (err) {
+        console.error('Error cargando diagnóstico:', err);
+        if (summaryText) summaryText.textContent = 'Error al ejecutar diagnóstico';
+        if (listEl) {
+            listEl.innerHTML = `<div style="font-size: 12px; color: var(--red); padding: 14px; text-align: center;">Error al comunicarse con Orbit: ${escapeHtml(err.message || String(err))}</div>`;
+        }
+    }
+}
+
+

@@ -82,6 +82,7 @@ function buildCmdPaletteItems() {
     // 5. System & VPN
     cmdPaletteItems.push(
         { cat: 'Sistema', title: 'Ocultar / Mostrar Sidebar', desc: 'Colapsar barra lateral izquierda', icon: '📂', shortcut: 'Ctrl+B', action: () => { closeCommandPalette(); toggleSidebar(); } },
+        { cat: 'Sistema', title: 'Diagnóstico del Entorno (Orbit Doctor)', desc: 'Verifica PTY, Git, MCP, Obsidian, Red y Permisos', icon: '🩺', shortcut: '', action: () => { closeCommandPalette(); openDoctorModal(); } },
         { cat: 'Sistema', title: 'Alternar VPN Windscribe', desc: 'Abrir diálogo de conexión VPN', icon: '🛡️', shortcut: '', action: () => { closeCommandPalette(); openVPNModal(); } },
         { cat: 'Sistema', title: 'Conectar Teléfono Móvil', desc: 'Ver QR y credenciales de pairing', icon: '📱', shortcut: '', action: () => { closeCommandPalette(); openPairModal(); } },
         { cat: 'Sistema', title: 'Copiar Token de Acceso', desc: 'Copiar token de autorización', icon: '📋', shortcut: '', action: () => { closeCommandPalette(); copyToken(); } },

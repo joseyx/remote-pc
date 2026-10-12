@@ -1162,6 +1162,32 @@
         </div>
     </div>
 
+    <!-- MODAL: ORBIT DOCTOR DIAGNOSTICS -->
+    <div id="modal-doctor" class="modal-overlay">
+        <div class="modal-box" style="max-width: 680px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🩺</span>
+                    <h3 style="margin: 0;">Diagnóstico del Entorno · Orbit Doctor</h3>
+                </div>
+                <button class="btn btn-sm" onclick="closeDoctorModal()">✕</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px; max-height: 70vh; overflow-y: auto;">
+                <div id="doctor-summary-bar" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; font-weight: 600; color: var(--text-main);" id="doctor-summary-text">Ejecutando diagnóstico...</span>
+                    <button class="btn btn-sm" onclick="loadDoctorDiagnostics()" title="Volver a ejecutar diagnóstico">🔄 Re-ejecutar</button>
+                </div>
+                <div id="doctor-checks-list" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="font-size: 12px; color: var(--text-dim); text-align: center; padding: 16px;">Analizando subsistemas del sistema...</div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 11px; color: var(--text-dim);" id="doctor-timestamp">--</span>
+                <button class="btn" onclick="closeDoctorModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Context Menu for Terminal Subtabs -->
     <div id="subtab-context-menu" class="custom-context-menu">
         <div style="font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 2px;" id="ctx-menu-title">
@@ -1309,6 +1335,7 @@
                 <span style="color: var(--border-subtle); font-size: 10px;">·</span>
                 <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;" id="modal-orbit-version">Orbit v1.0.0</span>
                 <button class="btn btn-sm" id="btn-check-update-stats" onclick="checkForUpdates(false)" style="padding: 1px 7px; font-size: 10px; border-color: rgba(59, 130, 246, 0.3); color: #93c5fd;" title="Buscar actualizaciones de Orbit">🔍 Buscar actualización</button>
+                <button class="btn btn-sm" id="btn-open-doctor" onclick="openDoctorModal()" style="padding: 1px 7px; font-size: 10px; border-color: rgba(52, 211, 153, 0.3); color: #34d399;" title="Diagnóstico de entorno y herramientas (Orbit Doctor)">🩺 Doctor</button>
             </div>
             <button class="btn btn-sm" onclick="closeSystemStatsModal()">Listo</button>
         </div>

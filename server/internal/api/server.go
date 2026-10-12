@@ -19,6 +19,7 @@ import (
 	"orbit/internal/bubble"
 	"orbit/internal/calendar"
 	"orbit/internal/config"
+	"orbit/internal/doctor"
 	"orbit/internal/git"
 	"orbit/internal/obsidian"
 	"orbit/internal/services"
@@ -69,6 +70,7 @@ func (s *Server) Routes() http.Handler {
 	// API Routes
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/server-info", s.handleServerInfo)
+	mux.HandleFunc("GET /api/system/doctor", s.handleSystemDoctor)
 	mux.HandleFunc("GET /api/system/version", s.handleSystemVersion)
 	mux.HandleFunc("POST /api/system/update", s.withAuth(s.handleSystemUpdate))
 	mux.HandleFunc("GET /api/system/stats", s.handleSystemStats)
@@ -252,6 +254,12 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) handleSystemDoctor(w http.ResponseWriter, r *http.Request) {
+	report := doctor.RunDiagnostics(s.cfg, s.version)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(report)
 }
 
 func (s *Server) handleSystemVersion(w http.ResponseWriter, r *http.Request) {

@@ -25,7 +25,7 @@ func SetupMCP(exePath string) error {
 	// 1. Configurar Claude Code CLI
 	setupClaudeCode(exePath)
 
-	// 2. Configurar Claude Desktop
+// 2. Configurar Claude Desktop
 	setupClaudeDesktop(exePath)
 
 	return nil
@@ -41,7 +41,8 @@ func UninstallMCP() error {
 	return nil
 }
 
-func getClaudeDesktopConfigPath() string {
+// GetClaudeDesktopConfigPath returns the platform-specific path to Claude Desktop configuration
+func GetClaudeDesktopConfigPath() string {
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
 	case "windows":
@@ -127,7 +128,7 @@ func setupClaudeCode(exePath string) {
 }
 
 func setupClaudeDesktop(exePath string) {
-	configPath := getClaudeDesktopConfigPath()
+	configPath := GetClaudeDesktopConfigPath()
 	if configPath == "" {
 		return
 	}
@@ -204,7 +205,7 @@ func uninstallClaudeCode() {
 }
 
 func uninstallClaudeDesktop() {
-	configPath := getClaudeDesktopConfigPath()
+	configPath := GetClaudeDesktopConfigPath()
 	if configPath == "" {
 		return
 	}

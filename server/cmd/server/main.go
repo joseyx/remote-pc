@@ -16,6 +16,7 @@ import (
 
 	"orbit/internal/api"
 	"orbit/internal/config"
+	"orbit/internal/doctor"
 	"orbit/internal/installer"
 	"orbit/internal/mcp"
 	"orbit/internal/session"
@@ -34,6 +35,12 @@ func main() {
 	if len(os.Args) > 1 {
 		subcommand := os.Args[1]
 		switch subcommand {
+		case "doctor":
+			cfg := config.LoadConfig()
+			report := doctor.RunDiagnostics(cfg, Version)
+			fmt.Print(doctor.FormatCLI(report))
+			return
+
 		case "check-update":
 			checkUpdateCLI()
 			return
@@ -190,6 +197,7 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Comandos disponibles:")
 	fmt.Println("  (sin comando)      Inicia el servidor daemon y el Cockpit web")
+	fmt.Println("  doctor             Ejecuta un diagnóstico completo del entorno e integraciones")
 	fmt.Println("  check-update       Verifica si existe una versión más reciente de Orbit")
 	fmt.Println("  update [--force]   Actualiza Orbit automáticamente a la última versión")
 	fmt.Println("  mcp                Ejecuta el servidor MCP JSON-RPC 2.0 por stdio (para Claude)")

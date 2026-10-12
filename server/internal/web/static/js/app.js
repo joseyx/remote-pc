@@ -118,6 +118,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             closeSystemStatsModal();
             closeVpnWarningModal();
             closeUpdateModal();
+            closeDoctorModal();
         }
     });
     window.addEventListener('click', (e) => {
