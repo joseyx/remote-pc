@@ -63,3 +63,20 @@ func TestConfigPINAndToken(t *testing.T) {
 		t.Errorf("expected PIN to be empty")
 	}
 }
+
+func TestGetDataDirEnvVar(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "orbit-datadir-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	os.Setenv("ORBIT_DATA_DIR", tempDir)
+	defer os.Unsetenv("ORBIT_DATA_DIR")
+
+	got := GetDataDir()
+	if filepath.Clean(got) != filepath.Clean(tempDir) {
+		t.Errorf("expected GetDataDir to return ORBIT_DATA_DIR %s, got %s", tempDir, got)
+	}
+}
+

@@ -36,6 +36,8 @@ func NewManager(dataDir ...string) *Manager {
 		metaPath = filepath.Join(dataDir[0], "bubbles_metadata.json")
 	} else if fi, err := os.Stat(filepath.Join("data", "bubbles_metadata.json")); err == nil && !fi.IsDir() {
 		metaPath = filepath.Join("data", "bubbles_metadata.json")
+	} else if fi, err := os.Stat(filepath.Join("..", "data", "bubbles_metadata.json")); err == nil && !fi.IsDir() {
+		metaPath = filepath.Join("..", "data", "bubbles_metadata.json")
 	}
 
 	m := &Manager{
@@ -121,8 +123,20 @@ func (m *Manager) loadMetadata() {
 		return
 	}
 	data, err := os.ReadFile(m.metaPath)
-	if err != nil && m.metaPath != "bubbles_metadata.json" {
-		data, err = os.ReadFile("bubbles_metadata.json")
+	if err != nil {
+		for _, fb := range []string{
+			filepath.Join("data", "bubbles_metadata.json"),
+			filepath.Join("..", "data", "bubbles_metadata.json"),
+			"bubbles_metadata.json",
+		} {
+			if fb != m.metaPath {
+				if d, errFb := os.ReadFile(fb); errFb == nil {
+					data = d
+					err = nil
+					break
+				}
+			}
+		}
 	}
 	if err != nil {
 		return

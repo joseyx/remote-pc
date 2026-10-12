@@ -136,8 +136,15 @@ func main() {
 	cfg := config.LoadConfig()
 	sessionsFile := filepath.Join(cfg.DataDir, "sessions_state.json")
 	if _, err := os.Stat(sessionsFile); os.IsNotExist(err) {
-		if _, err := os.Stat("sessions_state.json"); err == nil {
-			sessionsFile = "sessions_state.json"
+		for _, fb := range []string{
+			filepath.Join("data", "sessions_state.json"),
+			filepath.Join("..", "data", "sessions_state.json"),
+			"sessions_state.json",
+		} {
+			if _, errFb := os.Stat(fb); errFb == nil {
+				sessionsFile = fb
+				break
+			}
 		}
 	}
 	manager := session.NewManager(cfg.MaxHistoryKB, sessionsFile)

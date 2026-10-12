@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type Config struct {
@@ -34,16 +35,21 @@ func GetDataDir() string {
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
 	home, _ := os.UserHomeDir()
+	base := filepath.Base(exeDir)
 
 	// Search order for data directory:
-	// 1. "data" in current working directory
-	// 2. "data" in executable directory
-	// 3. "../data" (if binary is in server/ or bin/)
-	candidates := []string{
-		"data",
-		filepath.Join(exeDir, "data"),
-		filepath.Join(exeDir, "..", "data"),
+	var candidates []string
+
+	// If binary is in server/ or bin/, check parent data dir FIRST
+	if strings.EqualFold(base, "server") || strings.EqualFold(base, "bin") {
+		candidates = append(candidates, filepath.Join(exeDir, "..", "data"))
 	}
+
+	candidates = append(candidates,
+		filepath.Join(exeDir, "data"),
+		"data",
+		filepath.Join(exeDir, "..", "data"),
+	)
 
 	if runtime.GOOS == "darwin" && home != "" {
 		candidates = append(candidates,
@@ -62,15 +68,42 @@ func GetDataDir() string {
 		)
 	}
 
+	// Helper to check if a directory contains real project data
+	hasData := func(dir string) bool {
+		indicators := []string{"calendar_notes", "server.config.json", "bubbles_metadata.json", "sessions_state.json"}
+		for _, ind := range indicators {
+			if _, err := os.Stat(filepath.Join(dir, ind)); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1. First pass: Return first candidate that actually contains existing data files
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && fi.IsDir() {
+			if hasData(c) {
+				return filepath.Clean(c)
+			}
+		}
+	}
+
+	// 2. Second pass: If none has data, return first candidate directory that already exists
 	for _, c := range candidates {
 		if fi, err := os.Stat(c); err == nil && fi.IsDir() {
 			return filepath.Clean(c)
 		}
 	}
 
-	// Create "data" in current directory if none exists
-	_ = os.MkdirAll("data", 0755)
-	return "data"
+	// 3. Fallback: choose the best location to initialize data
+	var targetDir string
+	if strings.EqualFold(base, "server") || strings.EqualFold(base, "bin") {
+		targetDir = filepath.Join(exeDir, "..", "data")
+	} else {
+		targetDir = filepath.Join(exeDir, "data")
+	}
+	_ = os.MkdirAll(targetDir, 0755)
+	return filepath.Clean(targetDir)
 }
 
 func LoadConfig() *Config {

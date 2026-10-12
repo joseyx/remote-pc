@@ -80,6 +80,8 @@ func NewManager(notesDir ...string) *Manager {
 		dir = notesDir[0]
 	} else if fi, err := os.Stat(filepath.Join("data", "calendar_notes")); err == nil && fi.IsDir() {
 		dir = filepath.Join("data", "calendar_notes")
+	} else if fi, err := os.Stat(filepath.Join("..", "data", "calendar_notes")); err == nil && fi.IsDir() {
+		dir = filepath.Join("..", "data", "calendar_notes")
 	}
 
 	_ = os.MkdirAll(dir, 0755)
@@ -95,8 +97,21 @@ func NewManager(notesDir ...string) *Manager {
 
 func (m *Manager) loadState() {
 	data, err := os.ReadFile(m.stateFile)
-	if err != nil && m.stateFile != filepath.Join("calendar_notes", "handoffs_registry.json") {
-		data, err = os.ReadFile(filepath.Join("calendar_notes", "handoffs_registry.json"))
+	if err != nil {
+		fallbacks := []string{
+			filepath.Join("data", "calendar_notes", "handoffs_registry.json"),
+			filepath.Join("..", "data", "calendar_notes", "handoffs_registry.json"),
+			filepath.Join("calendar_notes", "handoffs_registry.json"),
+		}
+		for _, fb := range fallbacks {
+			if fb != m.stateFile {
+				if d, errFb := os.ReadFile(fb); errFb == nil {
+					data = d
+					err = nil
+					break
+				}
+			}
+		}
 	}
 	if err != nil {
 		return
@@ -116,7 +131,20 @@ func (m *Manager) saveState() error {
 }
 
 func (m *Manager) getNoteFilePath(date string) string {
-	return filepath.Join(m.notesDir, fmt.Sprintf("%s.md", date))
+	primary := filepath.Join(m.notesDir, fmt.Sprintf("%s.md", date))
+	if _, err := os.Stat(primary); err == nil {
+		return primary
+	}
+	for _, fb := range []string{
+		filepath.Join("data", "calendar_notes", fmt.Sprintf("%s.md", date)),
+		filepath.Join("..", "data", "calendar_notes", fmt.Sprintf("%s.md", date)),
+		filepath.Join("calendar_notes", fmt.Sprintf("%s.md", date)),
+	} {
+		if _, err := os.Stat(fb); err == nil {
+			return fb
+		}
+	}
+	return primary
 }
 
 // GetDayNote loads the markdown note and associated structured handoffs for date (YYYY-MM-DD)
