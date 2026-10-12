@@ -1,0 +1,40 @@
+name: CI - Test & Build
+
+on:
+  push:
+    branches: [ main, "feature/**" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-go:
+    name: Backend Go (Unit Tests & Build)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: server/go.sum
+
+      - name: Verify Dependencies
+        working-directory: ./server
+        run: go mod verify
+
+      - name: Run Unit Tests
+        working-directory: ./server
+        run: go test -v -race -timeout 3m ./...
+
+      - name: Compile Executable
+        working-directory: ./server
+        run: go build -ldflags="-s -w" -o remotepc-server.exe ./cmd/server
+
+      - name: Test CLI Subcommands
+        working-directory: ./server
+        run: |
+          .\remotepc-server.exe version
+          .\remotepc-server.exe help
