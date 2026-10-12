@@ -1202,4 +1202,304 @@ async function executeServiceAction(action) {
     }
 }
 
+// ==========================================
+// Security, Token Rotation & PIN Management
+// ==========================================
+let securityStatusData = null;
+let tokenMasked = true;
+
+async function openSecurityModal() {
+    const modal = document.getElementById('modal-security');
+    if (modal) modal.classList.add('open');
+    tokenMasked = true;
+    updateTokenMaskUI();
+    await fetchSecurityStatus();
+}
+
+function closeSecurityModal() {
+    const modal = document.getElementById('modal-security');
+    if (modal) modal.classList.remove('open');
+}
+
+function toggleTokenMask() {
+    tokenMasked = !tokenMasked;
+    updateTokenMaskUI();
+}
+
+function updateTokenMaskUI() {
+    const input = document.getElementById('security-token-input');
+    const btn = document.getElementById('btn-toggle-token-mask');
+    if (!input || !btn) return;
+
+    input.type = tokenMasked ? 'password' : 'text';
+    btn.textContent = tokenMasked ? '👁️' : '🔒';
+    btn.title = tokenMasked ? 'Revelar token' : 'Ocultar token';
+}
+
+async function fetchSecurityStatus() {
+    const pinCard = document.getElementById('security-pin-card');
+    const tokenInput = document.getElementById('security-token-input');
+
+    try {
+        const res = await fetch('/api/system/security', {
+            headers: {
+                'Authorization': `Bearer ${serverInfo ? serverInfo.authToken : ''}`
+            }
+        });
+        if (!res.ok) throw new Error(await res.text());
+        securityStatusData = await res.json();
+
+        if (tokenInput && securityStatusData.token) {
+            tokenInput.value = securityStatusData.token;
+        }
+
+        renderSecurityPINUI(securityStatusData);
+    } catch (e) {
+        console.error('Error fetching security status:', e);
+        if (pinCard) {
+            pinCard.innerHTML = `<span style="color: var(--red);">Error al consultar seguridad: ${escapeHtml(e.message || String(e))}</span>`;
+        }
+    }
+}
+
+function renderSecurityPINUI(sec) {
+    const pinCard = document.getElementById('security-pin-card');
+    if (!pinCard) return;
+
+    if (sec.hasPin) {
+        pinCard.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="color: var(--green); font-weight: 700;">✓ PIN Activo</span>
+                    <span style="font-size: 11px; color: var(--text-dim);">(4-8 dígitos configurados)</span>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-sm" onclick="promptSetPIN(true)">Cambiar</button>
+                    <button class="btn btn-sm" style="color: var(--red);" onclick="promptRemovePIN()">Eliminar</button>
+                </div>
+            </div>
+            <div style="font-size: 11px; color: var(--text-dim);">
+                El PIN es requerido para autorizar rotaciones de credenciales y desbloquear el Cockpit.
+            </div>
+        `;
+    } else {
+        pinCard.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="color: var(--amber); font-weight: 600;">! Sin PIN de Seguridad</span>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="promptSetPIN(false)">⚡ Configurar PIN</button>
+            </div>
+            <div style="font-size: 11px; color: var(--text-dim);">
+                Agrega un PIN numérico para proteger cambios de configuración y bloquear la pantalla.
+            </div>
+        `;
+    }
+}
+
+async function promptRotateToken() {
+    const confirmed = await appConfirm(
+        "¿Estás seguro de que deseas rotar el token de autenticación? Todas las aplicaciones móviles Orbit y herramientas MCP conectadas deberán actualizarse.",
+        "Rotar Token de Autenticación",
+        "Sí, rotar token",
+        "Cancelar",
+        true
+    );
+    if (!confirmed) return;
+
+    let pin = '';
+    if (securityStatusData && securityStatusData.hasPin) {
+        pin = await appPrompt(
+            "Introduce tu PIN de seguridad para autorizar la rotación del token:",
+            "",
+            "Autorización Requerida",
+            "Confirmar",
+            "🛡️"
+        );
+        if (!pin) return;
+    }
+
+    try {
+        const res = await fetch('/api/system/token/rotate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serverInfo ? serverInfo.authToken : ''}`
+            },
+            body: JSON.stringify({ pin })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            appAlert(`Error: ${data.error || 'No se pudo rotar el token'}`, 'Fallo de Seguridad', '❌');
+        } else {
+            // Update in-memory credentials immediately
+            if (serverInfo) serverInfo.authToken = data.token;
+            const input = document.getElementById('security-token-input');
+            if (input) input.value = data.token;
+            const pairToken = document.getElementById('pair-token');
+            if (pairToken) pairToken.textContent = data.token;
+
+            // Update QR Code
+            if (typeof updatePairQR === 'function') {
+                updatePairQR();
+            }
+
+            showToast("✓ Token rotado exitosamente. Generado nuevo QR.");
+        }
+    } catch (e) {
+        appAlert(`Error de red: ${e.message}`, 'Error de Comunicación', '❌');
+    }
+}
+
+async function promptSetPIN(isChanging = false) {
+    let currentPin = '';
+    if (isChanging) {
+        currentPin = await appPrompt(
+            "Introduce tu PIN actual:",
+            "",
+            "Verificar PIN Actual",
+            "Continuar",
+            "🔑"
+        );
+        if (!currentPin) return;
+    }
+
+    const newPin = await appPrompt(
+        "Introduce tu nuevo PIN (4 a 8 caracteres o dígitos):",
+        "",
+        isChanging ? "Cambiar PIN" : "Configurar PIN",
+        "Guardar",
+        "🔒"
+    );
+    if (!newPin || !newPin.trim()) return;
+
+    try {
+        const res = await fetch('/api/system/pin/set', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serverInfo ? serverInfo.authToken : ''}`
+            },
+            body: JSON.stringify({ currentPin, newPin: newPin.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            appAlert(`Error: ${data.error || 'No se pudo configurar el PIN'}`, 'Error de PIN', '❌');
+        } else {
+            showToast(data.message || "✓ PIN configurado correctamente");
+            await fetchSecurityStatus();
+        }
+    } catch (e) {
+        appAlert(`Error de red: ${e.message}`, 'Error de Comunicación', '❌');
+    }
+}
+
+async function promptRemovePIN() {
+    const pin = await appPrompt(
+        "Introduce tu PIN actual para confirmar su eliminación:",
+        "",
+        "Eliminar PIN de Seguridad",
+        "Eliminar",
+        "🗑️"
+    );
+    if (!pin) return;
+
+    try {
+        const res = await fetch('/api/system/pin/remove', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serverInfo ? serverInfo.authToken : ''}`
+            },
+            body: JSON.stringify({ pin })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            appAlert(`Error: ${data.error || 'No se pudo eliminar el PIN'}`, 'Error de PIN', '❌');
+        } else {
+            showToast(data.message || "✓ PIN eliminado correctamente");
+            await fetchSecurityStatus();
+        }
+    } catch (e) {
+        appAlert(`Error de red: ${e.message}`, 'Error de Comunicación', '❌');
+    }
+}
+
+// ==========================================
+// Cockpit Lock Screen
+// ==========================================
+function lockCockpit() {
+    const overlay = document.getElementById('cockpit-lock-overlay');
+    const input = document.getElementById('lock-screen-input');
+    const err = document.getElementById('lock-screen-error');
+    if (!overlay) return;
+
+    overlay.style.display = 'flex';
+    if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 100);
+    }
+    if (err) err.style.display = 'none';
+
+    try {
+        localStorage.setItem('orbit_cockpit_locked', 'true');
+    } catch (_) {}
+}
+
+async function unlockCockpit() {
+    const input = document.getElementById('lock-screen-input');
+    const err = document.getElementById('lock-screen-error');
+    const overlay = document.getElementById('cockpit-lock-overlay');
+    if (!input || !overlay) return;
+
+    const entered = input.value.trim();
+    if (!entered) return;
+
+    try {
+        const res = await fetch('/api/system/pin/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin: entered })
+        });
+        const data = await res.json();
+        if (data.valid) {
+            overlay.style.display = 'none';
+            if (err) err.style.display = 'none';
+            try {
+                localStorage.removeItem('orbit_cockpit_locked');
+            } catch (_) {}
+            showToast("✓ Cockpit desbloqueado");
+        } else {
+            if (err) {
+                err.style.display = 'block';
+                err.textContent = 'PIN o credencial incorrecta. Inténtalo de nuevo.';
+            }
+            input.value = '';
+            input.focus();
+        }
+    } catch (e) {
+        if (err) {
+            err.style.display = 'block';
+            err.textContent = `Error de red: ${e.message}`;
+        }
+    }
+}
+
+// Auto-check lock on initial load
+window.addEventListener('DOMContentLoaded', () => {
+    try {
+        if (localStorage.getItem('orbit_cockpit_locked') === 'true') {
+            lockCockpit();
+        }
+    } catch (_) {}
+});
+
+// Shortcut Alt+L to lock cockpit
+window.addEventListener('keydown', (e) => {
+    if (e.altKey && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        lockCockpit();
+    }
+});
+
 
