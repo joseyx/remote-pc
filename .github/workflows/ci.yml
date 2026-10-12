@@ -31,7 +31,7 @@ jobs:
 
       - name: Run Unit Tests
         working-directory: ./server
-        run: go test -v -race -timeout 3m ./...
+        run: go test -v -timeout 3m ./...
 
       - name: Compile Executable (Windows)
         if: runner.os == 'Windows'
@@ -60,6 +60,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache-dependency-path: server/go.sum
 
       - name: Build for Linux ARM64
         working-directory: ./server

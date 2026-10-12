@@ -1,11 +1,15 @@
 package pty
 
 import (
+	"runtime"
 	"testing"
 )
 
 func TestPTYSpawn(t *testing.T) {
 	cmd := "cmd.exe /c echo PTY_OK"
+	if runtime.GOOS != "windows" {
+		cmd = "echo PTY_OK"
+	}
 	p, err := Start(cmd, "", 80, 25)
 	if err != nil {
 		t.Fatalf("Failed to start: %v", err)
