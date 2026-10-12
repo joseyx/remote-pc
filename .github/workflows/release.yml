@@ -81,26 +81,26 @@ jobs:
           # 1. Linux AMD64
           mkdir -p build_linux_amd64
           GOOS=linux GOARCH=amd64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_linux_amd64/orbit ./cmd/server
-          cp scripts/install.sh README.md build_linux_amd64/
-          tar -czf dist/orbit-linux-amd64.tar.gz -C build_linux_amd64 orbit install.sh README.md
+          cp scripts/install.sh scripts/uninstall.sh README.md build_linux_amd64/
+          tar -czf dist/orbit-linux-amd64.tar.gz -C build_linux_amd64 orbit install.sh uninstall.sh README.md
 
           # 2. Linux ARM64
           mkdir -p build_linux_arm64
           GOOS=linux GOARCH=arm64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_linux_arm64/orbit ./cmd/server
-          cp scripts/install.sh README.md build_linux_arm64/
-          tar -czf dist/orbit-linux-arm64.tar.gz -C build_linux_arm64 orbit install.sh README.md
+          cp scripts/install.sh scripts/uninstall.sh README.md build_linux_arm64/
+          tar -czf dist/orbit-linux-arm64.tar.gz -C build_linux_arm64 orbit install.sh uninstall.sh README.md
 
           # 3. macOS ARM64 (Apple Silicon)
           mkdir -p build_darwin_arm64
           GOOS=darwin GOARCH=arm64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_darwin_arm64/orbit ./cmd/server
-          cp scripts/install.sh README.md build_darwin_arm64/
-          tar -czf dist/orbit-darwin-arm64.tar.gz -C build_darwin_arm64 orbit install.sh README.md
+          cp scripts/install.sh scripts/uninstall.sh README.md build_darwin_arm64/
+          tar -czf dist/orbit-darwin-arm64.tar.gz -C build_darwin_arm64 orbit install.sh uninstall.sh README.md
 
           # 4. macOS AMD64 (Intel)
           mkdir -p build_darwin_amd64
           GOOS=darwin GOARCH=amd64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_darwin_amd64/orbit ./cmd/server
-          cp scripts/install.sh README.md build_darwin_amd64/
-          tar -czf dist/orbit-darwin-amd64.tar.gz -C build_darwin_amd64 orbit install.sh README.md
+          cp scripts/install.sh scripts/uninstall.sh README.md build_darwin_amd64/
+          tar -czf dist/orbit-darwin-amd64.tar.gz -C build_darwin_amd64 orbit install.sh uninstall.sh README.md
 
       - name: Upload Unix Artifacts
         uses: actions/upload-artifact@v4
