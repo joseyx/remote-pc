@@ -10,6 +10,7 @@ const (
 	WorkspaceAditum  WorkspaceType = "aditum"
 	WorkspaceBrif    WorkspaceType = "brif"
 	WorkspaceGeneral WorkspaceType = "general"
+	WorkspaceGit     WorkspaceType = "git"
 )
 
 type BubbleStatus string
@@ -45,18 +46,21 @@ type WorkspaceInfo struct {
 	Name        string        `json:"name"`
 	Type        WorkspaceType `json:"type"`
 	BasePath    string        `json:"basePath"`
-	VaultAlias  string        `json:"vaultAlias"`
-	DefaultBase string        `json:"defaultBase"`
-	Description string        `json:"description"`
+	VaultAlias  string        `json:"vaultAlias,omitempty"`
+	DefaultBase string        `json:"defaultBase,omitempty"`
+	Description string        `json:"description,omitempty"`
+	DevCommand  string        `json:"devCommand,omitempty"`
+	DefaultPort int           `json:"defaultPort,omitempty"`
 }
 
 type CreateBubbleRequest struct {
 	Workspace  WorkspaceType `json:"workspace"`
-	TaskID     string        `json:"taskId"`     // e.g. "TAR-1120" (Aditum) or "dialogos-mx" (Brif)
+	TaskID     string        `json:"taskId"`     // e.g. "TAR-1120" (Aditum), "dialogos-mx" (Brif), or "feature-login"
 	Name       string        `json:"name"`       // optional human name
-	BaseBranch string        `json:"baseBranch"` // e.g. "development"
+	BaseBranch string        `json:"baseBranch"` // e.g. "development", "main"
 	UseSlim    bool          `json:"useSlim"`    // For Aditum: seed aditum_slim (true by default)
 	SeedSchema string        `json:"seedSchema"` // Custom seed schema if any
 	Index      int           `json:"index"`      // Port index 1-99 for Aditum
-	IsWorktree bool          `json:"isWorktree"` // For Brif: true if isolated worktree, false if in-place branch
+	IsWorktree bool          `json:"isWorktree"` // true if isolated worktree, false if in-place branch
+	Port       int           `json:"port,omitempty"` // Custom port override
 }

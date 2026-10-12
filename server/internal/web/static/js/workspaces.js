@@ -2,9 +2,67 @@
 // Workspace & Bubble Management
 // ==========================================
 
+let allWorkspaces = [];
+
+async function fetchWorkspaces() {
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/workspaces', { headers });
+        if (!res.ok) return;
+        allWorkspaces = await res.json();
+        renderWorkspaceTabs();
+    } catch (e) {
+        console.error("Error al obtener workspaces:", e);
+    }
+}
+
+function getWorkspaceIconSvg(ws) {
+    if (ws.id === 'aditum') {
+        return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>`;
+    } else if (ws.id === 'brif') {
+        return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`;
+    }
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+}
+
+function renderWorkspaceTabs() {
+    const container = document.getElementById('ws-tabs-container');
+    if (!container) return;
+
+    let html = '';
+    (allWorkspaces || []).forEach(ws => {
+        const isActive = activeFilter === ws.id;
+        const icon = getWorkspaceIconSvg(ws);
+        html += `
+            <button class="ws-tab-btn ${isActive ? 'active' : ''} ${escapeHtml(ws.id)}" data-ws="${escapeHtml(ws.id)}" onclick="setWorkspaceFilter('${escapeHtml(ws.id)}')" title="${escapeHtml(ws.name)} (${escapeHtml(ws.basePath)})">
+                ${icon}${escapeHtml(ws.name)}
+            </button>
+        `;
+    });
+
+    const isAllActive = activeFilter === 'all';
+    html += `
+        <button class="ws-tab-btn ${isAllActive ? 'active' : ''}" data-ws="all" onclick="setWorkspaceFilter('all')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>Todos
+        </button>
+    `;
+
+    html += `
+        <button class="ws-tab-btn ws-tab-add" onclick="openWorkspacesModal()" title="Gestionar y Añadir Workspaces" style="color: var(--accent); font-weight: 700;">
+            ⚙️ Proyectos
+        </button>
+    `;
+
+    container.innerHTML = html;
+}
+
 // Fetch Bubbles
 async function fetchBubbles() {
     try {
+        if (!allWorkspaces || allWorkspaces.length === 0) {
+            await fetchWorkspaces();
+        }
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         const res = await fetch('/api/bubbles', { headers });
@@ -48,13 +106,9 @@ function getBubbleSessions(b) {
 
 function setWorkspaceFilter(filter) {
     activeFilter = filter;
-    document.querySelectorAll('.ws-tab-btn').forEach(btn => {
-        btn.classList.remove('active');
+    document.querySelectorAll('#ws-tabs-container .ws-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-ws') === filter);
     });
-    if (filter === 'aditum') document.querySelector('.ws-tab-btn.aditum')?.classList.add('active');
-    else if (filter === 'brif') document.querySelector('.ws-tab-btn.brif')?.classList.add('active');
-    else document.querySelectorAll('.ws-tab-btn')[2]?.classList.add('active');
-
     renderBubblesList();
 }
 
@@ -532,12 +586,39 @@ async function confirmDeleteBubble() {
 // New Bubble Wizard Modal
 let wizardWs = 'aditum';
 
+function renderWizardWorkspaceTabs() {
+    const container = document.getElementById('wizard-ws-tabs');
+    if (!container) return;
+
+    if (!allWorkspaces || allWorkspaces.length === 0) {
+        container.innerHTML = `<div style="padding: 6px; font-size: 11px; color: var(--text-dim);">No hay workspaces disponibles</div>`;
+        return;
+    }
+
+    container.innerHTML = allWorkspaces.map(ws => {
+        const isActive = wizardWs === ws.id;
+        const icon = getWorkspaceIconSvg(ws);
+        return `
+            <button type="button" class="ws-tab-btn ${isActive ? 'active' : ''} ${escapeHtml(ws.id)}" id="wizard-tab-${escapeHtml(ws.id)}" onclick="setWizardWorkspace('${escapeHtml(ws.id)}')">
+                ${icon}${escapeHtml(ws.name)}
+            </button>
+        `;
+    }).join('');
+}
+
 function openNewBubbleModal(prefWs = null) {
     if (prefWs) {
-        setWizardWorkspace(prefWs);
+        wizardWs = prefWs;
+    } else if (activeFilter !== 'all') {
+        wizardWs = activeFilter;
+    } else if (allWorkspaces && allWorkspaces.length > 0) {
+        wizardWs = allWorkspaces[0].id;
     } else {
-        setWizardWorkspace(activeFilter === 'brif' ? 'brif' : 'aditum');
+        wizardWs = 'aditum';
     }
+
+    renderWizardWorkspaceTabs();
+    setWizardWorkspace(wizardWs);
     suggestNextAditumIndex();
     document.getElementById('modal-new-bubble').classList.add('open');
 }
@@ -546,23 +627,28 @@ function closeNewBubbleModal() {
     document.getElementById('modal-new-bubble').classList.remove('open');
 }
 
-function setWizardWorkspace(ws) {
-    wizardWs = ws;
-    const tabAditum = document.getElementById('wizard-tab-aditum');
-    const tabBrif = document.getElementById('wizard-tab-brif');
+function setWizardWorkspace(wsId) {
+    wizardWs = wsId;
+    document.querySelectorAll('#wizard-ws-tabs .ws-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.id === `wizard-tab-${wsId}`);
+    });
+
     const fieldsAditum = document.getElementById('wizard-fields-aditum');
     const fieldsBrif = document.getElementById('wizard-fields-brif');
+    const fieldsGeneric = document.getElementById('wizard-fields-generic');
 
-    if (ws === 'aditum') {
-        tabAditum.classList.add('active');
-        tabBrif.classList.remove('active');
-        fieldsAditum.style.display = 'block';
-        fieldsBrif.style.display = 'none';
-    } else {
-        tabBrif.classList.add('active');
-        tabAditum.classList.remove('active');
-        fieldsBrif.style.display = 'block';
-        fieldsAditum.style.display = 'none';
+    if (fieldsAditum) fieldsAditum.style.display = (wsId === 'aditum') ? 'block' : 'none';
+    if (fieldsBrif) fieldsBrif.style.display = (wsId === 'brif') ? 'block' : 'none';
+    if (fieldsGeneric) fieldsGeneric.style.display = (wsId !== 'aditum' && wsId !== 'brif') ? 'block' : 'none';
+
+    if (wsId !== 'aditum' && wsId !== 'brif') {
+        const ws = (allWorkspaces || []).find(w => w.id === wsId);
+        if (ws) {
+            const baseBranchEl = document.getElementById('generic-base-branch');
+            if (baseBranchEl && ws.defaultBase) baseBranchEl.value = ws.defaultBase;
+            const portEl = document.getElementById('generic-port');
+            if (portEl && ws.defaultPort) portEl.value = ws.defaultPort;
+        }
     }
 }
 
@@ -590,6 +676,17 @@ function toggleBrifModeHelp() {
         hint.textContent = "Trabajo directo y ágil en tu repositorio principal (brif-scrapper) sin carpetas extra.";
     } else {
         hint.textContent = "Crea una carpeta worktree aislada (brif-scrapper-<slug>) para trabajar en paralelo.";
+    }
+}
+
+function toggleGenericModeHelp() {
+    const mode = document.getElementById('generic-mode')?.value;
+    const hint = document.getElementById('generic-mode-hint');
+    if (!hint) return;
+    if (mode === 'worktree') {
+        hint.textContent = "Crea una carpeta de trabajo independiente (.worktrees/<taskId>) para desarrollo en paralelo.";
+    } else {
+        hint.textContent = "Cambia de rama directamente en la carpeta principal del repositorio.";
     }
 }
 
@@ -625,7 +722,7 @@ async function submitCreateBubble() {
                 baseBranch: baseBranch,
                 useSlim: useSlim
             };
-        } else {
+        } else if (wizardWs === 'brif') {
             const taskId = document.getElementById('brif-task-id').value.trim();
             if (!taskId) {
                 appAlert("Por favor ingresa un nombre de tarea o spider (ej. dialogos-mx)", "Campo Requerido", "⚠️");
@@ -641,6 +738,28 @@ async function submitCreateBubble() {
                 taskId: taskId,
                 isWorktree: isWorktree,
                 baseBranch: baseBranch
+            };
+        } else {
+            // Generic workspace
+            const taskId = document.getElementById('generic-task-id').value.trim();
+            if (!taskId) {
+                appAlert("Por favor ingresa un identificador de tarea o rama (ej. feat-login)", "Campo Requerido", "⚠️");
+                btn.disabled = false;
+                btn.textContent = "⚡ Crear y Configurar Bubble";
+                return;
+            }
+            const name = document.getElementById('generic-task-name').value.trim();
+            const isWorktree = document.getElementById('generic-mode').value === 'worktree';
+            const baseBranch = document.getElementById('generic-base-branch').value.trim() || 'main';
+            const port = parseInt(document.getElementById('generic-port').value) || 0;
+
+            body = {
+                workspace: wizardWs,
+                taskId: taskId,
+                name: name,
+                isWorktree: isWorktree,
+                baseBranch: baseBranch,
+                port: port
             };
         }
 
@@ -660,6 +779,274 @@ async function submitCreateBubble() {
         btn.disabled = false;
         btn.textContent = "⚡ Crear y Configurar Bubble";
     }
+}
+
+// ==========================================
+// Workspace Manager Modal & CRUD
+// ==========================================
+
+async function openWorkspacesModal() {
+    await fetchWorkspaces();
+    renderWorkspacesListInModal();
+    resetWorkspaceForm();
+    const modal = document.getElementById('modal-workspaces');
+    if (modal) modal.classList.add('open');
+}
+
+function closeWorkspacesModal() {
+    const modal = document.getElementById('modal-workspaces');
+    if (modal) modal.classList.remove('open');
+}
+
+function renderWorkspacesListInModal() {
+    const container = document.getElementById('ws-list-container');
+    const countEl = document.getElementById('ws-count-label');
+    if (countEl) countEl.textContent = `${(allWorkspaces || []).length} workspaces`;
+    if (!container) return;
+
+    if (!allWorkspaces || allWorkspaces.length === 0) {
+        container.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-dim); font-size: 12px;">No hay workspaces configurados. Añade uno con el formulario debajo.</div>`;
+        return;
+    }
+
+    container.innerHTML = allWorkspaces.map(ws => {
+        const isBuiltin = ws.id === 'aditum' || ws.id === 'brif';
+        return `
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <strong style="color: var(--text-main); font-size: 13px;">${escapeHtml(ws.name)}</strong>
+                        <span class="badge-ws ${escapeHtml(ws.id)}" style="font-size: 10px; padding: 1px 6px;">${escapeHtml(ws.id)}</span>
+                        ${ws.defaultPort ? `<span style="font-size: 11px; color: var(--accent); font-weight: 600;">:${escapeHtml(String(ws.defaultPort))}</span>` : ''}
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px;" title="${escapeHtml(ws.basePath)}">
+                        📁 ${escapeHtml(ws.basePath)}
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px; display: flex; gap: 12px;">
+                        <span>Rama base: <code style="color: var(--text-main);">${escapeHtml(ws.defaultBase || 'main')}</code></span>
+                        ${ws.devCommand ? `<span>Dev: <code style="color: var(--green);">${escapeHtml(ws.devCommand)}</code></span>` : ''}
+                    </div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-sm btn-ghost" onclick="editWorkspace('${escapeHtml(ws.id)}')" title="Editar configuración">
+                        ✏️ Editar
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="confirmDeleteWorkspace('${escapeHtml(ws.id)}', '${escapeHtml(ws.name)}')" title="Eliminar este workspace" ${isBuiltin ? 'style="opacity: 0.5;"' : ''}>
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function resetWorkspaceForm() {
+    document.getElementById('ws-form-edit-id').value = '';
+    document.getElementById('ws-form-title').textContent = '➕ Añadir Nuevo Workspace';
+    document.getElementById('ws-input-name').value = '';
+    document.getElementById('ws-input-id').value = '';
+    document.getElementById('ws-input-path').value = '';
+    document.getElementById('ws-input-base').value = 'main';
+    document.getElementById('ws-input-port').value = '';
+    document.getElementById('ws-input-cmd').value = '';
+    document.getElementById('ws-input-desc').value = '';
+    document.getElementById('ws-cancel-edit-btn').style.display = 'none';
+    document.getElementById('ws-save-btn').textContent = '💾 Guardar Workspace';
+}
+
+function editWorkspace(id) {
+    const ws = (allWorkspaces || []).find(w => w.id === id);
+    if (!ws) return;
+
+    document.getElementById('ws-form-edit-id').value = ws.id;
+    document.getElementById('ws-form-title').textContent = `✏️ Editar Workspace: ${ws.name}`;
+    document.getElementById('ws-input-name').value = ws.name || '';
+    document.getElementById('ws-input-id').value = ws.id || '';
+    document.getElementById('ws-input-path').value = ws.basePath || '';
+    document.getElementById('ws-input-base').value = ws.defaultBase || 'main';
+    document.getElementById('ws-input-port').value = ws.defaultPort || '';
+    document.getElementById('ws-input-cmd').value = ws.devCommand || '';
+    document.getElementById('ws-input-desc').value = ws.description || '';
+    document.getElementById('ws-cancel-edit-btn').style.display = 'inline-block';
+    document.getElementById('ws-save-btn').textContent = '💾 Actualizar Workspace';
+
+    document.getElementById('ws-input-name').focus();
+}
+
+async function saveWorkspaceFromForm() {
+    const editId = document.getElementById('ws-form-edit-id').value.trim();
+    const name = document.getElementById('ws-input-name').value.trim();
+    const id = document.getElementById('ws-input-id').value.trim() || name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    const basePath = document.getElementById('ws-input-path').value.trim();
+    const defaultBase = document.getElementById('ws-input-base').value.trim() || 'main';
+    const defaultPort = parseInt(document.getElementById('ws-input-port').value) || 0;
+    const devCommand = document.getElementById('ws-input-cmd').value.trim();
+    const description = document.getElementById('ws-input-desc').value.trim();
+
+    if (!name) {
+        appAlert("Por favor ingresa un nombre para el workspace.", "Campo Requerido", "⚠️");
+        return;
+    }
+    if (!basePath) {
+        appAlert("Por favor ingresa la ruta del repositorio en disco.", "Campo Requerido", "⚠️");
+        return;
+    }
+
+    const payload = {
+        id: id,
+        name: name,
+        type: id,
+        basePath: basePath,
+        defaultBase: defaultBase,
+        defaultPort: defaultPort,
+        devCommand: devCommand,
+        description: description
+    };
+
+    const token = serverInfo ? serverInfo.authToken : '';
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+    };
+
+    try {
+        let res;
+        if (editId) {
+            res = await fetch(`/api/workspaces/${encodeURIComponent(editId)}`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify(payload)
+            });
+        } else {
+            res = await fetch('/api/workspaces', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload)
+            });
+        }
+
+        if (res.ok) {
+            showToast(editId ? "Workspace actualizado con éxito." : "Workspace añadido con éxito.");
+            resetWorkspaceForm();
+            await fetchWorkspaces();
+            renderWorkspacesListInModal();
+            await fetchBubbles();
+        } else {
+            const err = await res.text();
+            appAlert("Error al guardar workspace: " + err, "Error", "❌");
+        }
+    } catch (e) {
+        appAlert("Error de red: " + e, "Error de Red", "❌");
+    }
+}
+
+async function confirmDeleteWorkspace(id, name) {
+    const ok = await appConfirm(`¿Estás seguro de eliminar el workspace "${name}"?\nEsto desvinculará sus bubbles de Orbit (tus archivos en disco NO serán borrados).`, "Eliminar Workspace", "Eliminar", "Cancelar", true, "🗑️");
+    if (!ok) return;
+
+    const token = serverInfo ? serverInfo.authToken : '';
+    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+    try {
+        const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+        if (res.ok) {
+            showToast(`Workspace "${name}" eliminado.`);
+            if (activeFilter === id) {
+                setWorkspaceFilter('all');
+            }
+            await fetchWorkspaces();
+            renderWorkspacesListInModal();
+            await fetchBubbles();
+        } else {
+            appAlert("Error al eliminar workspace: " + (await res.text()), "Error", "❌");
+        }
+    } catch (e) {
+        appAlert("Error de red: " + e, "Error de Red", "❌");
+    }
+}
+
+// ==========================================
+// Folder Browser Modal
+// ==========================================
+
+let folderPickerTargetInput = null;
+let folderPickerCurrentPath = '';
+let folderPickerParentPath = '';
+
+async function openFolderPicker(targetInputId) {
+    folderPickerTargetInput = targetInputId;
+    const initialPath = document.getElementById(targetInputId)?.value.trim() || '';
+    const modal = document.getElementById('modal-folder-picker');
+    if (modal) modal.classList.add('open');
+    await browseFolder(initialPath);
+}
+
+function closeFolderPicker() {
+    const modal = document.getElementById('modal-folder-picker');
+    if (modal) modal.classList.remove('open');
+}
+
+async function browseFolder(path) {
+    const token = serverInfo ? serverInfo.authToken : '';
+    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+    const url = `/api/fs/directories${path ? '?path=' + encodeURIComponent(path) : ''}`;
+
+    try {
+        const res = await fetch(url, { headers });
+        if (!res.ok) return;
+        const data = await res.json();
+        folderPickerCurrentPath = data.current;
+        folderPickerParentPath = data.parent;
+
+        const pathInput = document.getElementById('folder-picker-current-path');
+        if (pathInput) pathInput.value = data.current;
+
+        const listEl = document.getElementById('folder-picker-list');
+        if (!listEl) return;
+
+        if (!data.dirs || data.dirs.length === 0) {
+            listEl.innerHTML = `<div style="padding: 18px; text-align: center; color: var(--text-dim); font-size: 12px;">No se encontraron subcarpetas aquí.</div>`;
+            return;
+        }
+
+        listEl.innerHTML = data.dirs.map(d => {
+            const escapedPath = d.path.replace(/\\/g, '/');
+            return `
+                <div style="padding: 6px 10px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 8px; cursor: pointer; transition: background 0.15s ease;"
+                     onmouseover="this.style.background='var(--bg-hover)'"
+                     onmouseout="this.style.background='transparent'"
+                     onclick="browseFolder('${escapeHtml(escapedPath)}')">
+                    <span style="font-size: 14px;">📁</span>
+                    <span style="font-size: 12px; color: var(--text-main); font-weight: 500;">${escapeHtml(d.name)}</span>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error("Error al explorar carpetas:", e);
+    }
+}
+
+function folderPickerGoUp() {
+    if (folderPickerParentPath && folderPickerParentPath !== folderPickerCurrentPath) {
+        browseFolder(folderPickerParentPath);
+    }
+}
+
+function selectCurrentFolderPicker() {
+    if (folderPickerTargetInput && folderPickerCurrentPath) {
+        const el = document.getElementById(folderPickerTargetInput);
+        if (el) {
+            el.value = folderPickerCurrentPath;
+            const nameEl = document.getElementById('ws-input-name');
+            if (nameEl && !nameEl.value.trim()) {
+                const parts = folderPickerCurrentPath.replace(/\\/g, '/').split('/').filter(Boolean);
+                if (parts.length > 0) {
+                    nameEl.value = parts[parts.length - 1];
+                }
+            }
+        }
+    }
+    closeFolderPicker();
 }
 
 

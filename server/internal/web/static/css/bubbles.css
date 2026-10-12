@@ -5,10 +5,11 @@
 /* Workspace Switcher Tabs */
 .ws-tabs {
     display: flex;
+    flex-wrap: wrap;
     background-color: var(--bg-base);
     padding: 3px;
     border-radius: var(--radius-sm);
-    gap: 2px;
+    gap: 3px;
     border: 1px solid var(--border-subtle);
 }
 
@@ -381,6 +382,9 @@
     text-transform: uppercase;
     padding: 2px 5px;
     border-radius: 4px;
+    background-color: rgba(148, 163, 184, 0.15);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.3);
 }
 
 .badge-ws.aditum {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,65 +23,261 @@ type BubbleMeta struct {
 }
 
 type Manager struct {
-	mu         sync.RWMutex
-	workspaces map[WorkspaceType]WorkspaceInfo
-	bubbles    map[string]*Bubble
-	devCmds    map[string]*exec.Cmd
-	metaPath   string
-	metadata   map[string]BubbleMeta
+	mu             sync.RWMutex
+	dataDir        string
+	workspacesPath string
+	workspaces     map[WorkspaceType]WorkspaceInfo
+	bubbles        map[string]*Bubble
+	devCmds        map[string]*exec.Cmd
+	metaPath       string
+	metadata       map[string]BubbleMeta
 }
 
 func NewManager(dataDir ...string) *Manager {
-	metaPath := "bubbles_metadata.json"
+	dir := "data"
 	if len(dataDir) > 0 && dataDir[0] != "" {
-		metaPath = filepath.Join(dataDir[0], "bubbles_metadata.json")
-	} else if fi, err := os.Stat(filepath.Join("data", "bubbles_metadata.json")); err == nil && !fi.IsDir() {
-		metaPath = filepath.Join("data", "bubbles_metadata.json")
-	} else if fi, err := os.Stat(filepath.Join("..", "data", "bubbles_metadata.json")); err == nil && !fi.IsDir() {
-		metaPath = filepath.Join("..", "data", "bubbles_metadata.json")
+		dir = dataDir[0]
+	}
+
+	metaPath := filepath.Join(dir, "bubbles_metadata.json")
+	if _, err := os.Stat(metaPath); os.IsNotExist(err) {
+		for _, fb := range []string{
+			"bubbles_metadata.json",
+			filepath.Join("data", "bubbles_metadata.json"),
+			filepath.Join("..", "data", "bubbles_metadata.json"),
+		} {
+			if _, errFb := os.Stat(fb); errFb == nil {
+				metaPath = fb
+				break
+			}
+		}
+	}
+
+	wsPath := filepath.Join(dir, "workspaces.json")
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		for _, fb := range []string{
+			"workspaces.json",
+			filepath.Join("data", "workspaces.json"),
+			filepath.Join("..", "data", "workspaces.json"),
+		} {
+			if _, errFb := os.Stat(fb); errFb == nil {
+				wsPath = fb
+				break
+			}
+		}
 	}
 
 	m := &Manager{
-		workspaces: make(map[WorkspaceType]WorkspaceInfo),
-		bubbles:    make(map[string]*Bubble),
-		devCmds:    make(map[string]*exec.Cmd),
-		metaPath:   metaPath,
-		metadata:   make(map[string]BubbleMeta),
+		dataDir:        dir,
+		workspacesPath: wsPath,
+		workspaces:     make(map[WorkspaceType]WorkspaceInfo),
+		bubbles:        make(map[string]*Bubble),
+		devCmds:        make(map[string]*exec.Cmd),
+		metaPath:       metaPath,
+		metadata:       make(map[string]BubbleMeta),
 	}
 	m.loadMetadata()
-
-	m.workspaces[WorkspaceAditum] = WorkspaceInfo{
-		ID:          "aditum",
-		Name:        "Aditum",
-		Type:        WorkspaceAditum,
-		BasePath:    `C:\Users\Jose\Documents\Work\Aditum`,
-		VaultAlias:  "aditum",
-		DefaultBase: "development",
-		Description: "Java / Spring Boot + MySQL 8.0 local (multi-schema) + Liquibase",
-	}
-
-	m.workspaces[WorkspaceBrif] = WorkspaceInfo{
-		ID:          "brif",
-		Name:        "Brif",
-		Type:        WorkspaceBrif,
-		BasePath:    `C:\Users\Jose\Documents\Work\brif`,
-		VaultAlias:  "brif",
-		DefaultBase: "develop",
-		Description: "Django + Scrapy + Celery + GitLab (monorepo y worktrees)",
-	}
-
-	m.workspaces[WorkspaceGeneral] = WorkspaceInfo{
-		ID:          "general",
-		Name:        "General",
-		Type:        WorkspaceGeneral,
-		BasePath:    `C:\Users\Jose\Documents\Work`,
-		VaultAlias:  "aditum",
-		DefaultBase: "main",
-		Description: "Herramientas y proyectos generales",
-	}
-
+	m.loadWorkspaces()
 	m.ScanExistingBubbles()
 	return m
+}
+
+func (m *Manager) loadWorkspaces() {
+	data, err := os.ReadFile(m.workspacesPath)
+	if err == nil {
+		var list []WorkspaceInfo
+		if err := json.Unmarshal(data, &list); err == nil && len(list) > 0 {
+			for _, ws := range list {
+				m.workspaces[ws.Type] = ws
+			}
+			return
+		}
+	}
+
+	// Seed defaults if no workspaces.json exists
+	m.seedDefaultWorkspaces()
+	_ = m.saveWorkspacesLocked()
+}
+
+func (m *Manager) seedDefaultWorkspaces() {
+	// If Jose's personal Work directories exist, configure Aditum and Brif
+	if fi, err := os.Stat(`C:\Users\Jose\Documents\Work\Aditum`); err == nil && fi.IsDir() {
+		m.workspaces[WorkspaceAditum] = WorkspaceInfo{
+			ID:          "aditum",
+			Name:        "Aditum",
+			Type:        WorkspaceAditum,
+			BasePath:    `C:\Users\Jose\Documents\Work\Aditum`,
+			VaultAlias:  "aditum",
+			DefaultBase: "development",
+			Description: "Java / Spring Boot + MySQL 8.0 local (multi-schema) + Liquibase",
+			DefaultPort: 8080,
+		}
+	}
+
+	if fi, err := os.Stat(`C:\Users\Jose\Documents\Work\brif`); err == nil && fi.IsDir() {
+		m.workspaces[WorkspaceBrif] = WorkspaceInfo{
+			ID:          "brif",
+			Name:        "Brif",
+			Type:        WorkspaceBrif,
+			BasePath:    `C:\Users\Jose\Documents\Work\brif`,
+			VaultAlias:  "brif",
+			DefaultBase: "develop",
+			Description: "Django + Scrapy + Celery + GitLab (monorepo y worktrees)",
+			DefaultPort: 8000,
+		}
+	}
+
+	if fi, err := os.Stat(`C:\Users\Jose\Documents\Work`); err == nil && fi.IsDir() {
+		m.workspaces[WorkspaceGeneral] = WorkspaceInfo{
+			ID:          "general",
+			Name:        "General",
+			Type:        WorkspaceGeneral,
+			BasePath:    `C:\Users\Jose\Documents\Work`,
+			VaultAlias:  "aditum",
+			DefaultBase: "main",
+			Description: "Herramientas y proyectos generales",
+		}
+	}
+}
+
+func (m *Manager) saveWorkspacesLocked() error {
+	if m.workspacesPath == "" {
+		return nil
+	}
+	_ = os.MkdirAll(filepath.Dir(m.workspacesPath), 0755)
+	list := make([]WorkspaceInfo, 0, len(m.workspaces))
+	for _, ws := range m.workspaces {
+		list = append(list, ws)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name < list[j].Name
+	})
+	data, err := json.MarshalIndent(list, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(m.workspacesPath, data, 0644)
+}
+
+func (m *Manager) AddWorkspace(ws WorkspaceInfo) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if ws.ID == "" {
+		ws.ID = strings.ToLower(strings.ReplaceAll(ws.Name, " ", "-"))
+	}
+	if ws.Type == "" {
+		ws.Type = WorkspaceType(ws.ID)
+	}
+	if ws.BasePath == "" {
+		return fmt.Errorf("se requiere la ruta base (basePath) del workspace")
+	}
+
+	ws.BasePath = filepath.Clean(ws.BasePath)
+	if _, err := os.Stat(ws.BasePath); err != nil {
+		return fmt.Errorf("la ruta no existe: %s", ws.BasePath)
+	}
+
+	m.workspaces[ws.Type] = ws
+	if err := m.saveWorkspacesLocked(); err != nil {
+		return err
+	}
+
+	m.scanWorkspaceLocked(ws)
+	return nil
+}
+
+func (m *Manager) UpdateWorkspace(id string, ws WorkspaceInfo) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	wsKey := WorkspaceType(id)
+	existing, ok := m.workspaces[wsKey]
+	if !ok {
+		for k, v := range m.workspaces {
+			if v.ID == id {
+				wsKey = k
+				existing = v
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok {
+		return fmt.Errorf("workspace no encontrado: %s", id)
+	}
+
+	if ws.Name != "" {
+		existing.Name = ws.Name
+	}
+	if ws.BasePath != "" {
+		existing.BasePath = filepath.Clean(ws.BasePath)
+	}
+	if ws.DefaultBase != "" {
+		existing.DefaultBase = ws.DefaultBase
+	}
+	if ws.DevCommand != "" {
+		existing.DevCommand = ws.DevCommand
+	}
+	if ws.DefaultPort > 0 {
+		existing.DefaultPort = ws.DefaultPort
+	}
+	if ws.Description != "" {
+		existing.Description = ws.Description
+	}
+	if ws.VaultAlias != "" {
+		existing.VaultAlias = ws.VaultAlias
+	}
+
+	m.workspaces[wsKey] = existing
+	if err := m.saveWorkspacesLocked(); err != nil {
+		return err
+	}
+
+	m.scanWorkspaceLocked(existing)
+	return nil
+}
+
+func (m *Manager) DeleteWorkspace(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	wsKey := WorkspaceType(id)
+	if _, ok := m.workspaces[wsKey]; !ok {
+		for k, v := range m.workspaces {
+			if v.ID == id {
+				wsKey = k
+				break
+			}
+		}
+	}
+
+	delete(m.workspaces, wsKey)
+
+	// Remove bubbles belonging to this workspace
+	for bid, b := range m.bubbles {
+		if b.Workspace == wsKey {
+			delete(m.bubbles, bid)
+		}
+	}
+
+	return m.saveWorkspacesLocked()
+}
+
+func (m *Manager) GetWorkspace(id string) (WorkspaceInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	wsKey := WorkspaceType(id)
+	if ws, ok := m.workspaces[wsKey]; ok {
+		return ws, true
+	}
+	for _, ws := range m.workspaces {
+		if ws.ID == id {
+			return ws, true
+		}
+	}
+	return WorkspaceInfo{}, false
 }
 
 func (m *Manager) ListWorkspaces() []WorkspaceInfo {
@@ -90,6 +287,9 @@ func (m *Manager) ListWorkspaces() []WorkspaceInfo {
 	for _, ws := range m.workspaces {
 		res = append(res, ws)
 	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Name < res[j].Name
+	})
 	return res
 }
 
@@ -203,16 +403,25 @@ func (m *Manager) ScanExistingBubbles() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	for _, ws := range m.workspaces {
+		m.scanWorkspaceLocked(ws)
+	}
+}
+
+func (m *Manager) scanWorkspaceLocked(ws WorkspaceInfo) {
+	if _, err := os.Stat(ws.BasePath); err != nil {
+		return
+	}
+
 	// 1. Scan Aditum worktrees
-	aditumWS := m.workspaces[WorkspaceAditum]
-	if _, err := os.Stat(aditumWS.BasePath); err == nil {
-		m.scanGitWorktrees(WorkspaceAditum, aditumWS.BasePath)
+	if ws.Type == WorkspaceAditum {
+		m.scanGitWorktrees(WorkspaceAditum, ws.BasePath)
+		return
 	}
 
 	// 2. Scan Brif workspace and worktrees
-	brifWS := m.workspaces[WorkspaceBrif]
-	if _, err := os.Stat(brifWS.BasePath); err == nil {
-		scrapperPath := filepath.Join(brifWS.BasePath, "brif-scrapper")
+	if ws.Type == WorkspaceBrif {
+		scrapperPath := filepath.Join(ws.BasePath, "brif-scrapper")
 		var brifBranch string
 		if _, err := os.Stat(scrapperPath); err == nil {
 			cmd := exec.Command("git", "-C", scrapperPath, "rev-parse", "--abbrev-ref", "HEAD")
@@ -224,12 +433,11 @@ func (m *Manager) ScanExistingBubbles() {
 			brifBranch = "develop"
 		}
 
-		// Register the monorepo root bubble as the primary bubble
 		brifBubble := &Bubble{
 			ID:         "brif-main",
 			Name:       "Brif",
 			Workspace:  WorkspaceBrif,
-			Path:       brifWS.BasePath,
+			Path:       ws.BasePath,
 			Branch:     brifBranch,
 			Port:       8000,
 			Status:     StatusIdle,
@@ -239,10 +447,44 @@ func (m *Manager) ScanExistingBubbles() {
 		m.applyMetadata(brifBubble)
 		m.bubbles["brif-main"] = brifBubble
 
-		// Scan worktrees belonging to brif-scrapper if it exists
 		if _, err := os.Stat(scrapperPath); err == nil {
 			m.scanGitWorktrees(WorkspaceBrif, scrapperPath)
 		}
+		return
+	}
+
+	// 3. Generic Git workspaces or custom workspaces
+	cmd := exec.Command("git", "-C", ws.BasePath, "rev-parse", "--is-inside-work-tree")
+	if out, err := cmd.Output(); err == nil && strings.TrimSpace(string(out)) == "true" {
+		rootBranch := ws.DefaultBase
+		if rootBranch == "" {
+			rootBranch = "main"
+		}
+		bCmd := exec.Command("git", "-C", ws.BasePath, "rev-parse", "--abbrev-ref", "HEAD")
+		if bOut, err := bCmd.Output(); err == nil {
+			bStr := strings.TrimSpace(string(bOut))
+			if bStr != "" {
+				rootBranch = bStr
+			}
+		}
+
+		rootID := fmt.Sprintf("%s-root", ws.ID)
+		port := ws.DefaultPort
+		rootBubble := &Bubble{
+			ID:         rootID,
+			Name:       ws.Name,
+			Workspace:  ws.Type,
+			Path:       ws.BasePath,
+			Branch:     rootBranch,
+			Port:       port,
+			Status:     StatusIdle,
+			CreatedAt:  time.Now(),
+			IsWorktree: false,
+		}
+		m.applyMetadata(rootBubble)
+		m.bubbles[rootID] = rootBubble
+
+		m.scanGitWorktrees(ws.Type, ws.BasePath)
 	}
 }
 
@@ -290,6 +532,15 @@ func (m *Manager) registerDiscoveredWorktree(wsType WorkspaceType, repoPath, wtP
 		return
 	}
 
+	if wsType != WorkspaceAditum && isRoot {
+		for _, b := range m.bubbles {
+			if b.Workspace == wsType && !b.IsWorktree {
+				b.Branch = branch
+				return
+			}
+		}
+	}
+
 	dirName := filepath.Base(normPath)
 	id := fmt.Sprintf("%s-%s", wsType, strings.ToLower(dirName))
 	name := dirName
@@ -305,6 +556,9 @@ func (m *Manager) registerDiscoveredWorktree(wsType WorkspaceType, repoPath, wtP
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "SERVER_PORT=") {
 				p, _ := strconv.Atoi(strings.TrimPrefix(line, "SERVER_PORT="))
+				port = p
+			} else if strings.HasPrefix(line, "PORT=") {
+				p, _ := strconv.Atoi(strings.TrimPrefix(line, "PORT="))
 				port = p
 			} else if strings.HasPrefix(line, "DB_SCHEMA=") {
 				schema = strings.TrimPrefix(line, "DB_SCHEMA=")
@@ -323,6 +577,13 @@ func (m *Manager) registerDiscoveredWorktree(wsType WorkspaceType, repoPath, wtP
 	// Brif main default
 	if wsType == WorkspaceBrif && isRoot && port == 0 {
 		port = 8000
+	}
+
+	// Generic workspace default port
+	if port == 0 {
+		if ws, ok := m.workspaces[wsType]; ok && ws.DefaultPort > 0 {
+			port = ws.DefaultPort
+		}
 	}
 
 	if wsType == WorkspaceAditum {
@@ -453,11 +714,113 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 			}
 		}
 
-	case WorkspaceGeneral:
-		return nil, fmt.Errorf("unsupported workspace type for auto-creation")
+	default:
+		// Generic Git workspace handler
+		ws, ok := m.workspaces[req.Workspace]
+		if !ok {
+			for _, v := range m.workspaces {
+				if v.ID == string(req.Workspace) {
+					ws = v
+					ok = true
+					break
+				}
+			}
+		}
+		if !ok {
+			return nil, fmt.Errorf("workspace no encontrado: %s", req.Workspace)
+		}
+
+		baseBranch := req.BaseBranch
+		if baseBranch == "" {
+			baseBranch = ws.DefaultBase
+		}
+		if baseBranch == "" {
+			baseBranch = "main"
+		}
+
+		branchName := req.TaskID
+		if branchName == "" {
+			return nil, fmt.Errorf("se requiere un identificador de tarea o rama (taskId)")
+		}
+
+		if req.IsWorktree {
+			// Ensure .worktrees directory exists inside ws.BasePath
+			worktreesBase := filepath.Join(ws.BasePath, ".worktrees")
+			_ = os.MkdirAll(worktreesBase, 0755)
+
+			// Add .worktrees/ to git exclude if not present
+			excludePath := filepath.Join(ws.BasePath, ".git", "info", "exclude")
+			if exData, err := os.ReadFile(excludePath); err == nil {
+				if !strings.Contains(string(exData), ".worktrees") {
+					_ = os.WriteFile(excludePath, []byte(string(exData)+"\n.worktrees/\n"), 0644)
+				}
+			}
+
+			targetDir := filepath.Join(worktreesBase, req.TaskID)
+
+			// Try git worktree add -b <branchName> <targetDir> <baseBranch>
+			cmd := exec.Command("git", "-C", ws.BasePath, "worktree", "add", "-b", branchName, targetDir, baseBranch)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				// Retry with origin/<baseBranch> or existing branch
+				cmd = exec.Command("git", "-C", ws.BasePath, "worktree", "add", "-b", branchName, targetDir, fmt.Sprintf("origin/%s", baseBranch))
+				if out2, err2 := cmd.CombinedOutput(); err2 != nil {
+					// Fallback to checking out existing local branch
+					cmd = exec.Command("git", "-C", ws.BasePath, "worktree", "add", targetDir, branchName)
+					if out3, err3 := cmd.CombinedOutput(); err3 != nil {
+						return nil, fmt.Errorf("error al crear worktree git: %v (%s | %s | %s)", err, string(out), string(out2), string(out3))
+					}
+				}
+			}
+
+			// If custom port is requested or workspace has default port, write .worktree.env
+			port := req.Port
+			if port <= 0 {
+				port = ws.DefaultPort
+			}
+			if port > 0 {
+				envContent := fmt.Sprintf("PORT=%d\nSERVER_PORT=%d\n", port, port)
+				_ = os.WriteFile(filepath.Join(targetDir, ".worktree.env"), []byte(envContent), 0644)
+			}
+
+			m.scanGitWorktrees(ws.Type, ws.BasePath)
+
+			// Look up created bubble
+			for _, b := range m.bubbles {
+				if filepath.Clean(b.Path) == filepath.Clean(targetDir) {
+					if req.Name != "" {
+						b.Name = req.Name
+					}
+					if port > 0 {
+						b.Port = port
+					}
+					return b, nil
+				}
+			}
+
+			return nil, fmt.Errorf("worktree creado pero no se pudo registrar la bubble en %s", targetDir)
+		} else {
+			// In-place linear branch checkout
+			cmd := exec.Command("git", "-C", ws.BasePath, "checkout", "-b", branchName, baseBranch)
+			if err := cmd.Run(); err != nil {
+				_ = exec.Command("git", "-C", ws.BasePath, "checkout", branchName).Run()
+			}
+
+			rootID := fmt.Sprintf("%s-root", ws.ID)
+			if b, ok := m.bubbles[rootID]; ok {
+				b.Branch = branchName
+				return b, nil
+			}
+			// If not found, rescan and return root bubble
+			m.scanWorkspaceLocked(ws)
+			if b, ok := m.bubbles[rootID]; ok {
+				return b, nil
+			}
+			return nil, fmt.Errorf("rama cambiada pero no se pudo actualizar la bubble root")
+		}
 	}
 
-	return nil, fmt.Errorf("failed to create bubble")
+	return nil, fmt.Errorf("error inesperado al crear bubble")
 }
 
 func (m *Manager) DeleteBubble(id string) error {
@@ -491,8 +854,21 @@ func (m *Manager) DeleteBubble(id string) error {
 		}
 	} else if b.IsWorktree {
 		// Generic git worktree remove
-		cmd := exec.Command("git", "worktree", "remove", "--force", b.Path)
-		_ = cmd.Run()
+		basePath := ""
+		if ws, ok := m.workspaces[b.Workspace]; ok {
+			basePath = ws.BasePath
+		}
+		if basePath != "" {
+			cmd := exec.Command("git", "-C", basePath, "worktree", "remove", "--force", b.Path)
+			_ = cmd.Run()
+			_ = exec.Command("git", "-C", basePath, "worktree", "prune").Run()
+		} else {
+			cmd := exec.Command("git", "worktree", "remove", "--force", b.Path)
+			_ = cmd.Run()
+		}
+		if _, err := os.Stat(b.Path); err == nil {
+			_ = os.RemoveAll(b.Path)
+		}
 	}
 
 	delete(m.bubbles, id)
@@ -543,7 +919,22 @@ func (m *Manager) StartDevServer(id string) (int, error) {
 		}
 
 	default:
-		return 0, fmt.Errorf("no dev server command configured for this workspace")
+		ws, ok := m.workspaces[b.Workspace]
+		if ok && strings.TrimSpace(ws.DevCommand) != "" {
+			devCmd := strings.TrimSpace(ws.DevCommand)
+			if runtime.GOOS == "windows" {
+				cmd = exec.Command("cmd", "/c", devCmd)
+			} else {
+				cmd = exec.Command("sh", "-c", devCmd)
+			}
+			cmd.Dir = b.Path
+			cmd.Env = os.Environ()
+			if b.Port > 0 {
+				cmd.Env = append(cmd.Env, fmt.Sprintf("PORT=%d", b.Port), fmt.Sprintf("SERVER_PORT=%d", b.Port))
+			}
+		} else {
+			return 0, fmt.Errorf("no hay comando de desarrollo configurado para este workspace")
+		}
 	}
 
 	if err := cmd.Start(); err != nil {

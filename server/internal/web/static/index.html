@@ -107,15 +107,12 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <!-- Workspace Switcher Tabs -->
-                <div class="ws-tabs">
-                    <button class="ws-tab-btn active aditum" onclick="setWorkspaceFilter('aditum')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>Aditum
-                    </button>
-                    <button class="ws-tab-btn brif" onclick="setWorkspaceFilter('brif')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Brif
-                    </button>
-                    <button class="ws-tab-btn" onclick="setWorkspaceFilter('all')">
+                <div class="ws-tabs" id="ws-tabs-container">
+                    <button class="ws-tab-btn active" data-ws="all" onclick="setWorkspaceFilter('all')">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>Todos
+                    </button>
+                    <button class="ws-tab-btn ws-tab-add" onclick="openWorkspacesModal()" title="Gestionar y Añadir Workspaces" style="color: var(--accent); font-weight: 700;">
+                        ⚙️ Proyectos
                     </button>
                 </div>
 
@@ -191,15 +188,15 @@
                     <img src="favicon.svg" alt="Orbit Logo" width="56" height="56" style="border-radius: 14px; filter: drop-shadow(0 4px 20px rgba(56, 189, 248, 0.25)); display: inline-block;">
                 </div>
                 <h2>Selecciona o crea una tarea / bubble</h2>
-                <p style="color: var(--text-muted); max-width: 450px; font-size: 13px;">
-                    Elige un worktree de <strong>Aditum</strong> (con su esquema local y puerto asignado) o una rama de <strong>Brif</strong> desde la barra lateral para abrir su terminal, live preview, diff de git y runbooks de Obsidian.
+                <p style="color: var(--text-muted); max-width: 480px; font-size: 13px;">
+                    Elige un worktree o rama de tus proyectos registrados desde la barra lateral para abrir su terminal, live preview, diff de git y runbooks.
                 </p>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button class="btn btn-primary" onclick="openNewBubbleModal('aditum')">
-                        + Nueva Tarea en Aditum
+                    <button class="btn btn-primary" onclick="openNewBubbleModal()">
+                        + Nueva Tarea
                     </button>
-                    <button class="btn btn-success" onclick="openNewBubbleModal('brif')">
-                        + Nueva Tarea en Brif
+                    <button class="btn btn-ghost" onclick="openWorkspacesModal()">
+                        📁 Gestionar Proyectos
                     </button>
                 </div>
             </div>
@@ -603,9 +600,9 @@
         </main>
     </div>
 
-    <!-- MODAL: NUEVA TAREA / BUBBLE (WIZARD PARA ADITUM Y BRIF) -->
+    <!-- MODAL: NUEVA TAREA / BUBBLE (WIZARD UNIVERSAL) -->
     <div id="modal-new-bubble" class="modal-overlay">
-        <div class="modal-box">
+        <div class="modal-box" style="max-width: 560px;">
             <div class="modal-header">
                 <h3 id="modal-bubble-title">✨ Crear Nueva Tarea / Bubble</h3>
                 <button class="btn btn-sm" onclick="closeNewBubbleModal()">✕</button>
@@ -614,18 +611,13 @@
                 <!-- Workspace Selection -->
                 <div class="form-group">
                     <label class="form-label">Workspace Destino</label>
-                    <div class="ws-tabs">
-                        <button type="button" class="ws-tab-btn active aditum" id="wizard-tab-aditum" onclick="setWizardWorkspace('aditum')">
-                            🏢 Aditum (Spring Boot / MySQL local)
-                        </button>
-                        <button type="button" class="ws-tab-btn brif" id="wizard-tab-brif" onclick="setWizardWorkspace('brif')">
-                            ⚡ Brif (Django / Scrapy)
-                        </button>
+                    <div class="ws-tabs" id="wizard-ws-tabs" style="margin-bottom: 6px;">
+                        <!-- Rendered dynamically -->
                     </div>
                 </div>
 
                 <!-- ADITUM FIELDS -->
-                <div id="wizard-fields-aditum">
+                <div id="wizard-fields-aditum" style="display: none;">
                     <div class="form-group">
                         <label class="form-label">ID de Tarea (Jira / Linear)</label>
                         <input type="text" id="aditum-task-id" class="form-control" placeholder="Ej. TAR-1130" oninput="updateAditumPortPreview()">
@@ -677,11 +669,159 @@
                     </div>
                 </div>
 
+                <!-- GENERIC GIT WORKSPACE FIELDS -->
+                <div id="wizard-fields-generic" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">Modo de Trabajo</label>
+                        <select id="generic-mode" class="form-control" onchange="toggleGenericModeHelp()">
+                            <option value="worktree">⭐ Modo Worktree Aislado (.worktrees/&lt;id&gt; - Recomendado)</option>
+                            <option value="linear">Modo Rama Directa (Checkout en el repositorio)</option>
+                        </select>
+                        <span class="form-hint" id="generic-mode-hint">Crea una carpeta de trabajo independiente para desarrollo en paralelo.</span>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 6px;">
+                        <label class="form-label">ID de Tarea o Rama Git</label>
+                        <input type="text" id="generic-task-id" class="form-control" placeholder="Ej. feat-login, fix-auth, issue-102">
+                        <span class="form-hint">Identificador para la rama y la carpeta aislada.</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
+                        <div class="form-group">
+                            <label class="form-label">Nombre Descriptivo (Opcional)</label>
+                            <input type="text" id="generic-task-name" class="form-control" placeholder="Ej. Login con Google">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Rama Base</label>
+                            <input type="text" id="generic-base-branch" class="form-control" value="main">
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 6px;">
+                        <label class="form-label">Puerto de Desarrollo (Opcional)</label>
+                        <input type="number" id="generic-port" class="form-control" placeholder="Ej. 3000">
+                        <span class="form-hint">Se exportará como <code>PORT</code> y <code>SERVER_PORT</code> en <code>.worktree.env</code>.</span>
+                    </div>
+                </div>
+
             </div>
             <div class="modal-footer">
                 <button class="btn" onclick="closeNewBubbleModal()">Cancelar</button>
                 <button class="btn btn-primary" id="btn-submit-bubble" onclick="submitCreateBubble()">
                     ⚡ Crear y Configurar Bubble
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: GESTIONAR WORKSPACES (PROYECTOS) -->
+    <div id="modal-workspaces" class="modal-overlay" onclick="if(event.target === this) closeWorkspacesModal()">
+        <div class="modal-box" style="max-width: 680px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3>📁 Gestionar Workspaces y Proyectos</h3>
+                <button class="btn btn-sm" onclick="closeWorkspacesModal()">✕</button>
+            </div>
+            <div class="modal-body" style="overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 16px;">
+                <!-- Registered Workspaces List -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Proyectos Registrados</span>
+                        <span style="font-size: 11px; color: var(--text-dim);" id="ws-count-label">0 workspaces</span>
+                    </div>
+                    <div id="ws-list-container" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- List rendered dynamically -->
+                    </div>
+                </div>
+
+                <!-- Form to Add/Edit Workspace -->
+                <div style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px 16px;">
+                    <div style="font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 12px;" id="ws-form-title">
+                        ➕ Añadir Nuevo Workspace
+                    </div>
+                    <input type="hidden" id="ws-form-edit-id" value="">
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group">
+                            <label class="form-label">Nombre del Proyecto</label>
+                            <input type="text" id="ws-input-name" class="form-control" placeholder="Ej. Mi App React">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">ID / Slug (opcional)</label>
+                            <input type="text" id="ws-input-id" class="form-control" placeholder="Ej. mi-app">
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label class="form-label">Ruta en Disco (Repositorio Git)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="ws-input-path" class="form-control" placeholder="Ej. C:\Users\Jose\Projects\mi-app" style="flex: 1;">
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="openFolderPicker('ws-input-path')" title="Explorar carpetas del equipo">
+                                📂 Explorar
+                            </button>
+                        </div>
+                        <span class="form-hint">Ruta local de la carpeta raíz de tu repositorio.</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                        <div class="form-group">
+                            <label class="form-label">Rama Base por Defecto</label>
+                            <input type="text" id="ws-input-base" class="form-control" placeholder="main" value="main">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Puerto Local por Defecto</label>
+                            <input type="number" id="ws-input-port" class="form-control" placeholder="Ej. 3000">
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label class="form-label">Comando de Desarrollo (Dev Server)</label>
+                        <input type="text" id="ws-input-cmd" class="form-control" placeholder="Ej. npm run dev, pnpm start, go run .">
+                        <span class="form-hint">Comando ejecutado al pulsar '▶ Iniciar Dev Server' en el Cockpit.</span>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label class="form-label">Descripción (Opcional)</label>
+                        <input type="text" id="ws-input-desc" class="form-control" placeholder="Ej. Frontend Next.js + Tailwind">
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;">
+                        <button type="button" class="btn btn-sm" id="ws-cancel-edit-btn" onclick="resetWorkspaceForm()" style="display: none;">
+                            Cancelar Edición
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" id="ws-save-btn" onclick="saveWorkspaceFromForm()">
+                            💾 Guardar Workspace
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-sm" onclick="closeWorkspacesModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EXPLORADOR DE CARPETAS DEL SISTEMA -->
+    <div id="modal-folder-picker" class="modal-overlay" onclick="if(event.target === this) closeFolderPicker()" style="z-index: 10600;">
+        <div class="modal-box" style="max-width: 540px; max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h3>📂 Explorador de Carpetas</h3>
+                <button class="btn btn-sm" onclick="closeFolderPicker()">✕</button>
+            </div>
+            <div class="modal-body" style="padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: hidden;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <button class="btn btn-sm btn-ghost" id="folder-picker-up-btn" onclick="folderPickerGoUp()" title="Subir de nivel">
+                        ⬆ Arriba
+                    </button>
+                    <input type="text" id="folder-picker-current-path" class="form-control" style="flex: 1; font-family: monospace; font-size: 11px;" readonly>
+                </div>
+                <div id="folder-picker-list" style="flex: 1; min-height: 250px; max-height: 350px; overflow-y: auto; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 4px;">
+                    <!-- Subfolders rendered dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <button class="btn btn-sm" onclick="closeFolderPicker()">Cancelar</button>
+                <button class="btn btn-primary btn-sm" onclick="selectCurrentFolderPicker()">
+                    ✓ Seleccionar esta Carpeta
                 </button>
             </div>
         </div>

@@ -59,10 +59,28 @@ function buildCmdPaletteItems() {
     // 3. Workspaces
     cmdPaletteItems.push(
         { cat: 'Workspaces', title: 'Filtrar: Solo con Terminales Abiertas', desc: 'Ver únicamente tareas con consolas o Claude activos', icon: '💻', shortcut: '', action: () => { setTaskTermFilter(true); closeCommandPalette(); } },
-        { cat: 'Workspaces', title: 'Filtrar: Ver Todas las Tareas', desc: 'Quitar filtro de terminales abiertas', icon: '📋', shortcut: '', action: () => { setTaskTermFilter(false); closeCommandPalette(); } },
-        { cat: 'Workspaces', title: 'Filtrar por Aditum', desc: 'Ver solo tareas de Aditum', icon: '🏢', shortcut: '', action: () => { setWorkspaceFilter('aditum'); closeCommandPalette(); } },
-        { cat: 'Workspaces', title: 'Filtrar por Brif', desc: 'Ver solo tareas de Brif', icon: '⚡', shortcut: '', action: () => { setWorkspaceFilter('brif'); closeCommandPalette(); } },
-        { cat: 'Workspaces', title: 'Ver Todos los Workspaces', desc: 'Mostrar todas las tareas', icon: '🌐', shortcut: '', action: () => { setWorkspaceFilter('all'); closeCommandPalette(); } }
+        { cat: 'Workspaces', title: 'Filtrar: Ver Todas las Tareas', desc: 'Quitar filtro de terminales abiertas', icon: '📋', shortcut: '', action: () => { setTaskTermFilter(false); closeCommandPalette(); } }
+    );
+    if (typeof allWorkspaces !== 'undefined' && allWorkspaces.length > 0) {
+        allWorkspaces.forEach(ws => {
+            cmdPaletteItems.push({
+                cat: 'Workspaces',
+                title: `Filtrar por ${ws.name}`,
+                desc: `Ver solo tareas de ${ws.name}`,
+                icon: '📁',
+                shortcut: '',
+                action: () => { setWorkspaceFilter(ws.id); closeCommandPalette(); }
+            });
+        });
+    } else {
+        cmdPaletteItems.push(
+            { cat: 'Workspaces', title: 'Filtrar por Aditum', desc: 'Ver solo tareas de Aditum', icon: '🏢', shortcut: '', action: () => { setWorkspaceFilter('aditum'); closeCommandPalette(); } },
+            { cat: 'Workspaces', title: 'Filtrar por Brif', desc: 'Ver solo tareas de Brif', icon: '⚡', shortcut: '', action: () => { setWorkspaceFilter('brif'); closeCommandPalette(); } }
+        );
+    }
+    cmdPaletteItems.push(
+        { cat: 'Workspaces', title: 'Ver Todos los Workspaces', desc: 'Mostrar todas las tareas', icon: '🌐', shortcut: '', action: () => { setWorkspaceFilter('all'); closeCommandPalette(); } },
+        { cat: 'Workspaces', title: 'Gestionar Workspaces y Proyectos', desc: 'Añadir o configurar proyectos en Orbit', icon: '⚙️', shortcut: '', action: () => { closeCommandPalette(); openWorkspacesModal(); } }
     );
 
     // 4. Terminal & Shell actions

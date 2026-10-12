@@ -103,6 +103,9 @@ func (s *Server) Routes() http.Handler {
 
 	// Eco & Bubble Routes
 	mux.HandleFunc("GET /api/workspaces", s.withAuth(s.handleListWorkspaces))
+	mux.HandleFunc("POST /api/workspaces", s.withAuth(s.handleCreateWorkspace))
+	mux.HandleFunc("PUT /api/workspaces/{id}", s.withAuth(s.handleUpdateWorkspace))
+	mux.HandleFunc("DELETE /api/workspaces/{id}", s.withAuth(s.handleDeleteWorkspace))
 	mux.HandleFunc("GET /api/bubbles", s.withAuth(s.handleListBubbles))
 	mux.HandleFunc("POST /api/bubbles", s.withAuth(s.handleCreateBubble))
 	mux.HandleFunc("PATCH /api/bubbles/{id}", s.withAuth(s.handleUpdateBubbleMetadata))
@@ -911,6 +914,46 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	ws := s.bubbleMgr.ListWorkspaces()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(ws)
+}
+
+func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
+	var ws bubble.WorkspaceInfo
+	if err := json.NewDecoder(r.Body).Decode(&ws); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := s.bubbleMgr.AddWorkspace(ws); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var ws bubble.WorkspaceInfo
+	if err := json.NewDecoder(r.Body).Decode(&ws); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := s.bubbleMgr.UpdateWorkspace(id, ws); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.bubbleMgr.DeleteWorkspace(id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleListBubbles(w http.ResponseWriter, r *http.Request) {
