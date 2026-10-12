@@ -82,8 +82,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     initSplitResizer();
     initSysStatsDrag();
     await refreshAll();
+    checkForUpdates(true);
     setInterval(fetchServerAndSessions, 3500);
     setInterval(fetchSystemStats, 5000);
+    setInterval(() => checkForUpdates(true), 15 * 60 * 1000);
     fetchSystemStats();
     window.addEventListener('resize', handleWindowResize);
     window.addEventListener('keydown', (e) => {
@@ -115,6 +117,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             closeTerminalSearch();
             closeSystemStatsModal();
             closeVpnWarningModal();
+            closeUpdateModal();
         }
     });
     window.addEventListener('click', (e) => {

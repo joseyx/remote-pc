@@ -22,6 +22,11 @@ function updateServerInfoUI() {
     document.getElementById('pair-port').textContent = serverInfo.port || '8080';
     document.getElementById('pair-token').textContent = serverInfo.authToken || '';
 
+    const verEl = document.getElementById('modal-orbit-version');
+    if (verEl && serverInfo.version) {
+        verEl.textContent = 'Orbit v' + serverInfo.version;
+    }
+
     if (serverInfo.vpn) {
         updateVpnUI(serverInfo.vpn);
     }
@@ -664,3 +669,197 @@ function drawRamHistoryChart() {
     ctx.lineWidth = 2;
     ctx.stroke();
 }
+
+// ==========================================
+// Orbit Auto-Updater Functions
+// ==========================================
+
+let latestUpdateInfo = null;
+let isUpdatingOrbit = false;
+
+async function checkForUpdates(silent = true) {
+    const btnCheck = document.getElementById('btn-check-update-stats');
+    if (btnCheck) {
+        btnCheck.disabled = true;
+        btnCheck.textContent = 'Verificando...';
+    }
+
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/system/version', { headers });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        latestUpdateInfo = data;
+
+        const curVerStr = data.currentVersion ? 'v' + data.currentVersion : 'v1.0.0';
+        const verEl = document.getElementById('modal-orbit-version');
+        if (verEl) verEl.textContent = 'Orbit ' + curVerStr;
+
+        const headerBtn = document.getElementById('header-update-btn');
+        const headerText = document.getElementById('header-update-text');
+
+        if (data.updateAvailable) {
+            if (headerBtn && headerText) {
+                headerText.textContent = 'v' + data.latestVersion;
+                headerBtn.style.display = 'inline-flex';
+            }
+            if (!silent) {
+                openUpdateModal();
+            }
+        } else {
+            if (headerBtn) headerBtn.style.display = 'none';
+            if (!silent) {
+                alert(`✓ Orbit ${curVerStr} ya está en la versión más reciente.`);
+            }
+        }
+    } catch (err) {
+        console.error('Error verificando actualizaciones:', err);
+        if (!silent) {
+            alert('Error al verificar actualizaciones de Orbit: ' + (err.message || err));
+        }
+    } finally {
+        if (btnCheck) {
+            btnCheck.disabled = false;
+            btnCheck.textContent = '🔍 Buscar actualización';
+        }
+    }
+}
+
+function openUpdateModal() {
+    if (!latestUpdateInfo) {
+        checkForUpdates(false);
+        return;
+    }
+
+    const modal = document.getElementById('modal-update');
+    if (!modal) return;
+
+    const curVerEl = document.getElementById('update-cur-ver');
+    const newVerEl = document.getElementById('update-new-ver');
+    const changelogEl = document.getElementById('update-changelog');
+
+    if (curVerEl) curVerEl.textContent = 'v' + (latestUpdateInfo.currentVersion || '1.0.0');
+    if (newVerEl) newVerEl.textContent = 'v' + (latestUpdateInfo.latestVersion || '1.0.0');
+    if (changelogEl) changelogEl.textContent = latestUpdateInfo.changelog || 'Sin notas de versión disponibles.';
+
+    const instBtn = document.getElementById('update-download-installer-btn');
+    if (instBtn) {
+        if (latestUpdateInfo.installerUrl) {
+            instBtn.href = latestUpdateInfo.installerUrl;
+            instBtn.style.display = 'inline-block';
+        } else if (latestUpdateInfo.releaseUrl) {
+            instBtn.href = latestUpdateInfo.releaseUrl;
+            instBtn.textContent = '🌐 Ver en GitHub';
+            instBtn.style.display = 'inline-block';
+        } else {
+            instBtn.style.display = 'none';
+        }
+    }
+
+    // Reset progress UI
+    const progressBox = document.getElementById('update-progress-box');
+    if (progressBox) progressBox.style.display = 'none';
+    const confirmBtn = document.getElementById('update-confirm-btn');
+    if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '🚀 Actualizar Ahora';
+    }
+    const cancelBtn = document.getElementById('update-cancel-btn');
+    if (cancelBtn) cancelBtn.disabled = false;
+
+    modal.classList.add('open');
+}
+
+function closeUpdateModal() {
+    if (isUpdatingOrbit) return;
+    const modal = document.getElementById('modal-update');
+    if (modal) modal.classList.remove('open');
+}
+
+async function applyOrbitUpdate() {
+    if (isUpdatingOrbit) return;
+    isUpdatingOrbit = true;
+
+    const progressBox = document.getElementById('update-progress-box');
+    const statusMsg = document.getElementById('update-status-msg');
+    const confirmBtn = document.getElementById('update-confirm-btn');
+    const cancelBtn = document.getElementById('update-cancel-btn');
+
+    if (progressBox) progressBox.style.display = 'block';
+    if (statusMsg) {
+        statusMsg.style.color = '#60a5fa';
+        statusMsg.textContent = 'Descargando paquete y actualizando Orbit...';
+    }
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Actualizando...';
+    }
+    if (cancelBtn) cancelBtn.disabled = true;
+
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        };
+
+        const res = await fetch('/api/system/update', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ force: false })
+        });
+
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            throw new Error(data.error || 'Error al aplicar actualización');
+        }
+
+        if (statusMsg) {
+            statusMsg.textContent = '¡Actualización completada! Reiniciando Orbit, reconectando...';
+        }
+
+        setTimeout(() => {
+            pollServerRestart();
+        }, 2000);
+
+    } catch (err) {
+        console.error('Error aplicando actualización:', err);
+        isUpdatingOrbit = false;
+        if (statusMsg) {
+            statusMsg.style.color = 'var(--red, #ef4444)';
+            statusMsg.textContent = 'Fallo en la actualización: ' + (err.message || err);
+        }
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Reintentar';
+        }
+        if (cancelBtn) cancelBtn.disabled = false;
+    }
+}
+
+function pollServerRestart() {
+    const statusMsg = document.getElementById('update-status-msg');
+    let attempts = 0;
+    const interval = setInterval(async () => {
+        attempts++;
+        if (statusMsg) {
+            statusMsg.textContent = `Reconectando con Orbit (${attempts})...`;
+        }
+        try {
+            const res = await fetch('/api/health');
+            if (res.ok) {
+                clearInterval(interval);
+                if (statusMsg) {
+                    statusMsg.textContent = '¡Orbit en línea con la nueva versión! Recargando...';
+                }
+                setTimeout(() => {
+                    window.location.reload();
+                }, 800);
+            }
+        } catch (e) {
+            // Keep polling
+        }
+    }, 1500);
+}
+

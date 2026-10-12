@@ -19,6 +19,7 @@ import (
 	"orbit/internal/installer"
 	"orbit/internal/mcp"
 	"orbit/internal/session"
+	"orbit/internal/updater"
 )
 
 var Version = "1.0.0"
@@ -28,10 +29,19 @@ func main() {
 	if err != nil {
 		exePath = os.Args[0]
 	}
+	updater.CleanOldBinaries(exePath)
 
 	if len(os.Args) > 1 {
 		subcommand := os.Args[1]
 		switch subcommand {
+		case "check-update":
+			checkUpdateCLI()
+			return
+
+		case "update":
+			updateCLI()
+			return
+
 		case "mcp":
 			// Crucial: Preserve caller's current working directory for git/bubble auto-detection!
 			if err := mcp.RunServer(); err != nil {
@@ -113,7 +123,7 @@ func main() {
 	if err := manager.RestoreSessions(); err != nil {
 		log.Printf("Warning: failed to restore previous sessions: %v", err)
 	}
-	server := api.NewServer(cfg, manager)
+	server := api.NewServer(cfg, manager, Version)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	dashUrl := fmt.Sprintf("http://localhost:%s/", cfg.Port)
@@ -180,6 +190,8 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Comandos disponibles:")
 	fmt.Println("  (sin comando)      Inicia el servidor daemon y el Cockpit web")
+	fmt.Println("  check-update       Verifica si existe una versión más reciente de Orbit")
+	fmt.Println("  update [--force]   Actualiza Orbit automáticamente a la última versión")
 	fmt.Println("  mcp                Ejecuta el servidor MCP JSON-RPC 2.0 por stdio (para Claude)")
 	fmt.Println("  setup-mcp          Configura el servidor MCP en Claude Code y Claude Desktop")
 	fmt.Println("  uninstall-mcp      Remueve la configuración MCP de Claude Code y Claude Desktop")

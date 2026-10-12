@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"orbit/internal/services"
 	"orbit/internal/session"
 	"orbit/internal/system"
+	"orbit/internal/updater"
 	"orbit/internal/vpn"
 	"orbit/internal/web"
 )
@@ -41,9 +43,10 @@ type Server struct {
 	obsidianMgr *obsidian.Manager
 	calendarMgr *calendar.Manager
 	startedAt   time.Time
+	version     string
 }
 
-func NewServer(cfg *config.Config, manager *session.Manager) *Server {
+func NewServer(cfg *config.Config, manager *session.Manager, version string) *Server {
 	dataDir := cfg.DataDir
 	if dataDir == "" {
 		dataDir = config.GetDataDir()
@@ -56,6 +59,7 @@ func NewServer(cfg *config.Config, manager *session.Manager) *Server {
 		obsidianMgr: obsidian.NewManager(),
 		calendarMgr: calendar.NewManager(filepath.Join(dataDir, "calendar_notes")),
 		startedAt:   time.Now(),
+		version:     version,
 	}
 }
 
@@ -65,6 +69,8 @@ func (s *Server) Routes() http.Handler {
 	// API Routes
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/server-info", s.handleServerInfo)
+	mux.HandleFunc("GET /api/system/version", s.handleSystemVersion)
+	mux.HandleFunc("POST /api/system/update", s.withAuth(s.handleSystemUpdate))
 	mux.HandleFunc("GET /api/system/stats", s.handleSystemStats)
 	mux.HandleFunc("POST /api/system/process/kill", s.withAuth(s.handleKillProcess))
 	mux.HandleFunc("POST /api/services/{id}/start", s.withAuth(s.handleStartService))
@@ -209,6 +215,7 @@ func (s *Server) handleStopService(w http.ResponseWriter, r *http.Request) {
 }
 
 type ServerInfoResponse struct {
+	Version      string      `json:"version"`
 	Hostname     string      `json:"hostname"`
 	Port         string      `json:"port"`
 	LanIps       []string    `json:"lanIps"`
@@ -231,6 +238,7 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 	vpnStatus := s.vpnMgr.Status()
 
 	info := ServerInfoResponse{
+		Version:      s.version,
 		Hostname:     hostname,
 		Port:         s.cfg.Port,
 		LanIps:       getLANIPs(),
@@ -244,6 +252,99 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) handleSystemVersion(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	check := r.URL.Query().Get("check") != "false"
+
+	if !check {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"currentVersion":  s.version,
+			"updateAvailable": false,
+		})
+		return
+	}
+
+	info, err := updater.CheckUpdate(s.version)
+	if err != nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"currentVersion":  s.version,
+			"latestVersion":   s.version,
+			"updateAvailable": false,
+			"error":           err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(info)
+}
+
+func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Force bool `json:"force"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	info, err := updater.CheckUpdate(s.version)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": fmt.Sprintf("Error al verificar actualizaciones: %v", err),
+		})
+		return
+	}
+
+	if !info.UpdateAvailable && !req.Force {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false,
+			"message": fmt.Sprintf("Orbit ya está en la versión más reciente (v%s)", s.version),
+			"version": s.version,
+		})
+		return
+	}
+
+	if err := updater.ApplyUpdate(info); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": fmt.Sprintf("Error aplicando actualización: %v", err),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+		"message": fmt.Sprintf("Actualización completada a v%s. Reiniciando servidor...", info.LatestVersion),
+		"version": info.LatestVersion,
+	})
+
+	// Graceful restart in background
+	go func() {
+		time.Sleep(1500 * time.Millisecond)
+		if err := s.manager.SaveState(); err != nil {
+			log.Printf("Error saving session state prior to update restart: %v", err)
+		}
+		s.manager.CloseAllPTYs()
+
+		exePath, err := os.Executable()
+		if err != nil {
+			exePath = os.Args[0]
+		}
+
+		cmd := exec.Command(exePath, os.Args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		if err := cmd.Start(); err != nil {
+			log.Printf("Error restarting after update: %v", err)
+			return
+		}
+		os.Exit(0)
+	}()
 }
 
 func (s *Server) handleVPNStatus(w http.ResponseWriter, r *http.Request) {

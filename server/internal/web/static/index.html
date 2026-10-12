@@ -32,6 +32,9 @@
             <div class="brand-title">
                 <span class="status-pill"><span class="status-dot"></span> HOST ONLINE</span>
             </div>
+            <button class="btn btn-sm" id="header-update-btn" onclick="openUpdateModal()" style="display: none; background: rgba(59, 130, 246, 0.18); border: 1px solid rgba(59, 130, 246, 0.5); color: #93c5fd; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; align-items: center; gap: 4px;" title="Nueva versión disponible de Orbit">
+                <span>✨</span> <span id="header-update-text">v1.0.1</span>
+            </button>
         </div>
 
         <div class="header-controls">
@@ -1116,6 +1119,49 @@
         </div>
     </div>
 
+    <!-- MODAL: ACTUALIZACIÓN DE ORBIT -->
+    <div id="modal-update" class="modal-overlay">
+        <div class="modal-box" style="max-width: 580px;">
+            <div class="modal-header">
+                <h3>✨ Actualización de Orbit</h3>
+                <button class="btn btn-sm" onclick="closeUpdateModal()">✕</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Versión Actual</div>
+                        <div style="font-size: 16px; font-weight: 700; color: var(--text-main);" id="update-cur-ver">v1.0.0</div>
+                    </div>
+                    <div style="font-size: 20px; color: var(--text-dim);">➜</div>
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Nueva Versión</div>
+                        <div style="font-size: 16px; font-weight: 700; color: #60a5fa;" id="update-new-ver">v1.0.1</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px;">Notas de la Versión:</div>
+                    <div id="update-changelog" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px; font-size: 12px; line-height: 1.5; max-height: 200px; overflow-y: auto; white-space: pre-wrap; font-family: var(--font-mono, monospace); color: var(--text-muted);">Cargando notas de la versión...</div>
+                </div>
+
+                <!-- Status / Progress indicator -->
+                <div id="update-progress-box" style="display: none; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-sm); padding: 12px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="orbit-spinner" id="update-spinner" style="width: 18px; height: 18px; border: 2px solid rgba(59, 130, 246, 0.3); border-top-color: #60a5fa; border-radius: 50%; animation: orbit-spin 0.8s linear infinite;"></div>
+                        <div style="font-size: 13px; color: #60a5fa; font-weight: 500;" id="update-status-msg">Descargando e instalando actualización...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <a id="update-download-installer-btn" href="#" target="_blank" class="btn btn-sm" style="display: none; text-decoration: none;" title="Descargar paquete completo directamente desde GitHub">📦 Descargar Instalador</a>
+                <div style="display: flex; gap: 8px; margin-left: auto;">
+                    <button class="btn" id="update-cancel-btn" onclick="closeUpdateModal()">Cerrar</button>
+                    <button class="btn btn-primary" id="update-confirm-btn" onclick="applyOrbitUpdate()">🚀 Actualizar Ahora</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Context Menu for Terminal Subtabs -->
     <div id="subtab-context-menu" class="custom-context-menu">
         <div style="font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 2px;" id="ctx-menu-title">
@@ -1256,9 +1302,14 @@
         </div>
 
         <div style="padding: 10px 14px; border-top: 1px solid rgba(255,255,255,0.08); background: rgba(20, 27, 45, 0.6); display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 11px; color: var(--text-dim);" id="modal-host-info">
-                Host en línea
-            </span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; color: var(--text-dim);" id="modal-host-info">
+                    Host en línea
+                </span>
+                <span style="color: var(--border-subtle); font-size: 10px;">·</span>
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;" id="modal-orbit-version">Orbit v1.0.0</span>
+                <button class="btn btn-sm" id="btn-check-update-stats" onclick="checkForUpdates(false)" style="padding: 1px 7px; font-size: 10px; border-color: rgba(59, 130, 246, 0.3); color: #93c5fd;" title="Buscar actualizaciones de Orbit">🔍 Buscar actualización</button>
+            </div>
             <button class="btn btn-sm" onclick="closeSystemStatsModal()">Listo</button>
         </div>
     </div>
