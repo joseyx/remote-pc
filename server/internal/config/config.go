@@ -16,6 +16,7 @@ type Config struct {
 	Host         string `json:"host"`
 	DefaultShell string `json:"defaultShell"`
 	MaxHistoryKB int    `json:"maxHistoryKB"`
+	PIN          string `json:"pin,omitempty"`
 	DataDir      string `json:"-"`
 }
 
@@ -154,4 +155,51 @@ func LoadConfig() *Config {
 	}
 
 	return cfg
+}
+
+// Save persists the configuration to server.config.json in dataDir
+func (c *Config) Save() error {
+	dataDir := c.DataDir
+	if dataDir == "" {
+		dataDir = GetDataDir()
+	}
+	savePath := filepath.Join(dataDir, "server.config.json")
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(savePath, data, 0644)
+}
+
+// RotateToken generates a new random token or sets a custom token and persists it
+func (c *Config) RotateToken(customToken string) string {
+	if customToken != "" {
+		c.AuthToken = customToken
+	} else {
+		bytes := make([]byte, 16)
+		_, _ = rand.Read(bytes)
+		c.AuthToken = hex.EncodeToString(bytes)
+	}
+	_ = c.Save()
+	return c.AuthToken
+}
+
+// SetPIN configures or updates the security PIN
+func (c *Config) SetPIN(pin string) error {
+	c.PIN = pin
+	return c.Save()
+}
+
+// RemovePIN clears the configured security PIN
+func (c *Config) RemovePIN() error {
+	c.PIN = ""
+	return c.Save()
+}
+
+// VerifyPIN checks whether the provided PIN matches
+func (c *Config) VerifyPIN(pin string) bool {
+	if c.PIN == "" {
+		return true // No PIN configured
+	}
+	return c.PIN == pin
 }

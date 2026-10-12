@@ -47,6 +47,14 @@ func main() {
 			serviceCLI(exePath)
 			return
 
+		case "token":
+			tokenCLI()
+			return
+
+		case "pin":
+			pinCLI()
+			return
+
 		case "check-update":
 			checkUpdateCLI()
 			return
@@ -205,6 +213,8 @@ func printUsage() {
 	fmt.Println("  (sin comando)      Inicia el servidor daemon y el Cockpit web")
 	fmt.Println("  doctor             Ejecuta un diagnóstico completo del entorno e integraciones")
 	fmt.Println("  service [comando]  Gestiona el demonio de fondo (install, uninstall, start, stop, status)")
+	fmt.Println("  token [comando]    Muestra o rota el token de autenticación (show, rotate, set)")
+	fmt.Println("  pin [comando]      Gestiona el PIN de seguridad (status, set, remove)")
 	fmt.Println("  check-update       Verifica si existe una versión más reciente de Orbit")
 	fmt.Println("  update [--force]   Actualiza Orbit automáticamente a la última versión")
 	fmt.Println("  mcp                Ejecuta el servidor MCP JSON-RPC 2.0 por stdio (para Claude)")
@@ -305,6 +315,102 @@ func printServiceUsage() {
 	fmt.Println("  stop        Detiene el proceso en segundo plano")
 	fmt.Println("  restart     Reinicia el proceso en segundo plano")
 	fmt.Println("  help        Muestra esta ayuda")
+}
+
+func tokenCLI() {
+	cfg := config.LoadConfig()
+
+	action := "show"
+	if len(os.Args) > 2 {
+		action = strings.ToLower(os.Args[2])
+	}
+
+	switch action {
+	case "show", "get", "status":
+		fmt.Printf("Token de Autenticación de Orbit: %s\n", cfg.AuthToken)
+
+	case "rotate":
+		oldToken := cfg.AuthToken
+		newToken := cfg.RotateToken("")
+		fmt.Println("✓ Token rotado exitosamente.")
+		fmt.Printf("  Token anterior : %s\n", oldToken)
+		fmt.Printf("  Nuevo Token    : %s\n", newToken)
+		fmt.Println("  Recuerda actualizar tu app Orbit Mobile escaneando el nuevo código QR.")
+
+	case "set":
+		if len(os.Args) < 4 || strings.TrimSpace(os.Args[3]) == "" {
+			fmt.Println("Uso: orbit token set <nuevo-token>")
+			os.Exit(1)
+		}
+		custom := strings.TrimSpace(os.Args[3])
+		cfg.RotateToken(custom)
+		fmt.Printf("✓ Token de autenticación establecido a: %s\n", custom)
+
+	case "help", "-h", "--help":
+		fmt.Println("Uso: orbit token [comando]")
+		fmt.Println("  show              Muestra el token actual (por defecto)")
+		fmt.Println("  rotate            Genera y guarda un nuevo token aleatorio seguro")
+		fmt.Println("  set <token>       Configura un token personalizado específico")
+
+	default:
+		fmt.Printf("Token actual: %s\n", cfg.AuthToken)
+		fmt.Println("Comandos: 'orbit token rotate' o 'orbit token set <token>'")
+	}
+}
+
+func pinCLI() {
+	cfg := config.LoadConfig()
+
+	action := "status"
+	if len(os.Args) > 2 {
+		action = strings.ToLower(os.Args[2])
+	}
+
+	switch action {
+	case "status", "show":
+		if cfg.PIN != "" {
+			fmt.Println("Estado del PIN de Seguridad: [✓ Configurado]")
+		} else {
+			fmt.Println("Estado del PIN de Seguridad: [! No configurado]")
+			fmt.Println("Para configurar un PIN: 'orbit pin set <pin_4_a_8_digitos>'")
+		}
+
+	case "set":
+		if len(os.Args) < 4 || strings.TrimSpace(os.Args[3]) == "" {
+			fmt.Println("Uso: orbit pin set <nuevo_pin>")
+			os.Exit(1)
+		}
+		newPin := strings.TrimSpace(os.Args[3])
+		if len(newPin) < 4 || len(newPin) > 8 {
+			fmt.Println("Error: El PIN debe tener entre 4 y 8 caracteres o dígitos.")
+			os.Exit(1)
+		}
+		if err := cfg.SetPIN(newPin); err != nil {
+			fmt.Fprintf(os.Stderr, "Error guardando PIN: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ PIN de seguridad establecido exitosamente.")
+
+	case "remove", "delete":
+		if cfg.PIN == "" {
+			fmt.Println("No hay ningún PIN de seguridad configurado actualmente.")
+			return
+		}
+		if err := cfg.RemovePIN(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error removiendo PIN: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ PIN de seguridad removido exitosamente.")
+
+	case "help", "-h", "--help":
+		fmt.Println("Uso: orbit pin [comando]")
+		fmt.Println("  status            Muestra si hay un PIN de seguridad activo")
+		fmt.Println("  set <pin>         Establece un nuevo PIN (4 a 8 caracteres)")
+		fmt.Println("  remove            Elimina el PIN de seguridad configurado")
+
+	default:
+		fmt.Println("Comando desconocido. Usa 'orbit pin help'")
+	}
 }
 
 func openBrowser(url string) error {

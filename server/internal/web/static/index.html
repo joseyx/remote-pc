@@ -78,13 +78,18 @@
             </div>
 
             <!-- Copy Token -->
-            <button class="btn btn-sm" onclick="copyToken()" title="Copy Auth Token">
+            <button class="btn btn-sm" onclick="copyToken()" title="Copiar Token de Acceso">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                 Token
             </button>
 
+            <!-- Security & Token Settings -->
+            <button class="btn btn-sm" onclick="openSecurityModal()" title="Configuración de Seguridad, Token y PIN">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Seguridad
+            </button>
+
             <!-- Pair Phone Modal -->
-            <button class="btn btn-sm" onclick="openPairModal()">
+            <button class="btn btn-sm" onclick="openPairModal()" title="Emparejar Orbit Mobile con QR">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path></svg> Pair Phone
             </button>
 
@@ -1243,6 +1248,84 @@
             <div class="modal-footer">
                 <button class="btn btn-sm" onclick="closeServiceModal()">Cerrar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SECURITY & TOKEN SETTINGS -->
+    <div id="modal-security" class="modal-overlay" onclick="if(event.target === this) closeSecurityModal()">
+        <div class="modal-box" style="max-width: 520px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🔐</span>
+                    <h3 style="margin: 0;">Seguridad, Token & PIN</h3>
+                </div>
+                <button class="btn btn-sm" onclick="closeSecurityModal()">✕</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Section 1: Auth Token -->
+                <div>
+                    <label class="form-label" style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">
+                        🔑 Token de Autenticación Bearer
+                    </label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="password" id="security-token-input" class="form-control" readonly style="flex: 1; font-family: monospace; font-size: 12px; background: var(--bg-card); cursor: text;" value="">
+                        <button class="btn btn-sm" id="btn-toggle-token-mask" onclick="toggleTokenMask()" title="Revelar / Ocultar token" style="padding: 6px 10px;">👁️</button>
+                        <button class="btn btn-sm" onclick="copyToken()" title="Copiar token" style="padding: 6px 10px;">📋</button>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">
+                        Este token autentica la app Orbit Mobile, clientes WebSocket y herramientas MCP.
+                    </div>
+                </div>
+
+                <!-- Token Actions -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 14px;">
+                    <div>
+                        <div style="font-size: 12px; font-weight: 600; color: var(--text-main);">Rotar Credencial</div>
+                        <div style="font-size: 11px; color: var(--text-dim);">Genera un nuevo token seguro de 32 caracteres hex</div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" onclick="promptRotateToken()">⚡ Rotar Token</button>
+                </div>
+
+                <!-- Section 2: Security PIN -->
+                <div>
+                    <label class="form-label" style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; display: block;">
+                        🛡️ PIN de Seguridad (Confirmación & Bloqueo)
+                    </label>
+                    <div id="security-pin-card" style="background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Injected dynamically -->
+                    </div>
+                </div>
+
+                <!-- Lock Screen Trigger -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: var(--radius-sm); padding: 10px 14px;">
+                    <div>
+                        <div style="font-size: 12px; font-weight: 600; color: var(--text-main);">🔒 Bloqueo de Pantalla</div>
+                        <div style="font-size: 11px; color: var(--text-dim);">Bloquea el Cockpit inmediatamente hasta ingresar el PIN</div>
+                    </div>
+                    <button class="btn btn-sm" onclick="closeSecurityModal(); lockCockpit();">Bloquear Ahora</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-sm" onclick="closeSecurityModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOCK SCREEN OVERLAY -->
+    <div id="cockpit-lock-overlay" style="display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(10, 14, 23, 0.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); justify-content: center; align-items: center; flex-direction: column;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 32px; max-width: 380px; width: 90%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; gap: 16px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(56, 189, 248, 0.12); display: flex; justify-content: center; align-items: center; font-size: 26px;">
+                🔒
+            </div>
+            <div>
+                <h3 style="margin: 0 0 6px 0; font-size: 18px; color: var(--text-main);">Orbit Cockpit Bloqueado</h3>
+                <div style="font-size: 12px; color: var(--text-muted);" id="lock-screen-subtitle">Introduce tu PIN de seguridad para continuar</div>
+            </div>
+            <div style="width: 100%;">
+                <input type="password" id="lock-screen-input" class="form-control" placeholder="PIN de seguridad..." style="width: 100%; text-align: center; font-size: 18px; letter-spacing: 4px; padding: 10px 14px; background: var(--bg-base);" onkeydown="if(event.key==='Enter') unlockCockpit();">
+            </div>
+            <div id="lock-screen-error" style="font-size: 11px; color: var(--red); display: none;">PIN incorrecto. Inténtalo de nuevo.</div>
+            <button class="btn btn-primary" onclick="unlockCockpit()" style="width: 100%; padding: 10px;">Desbloquear Cockpit</button>
         </div>
     </div>
 

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/orbit-logo.png" alt="Orbit Logo" width="124" height="124" style="border-radius: 28px;" />
+
 # 🚀 Orbit
 
 ### The Local-First Developer Cockpit & Native AI MCP Orchestrator
@@ -217,6 +219,7 @@ Opciones del servidor:
 
 ```text
 remote-pc/
+├── assets/                     # Identidad visual, logos (PNG, SVG) e iconografía
 ├── android/                    # Cliente móvil Android Orbit Mobile (Kotlin + Compose)
 │   ├── app/src/main/java/com/remotepc/app/
 │   │   ├── data/               # Modelos de sesión, VPN y red (OkHttp/WebSocket)

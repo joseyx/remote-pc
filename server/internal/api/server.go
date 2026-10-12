@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ var upgrader = websocket.Upgrader{
 }
 
 type Server struct {
+	mu          sync.RWMutex
 	cfg         *config.Config
 	manager     *session.Manager
 	vpnMgr      *vpn.Manager
@@ -76,6 +78,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/system/update", s.withAuth(s.handleSystemUpdate))
 	mux.HandleFunc("GET /api/system/service", s.handleSystemServiceStatus)
 	mux.HandleFunc("POST /api/system/service", s.withAuth(s.handleSystemServiceAction))
+	mux.HandleFunc("GET /api/system/security", s.withAuth(s.handleGetSecurityStatus))
+	mux.HandleFunc("POST /api/system/token/rotate", s.withAuth(s.handleRotateToken))
+	mux.HandleFunc("POST /api/system/pin/set", s.withAuth(s.handleSetPIN))
+	mux.HandleFunc("POST /api/system/pin/remove", s.withAuth(s.handleRemovePIN))
+	mux.HandleFunc("POST /api/system/pin/verify", s.handleVerifyPIN)
 	mux.HandleFunc("GET /api/system/stats", s.handleSystemStats)
 	mux.HandleFunc("POST /api/system/process/kill", s.withAuth(s.handleKillProcess))
 	mux.HandleFunc("POST /api/services/{id}/start", s.withAuth(s.handleStartService))
@@ -144,7 +151,11 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 			token = r.URL.Query().Get("token")
 		}
 
-		if s.cfg.AuthToken != "" && token != s.cfg.AuthToken {
+		s.mu.RLock()
+		expectedToken := s.cfg.AuthToken
+		s.mu.RUnlock()
+
+		if expectedToken != "" && token != expectedToken {
 			http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
@@ -242,12 +253,16 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 
 	vpnStatus := s.vpnMgr.Status()
 
+	s.mu.RLock()
+	curToken := s.cfg.AuthToken
+	s.mu.RUnlock()
+
 	info := ServerInfoResponse{
 		Version:      s.version,
 		Hostname:     hostname,
 		Port:         s.cfg.Port,
 		LanIps:       getLANIPs(),
-		AuthToken:    s.cfg.AuthToken,
+		AuthToken:    curToken,
 		Uptime:       uptimeStr,
 		StartedAt:    s.startedAt,
 		SessionCount: len(s.manager.ListSessions()),
@@ -422,6 +437,150 @@ func (s *Server) handleSystemServiceAction(w http.ResponseWriter, r *http.Reques
 		"success": true,
 		"message": msg,
 		"status":  st,
+	})
+}
+
+func (s *Server) handleGetSecurityStatus(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"token":   s.cfg.AuthToken,
+		"hasPin":  s.cfg.PIN != "",
+		"port":    s.cfg.Port,
+		"success": true,
+	})
+}
+
+func (s *Server) handleRotateToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PIN         string `json:"pin"`
+		CustomToken string `json:"customToken"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cfg.PIN != "" && req.PIN != s.cfg.PIN {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false,
+			"error":   "PIN de seguridad incorrecto",
+		})
+		return
+	}
+
+	newToken := s.cfg.RotateToken(strings.TrimSpace(req.CustomToken))
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+		"token":   newToken,
+		"message": "Token de autenticación rotado exitosamente.",
+	})
+}
+
+func (s *Server) handleSetPIN(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CurrentPIN string `json:"currentPin"`
+		NewPIN     string `json:"newPin"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "Payload JSON inválido"})
+		return
+	}
+
+	req.NewPIN = strings.TrimSpace(req.NewPIN)
+	if len(req.NewPIN) < 4 || len(req.NewPIN) > 8 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "El PIN debe tener entre 4 y 8 caracteres o dígitos"})
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cfg.PIN != "" && req.CurrentPIN != s.cfg.PIN {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false,
+			"error":   "El PIN actual no coincide",
+		})
+		return
+	}
+
+	if err := s.cfg.SetPIN(req.NewPIN); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+		"hasPin":  true,
+		"message": "PIN de seguridad configurado exitosamente.",
+	})
+}
+
+func (s *Server) handleRemovePIN(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PIN string `json:"pin"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cfg.PIN != "" && req.PIN != s.cfg.PIN {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false,
+			"error":   "PIN de seguridad incorrecto",
+		})
+		return
+	}
+
+	_ = s.cfg.RemovePIN()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+		"hasPin":  false,
+		"message": "PIN de seguridad removido exitosamente.",
+	})
+}
+
+func (s *Server) handleVerifyPIN(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PIN string `json:"pin"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	valid := false
+	if s.cfg.PIN != "" {
+		valid = req.PIN == s.cfg.PIN
+	} else if s.cfg.AuthToken != "" {
+		valid = req.PIN == s.cfg.AuthToken
+	} else {
+		valid = true
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"valid":   valid,
+		"hasPin":  s.cfg.PIN != "",
+		"message": map[bool]string{true: "PIN verificado correctamente", false: "PIN incorrecto"}[valid],
 	})
 }
 
@@ -658,7 +817,11 @@ type WsIncomingMsg struct {
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	token := r.URL.Query().Get("token")
-	if s.cfg.AuthToken != "" && token != s.cfg.AuthToken {
+	s.mu.RLock()
+	expectedToken := s.cfg.AuthToken
+	s.mu.RUnlock()
+
+	if expectedToken != "" && token != expectedToken {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
