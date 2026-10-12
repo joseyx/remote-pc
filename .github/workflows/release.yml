@@ -1,0 +1,149 @@
+name: Release - Build & Publish Artifacts
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag de versión a publicar (ej: v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Package Windows Installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: server/go.sum
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress
+
+      - name: Build Windows Executable
+        working-directory: ./server
+        run: |
+          $rawVer = if ("${{ github.ref_name }}" -ne "") { "${{ github.ref_name }}" } else { "${{ inputs.tag }}" }
+          $ver = if ($rawVer.StartsWith("v")) { $rawVer.TrimStart("v") } else { "1.0.0" }
+          go build -ldflags="-s -w -X main.Version=$ver" -o orbit.exe ./cmd/server
+          Copy-Item orbit.exe remotepc-server.exe -Force
+          Copy-Item orbit.exe ..\orbit.exe -Force
+          Copy-Item remotepc-server.exe ..\remotepc-server.exe -Force
+
+      - name: Compile Inno Setup Installer
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/Orbit-Setup.iss
+
+      - name: Create Portable Windows Zip
+        run: |
+          Compress-Archive -Path server/orbit.exe, server/remotepc-server.exe, README.md -DestinationPath dist/orbit-windows-amd64.zip -Force
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            dist/Orbit-Setup.exe
+            dist/orbit-windows-amd64.zip
+
+  build-unix:
+    name: Package Unix Binaries (Linux & macOS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: server/go.sum
+
+      - name: Build & Package Binaries
+        run: |
+          mkdir -p dist
+          RAW_VER="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+          VER="${RAW_VER#v}"
+          if [ -z "$VER" ] || [ "$VER" = "$RAW_VER" ]; then VER="1.0.0"; fi
+
+          # 1. Linux AMD64
+          mkdir -p build_linux_amd64
+          GOOS=linux GOARCH=amd64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_linux_amd64/orbit ./cmd/server
+          cp scripts/install.sh README.md build_linux_amd64/
+          tar -czf dist/orbit-linux-amd64.tar.gz -C build_linux_amd64 orbit install.sh README.md
+
+          # 2. Linux ARM64
+          mkdir -p build_linux_arm64
+          GOOS=linux GOARCH=arm64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_linux_arm64/orbit ./cmd/server
+          cp scripts/install.sh README.md build_linux_arm64/
+          tar -czf dist/orbit-linux-arm64.tar.gz -C build_linux_arm64 orbit install.sh README.md
+
+          # 3. macOS ARM64 (Apple Silicon)
+          mkdir -p build_darwin_arm64
+          GOOS=darwin GOARCH=arm64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_darwin_arm64/orbit ./cmd/server
+          cp scripts/install.sh README.md build_darwin_arm64/
+          tar -czf dist/orbit-darwin-arm64.tar.gz -C build_darwin_arm64 orbit install.sh README.md
+
+          # 4. macOS AMD64 (Intel)
+          mkdir -p build_darwin_amd64
+          GOOS=darwin GOARCH=amd64 go build -C server -ldflags="-s -w -X main.Version=$VER" -o ../build_darwin_amd64/orbit ./cmd/server
+          cp scripts/install.sh README.md build_darwin_amd64/
+          tar -czf dist/orbit-darwin-amd64.tar.gz -C build_darwin_amd64 orbit install.sh README.md
+
+      - name: Upload Unix Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: unix-artifacts
+          path: dist/*.tar.gz
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-unix]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: dist
+
+      - name: Download Unix Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: unix-artifacts
+          path: dist
+
+      - name: Generate Checksums
+        working-directory: ./dist
+        run: |
+          sha256sum * > checksums.txt
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag }}
+          name: Orbit ${{ github.ref_name || inputs.tag }}
+          generate_release_notes: true
+          files: |
+            dist/Orbit-Setup.exe
+            dist/orbit-windows-amd64.zip
+            dist/orbit-linux-amd64.tar.gz
+            dist/orbit-linux-arm64.tar.gz
+            dist/orbit-darwin-arm64.tar.gz
+            dist/orbit-darwin-amd64.tar.gz
+            dist/checksums.txt

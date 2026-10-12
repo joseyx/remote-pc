@@ -21,7 +21,7 @@ import (
 	"orbit/internal/session"
 )
 
-const Version = "1.0.0"
+var Version = "1.0.0"
 
 func main() {
 	exePath, err := os.Executable()
