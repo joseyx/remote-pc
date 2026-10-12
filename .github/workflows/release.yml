@@ -44,7 +44,9 @@ jobs:
       - name: Compile Inno Setup Installer
         run: |
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/Orbit-Setup.iss
+          $rawVer = if ("${{ github.ref_name }}" -ne "") { "${{ github.ref_name }}" } else { "${{ inputs.tag }}" }
+          $ver = if ($rawVer.StartsWith("v")) { $rawVer.TrimStart("v") } else { "1.1.0" }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" installer/Orbit-Setup.iss
 
       - name: Create Portable Windows Zip
         run: |

@@ -2,7 +2,9 @@
 ; Orbit - Developer Cockpit & Native AI MCP Orchestrator
 
 #define MyAppName "Orbit"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+#define MyAppVersion "1.1.0"
+#endif
 #define MyAppPublisher "Orbit"
 #define MyAppExeName "orbit.exe"
 
