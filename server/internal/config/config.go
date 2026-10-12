@@ -7,6 +7,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 type Config struct {
@@ -27,6 +28,7 @@ func GetDataDir() string {
 
 	exePath, _ := os.Executable()
 	exeDir := filepath.Dir(exePath)
+	home, _ := os.UserHomeDir()
 
 	// Search order for data directory:
 	// 1. "data" in current working directory
@@ -36,6 +38,14 @@ func GetDataDir() string {
 		"data",
 		filepath.Join(exeDir, "data"),
 		filepath.Join(exeDir, "..", "data"),
+	}
+
+	if runtime.GOOS == "darwin" && home != "" {
+		candidates = append(candidates, filepath.Join(home, "Library", "Application Support", "RemotePC", "data"))
+	} else if runtime.GOOS != "windows" && home != "" {
+		candidates = append(candidates, filepath.Join(home, ".local", "share", "remotepc", "data"))
+	} else if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
+		candidates = append(candidates, filepath.Join(localApp, "RemotePC", "data"))
 	}
 
 	for _, c := range candidates {
@@ -52,10 +62,21 @@ func GetDataDir() string {
 func LoadConfig() *Config {
 	dataDir := GetDataDir()
 
+	defaultShell := "powershell.exe"
+	if runtime.GOOS == "darwin" {
+		defaultShell = "/bin/zsh"
+	} else if runtime.GOOS != "windows" {
+		if shell := os.Getenv("SHELL"); shell != "" {
+			defaultShell = shell
+		} else {
+			defaultShell = "/bin/bash"
+		}
+	}
+
 	cfg := &Config{
 		Port:         "8080",
 		Host:         "0.0.0.0",
-		DefaultShell: "powershell.exe",
+		DefaultShell: defaultShell,
 		MaxHistoryKB: 2048, // 2 MB ring buffer per session
 		DataDir:      dataDir,
 	}

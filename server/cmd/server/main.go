@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -138,7 +139,7 @@ func main() {
 	if shouldOpen {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
-			_ = exec.Command("cmd", "/c", "start", dashUrl).Start()
+			_ = openBrowser(dashUrl)
 		}()
 	}
 
@@ -194,4 +195,17 @@ func printUsage() {
 	fmt.Println("  -port <puerto>     Puerto HTTP a utilizar (por defecto: 8080)")
 	fmt.Println("  -token <token>     Token de autenticación Bearer")
 	fmt.Println("  -host <ip>         Dirección IP para escuchar (por defecto: 0.0.0.0)")
+}
+
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default: // linux, bsd, etc.
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }

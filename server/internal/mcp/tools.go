@@ -7,10 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -323,23 +321,31 @@ func ensureServerRunning(port string) bool {
 		return false
 	}
 	exeDir := filepath.Dir(exePath)
+	home, _ := os.UserHomeDir()
 
 	candidatePaths := []string{
 		exePath,
 		filepath.Join(exeDir, "remotepc-server.exe"),
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "RemotePC", "remotepc-server.exe"),
-		filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Personal Projects", "Remote PC", "remotepc-server.exe"),
-		filepath.Join(os.Getenv("USERPROFILE"), "Documents", "Personal Projects", "Remote PC", "server", "remotepc-server.exe"),
+		filepath.Join(exeDir, "remotepc-server"),
+	}
+
+	if home != "" {
+		candidatePaths = append(candidatePaths,
+			filepath.Join(home, ".local", "bin", "remotepc-server"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "remotepc-server.exe"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "remotepc-server"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "server", "remotepc-server.exe"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "server", "remotepc-server"),
+		)
+	}
+
+	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
+		candidatePaths = append(candidatePaths, filepath.Join(localApp, "RemotePC", "remotepc-server.exe"))
 	}
 
 	for _, p := range candidatePaths {
 		if _, err := os.Stat(p); err == nil {
-			cmd := exec.Command("cmd", "/c", "start", "", "/b", p, "-no-open")
-			cmd.Dir = filepath.Dir(p)
-			cmd.SysProcAttr = &syscall.SysProcAttr{
-				CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-			}
-			if err := cmd.Start(); err == nil {
+			if err := startBackgroundDaemon(p); err == nil {
 				healthURL := fmt.Sprintf("http://127.0.0.1:%s/api/health", port)
 				client := &http.Client{Timeout: 500 * time.Millisecond}
 				for i := 0; i < 15; i++ {

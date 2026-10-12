@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 // SetupMCP configures the MCP server for Claude Code CLI and Claude Desktop
@@ -40,6 +41,32 @@ func UninstallMCP() error {
 	return nil
 }
 
+func getClaudeDesktopConfigPath() string {
+	home, _ := os.UserHomeDir()
+	switch runtime.GOOS {
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		if appData == "" && home != "" {
+			appData = filepath.Join(home, "AppData", "Roaming")
+		}
+		if appData != "" {
+			return filepath.Join(appData, "Claude", "claude_desktop_config.json")
+		}
+	case "darwin":
+		if home != "" {
+			return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+		}
+	default: // Linux and other POSIX
+		if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
+			return filepath.Join(configHome, "Claude", "claude_desktop_config.json")
+		}
+		if home != "" {
+			return filepath.Join(home, ".config", "Claude", "claude_desktop_config.json")
+		}
+	}
+	return ""
+}
+
 func setupClaudeCode(exePath string) {
 	// Intentar primero con el comando oficial de Claude CLI si está disponible
 	if claudeCmd, err := exec.LookPath("claude"); err == nil && claudeCmd != "" {
@@ -54,13 +81,16 @@ func setupClaudeCode(exePath string) {
 	}
 
 	// Configuración directa en ~/.claude.json
-	userProfile := os.Getenv("USERPROFILE")
-	if userProfile == "" {
-		fmt.Println("[MCP] Aviso: No se encontró USERPROFILE para configurar Claude Code.")
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("USERPROFILE")
+	}
+	if home == "" {
+		fmt.Println("[MCP] Aviso: No se encontró directorio home para configurar Claude Code.")
 		return
 	}
 
-	claudeJsonPath := filepath.Join(userProfile, ".claude.json")
+	claudeJsonPath := filepath.Join(home, ".claude.json")
 	var root map[string]interface{}
 
 	if data, err := os.ReadFile(claudeJsonPath); err == nil {
@@ -93,17 +123,15 @@ func setupClaudeCode(exePath string) {
 }
 
 func setupClaudeDesktop(exePath string) {
-	appData := os.Getenv("APPDATA")
-	if appData == "" {
+	configPath := getClaudeDesktopConfigPath()
+	if configPath == "" {
 		return
 	}
 
-	claudeDir := filepath.Join(appData, "Claude")
+	claudeDir := filepath.Dir(configPath)
 	_ = os.MkdirAll(claudeDir, 0755)
 
-	configPath := filepath.Join(claudeDir, "claude_desktop_config.json")
 	var root map[string]interface{}
-
 	if data, err := os.ReadFile(configPath); err == nil {
 		if err := json.Unmarshal(data, &root); err != nil {
 			root = make(map[string]interface{})
@@ -138,12 +166,15 @@ func uninstallClaudeCode() {
 		_ = cmd.Run()
 	}
 
-	userProfile := os.Getenv("USERPROFILE")
-	if userProfile == "" {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("USERPROFILE")
+	}
+	if home == "" {
 		return
 	}
 
-	claudeJsonPath := filepath.Join(userProfile, ".claude.json")
+	claudeJsonPath := filepath.Join(home, ".claude.json")
 	data, err := os.ReadFile(claudeJsonPath)
 	if err != nil {
 		return
@@ -166,12 +197,11 @@ func uninstallClaudeCode() {
 }
 
 func uninstallClaudeDesktop() {
-	appData := os.Getenv("APPDATA")
-	if appData == "" {
+	configPath := getClaudeDesktopConfigPath()
+	if configPath == "" {
 		return
 	}
 
-	configPath := filepath.Join(appData, "Claude", "claude_desktop_config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return

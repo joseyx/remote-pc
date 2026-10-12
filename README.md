@@ -8,12 +8,12 @@
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Android](https://img.shields.io/badge/Android-Kotlin%20%2B%20Compose-3DDC84?style=flat&logo=android)](https://developer.android.com)
 [![Protocol](https://img.shields.io/badge/AI%20Protocol-MCP%20JSON--RPC%202.0-8A2BE2?style=flat)](https://modelcontextprotocol.io/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=flat&logo=windows)](https://microsoft.com)
-[![Installer](https://img.shields.io/badge/Installer-Inno%20Setup%206-orange?style=flat)](dist/RemotePC-Setup.exe)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6?style=flat)](https://github.com/joseyx/remote-pc)
+[![Installer](https://img.shields.io/badge/Installer-Inno%20Setup%20%2B%20Unix%20Script-orange?style=flat)](dist/RemotePC-Setup.exe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 <p align="center">
-  <b>Controla Claude Code, terminales interactivas de Windows y flujos multi-proyecto desde tu teléfono Android o navegador web.</b><br>
+  <b>Controla Claude Code, terminales interactivas (ConPTY / POSIX PTY) y flujos multi-proyecto desde tu teléfono Android o navegador web.</b><br>
   Integración nativa con <b>Model Context Protocol (MCP)</b>, Git Worktrees, bóvedas de Obsidian, bases de datos multi-esquema y Windscribe VPN.
 </p>
 
@@ -33,7 +33,7 @@
 
 **Remote PC** es una suite completa de desarrollo remoto diseñada para eliminar la fricción al trabajar con herramientas de inteligencia artificial (**Claude Code**, Antigravity) y proyectos de software complejos con múltiples ramas y worktrees. 
 
-A diferencia de clientes SSH genéricos que rompen cursores y colores ANSI en Windows, Remote PC emula consolas interactivas mediante la API oficial **Windows Pseudo Console (ConPTY)**, persistiendo sesiones en segundo plano al estilo tmux con búfer circular de 2 MB y permitiendo la interacción bidireccional desde **Android**, **Web** y **Agentes de IA**.
+A diferencia de clientes SSH genéricos que rompen cursores y colores ANSI, Remote PC emula consolas interactivas mediante **Windows Pseudo Console (ConPTY)** en Windows y **POSIX pseudo-terminals (`creack/pty`)** en macOS y Linux, persistiendo sesiones en segundo plano al estilo tmux con búfer circular de 2 MB y permitiendo la interacción bidireccional desde **Android**, **Web** y **Agentes de IA**.
 
 > [!TIP]
 > **100% Autónomo y Privado:** Sin servidores en la nube de terceros, sin telemetría y con latencia ultrabaja en red local (Wi-Fi) o redes privadas virtuales (Tailscale).
@@ -42,7 +42,7 @@ A diferencia de clientes SSH genéricos que rompen cursores y colores ANSI en Wi
 
 ## ⚡ Instalación Rápida
 
-### Opción 1: Instalador Gráfico de Windows (Recomendada para usuarios)
+### Opción 1: Windows (Instalador Gráfico Asistido)
 1. Descarga el instalador compilado [`dist/RemotePC-Setup.exe`](dist/RemotePC-Setup.exe) (**4.7 MB**).
 2. Ejecuta el asistente de instalación:
    - Se instala por usuario en `%LOCALAPPDATA%\RemotePC` (no requiere permisos de Administrador).
@@ -50,17 +50,32 @@ A diferencia de clientes SSH genéricos que rompen cursores y colores ANSI en Wi
    - `[x]` Configura el servidor MCP en **Claude Code** y **Claude Desktop** de forma desatendida.
 3. ¡Listo! Abre cualquier terminal y ejecuta `remotepc-server` para iniciar.
 
-### Opción 2: Compilación desde Código Fuente (Desarrolladores)
-```powershell
+### Opción 2: macOS & Linux (Script Automatizado)
+Instala y configura el binario y el servidor MCP en un solo comando:
+```bash
+./scripts/install.sh
+```
+O directamente con curl:
+```bash
+curl -fsSL https://raw.githubusercontent.com/joseyx/remote-pc/main/scripts/install.sh | bash
+```
+
+### Opción 3: Compilación desde Código Fuente (Multiplataforma)
+```bash
 # 1. Clonar el repositorio
 git clone https://github.com/joseyx/remote-pc.git
 cd "remote-pc"
 
-# 2. Compilar binario y empaquetar instalador
-.\scripts\build-installer.ps1
+# 2. Compilar el servidor Go
+cd server
+go build -ldflags="-s -w" -o ../bin/remotepc-server ./cmd/server
+cd ..
 
-# 3. Iniciar el servidor localmente
-.\start-server.bat
+# 3. Registrar MCP en tu sistema
+./bin/remotepc-server setup-mcp
+
+# 4. Iniciar el servidor
+./bin/remotepc-server
 ```
 
 ---

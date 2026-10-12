@@ -46,13 +46,26 @@ func NewManager() *Manager {
 }
 
 func (m *Manager) discoverVaults() {
-	appData := os.Getenv("APPDATA")
-	if appData == "" {
-		return
+	var candidatePaths []string
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		candidatePaths = append(candidatePaths, filepath.Join(appData, "obsidian", "obsidian.json"))
 	}
-	configFile := filepath.Join(appData, "obsidian", "obsidian.json")
-	data, err := os.ReadFile(configFile)
-	if err != nil {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidatePaths = append(candidatePaths,
+			filepath.Join(home, "Library", "Application Support", "obsidian", "obsidian.json"),
+			filepath.Join(home, ".config", "obsidian", "obsidian.json"),
+			filepath.Join(home, "AppData", "Roaming", "obsidian", "obsidian.json"),
+		)
+	}
+
+	var data []byte
+	for _, cp := range candidatePaths {
+		if d, err := os.ReadFile(cp); err == nil {
+			data = d
+			break
+		}
+	}
+	if len(data) == 0 {
 		return
 	}
 
@@ -86,11 +99,36 @@ func (m *Manager) GetVaultPath(aliasOrName string) string {
 	if p, ok := m.knownVaults[lower]; ok {
 		return p
 	}
-	// Fallback to hardcoded standard paths if obsidian.json didn't have it
+	// Fallback to standard paths if obsidian.json didn't have it
+	home, _ := os.UserHomeDir()
 	switch lower {
 	case "aditum":
+		if home != "" {
+			candidates := []string{
+				filepath.Join(home, "Documents", "Vaultsa", "Aditum"),
+				filepath.Join(home, "Documents", "Vaults", "Aditum"),
+				filepath.Join(home, "Vaults", "Aditum"),
+			}
+			for _, c := range candidates {
+				if _, err := os.Stat(c); err == nil {
+					return c
+				}
+			}
+		}
 		return `C:\Users\Jose\Documents\Vaultsa\Aditum`
 	case "brif":
+		if home != "" {
+			candidates := []string{
+				filepath.Join(home, "Documents", "Vaultsa", "Brif", "Brif"),
+				filepath.Join(home, "Documents", "Vaults", "Brif"),
+				filepath.Join(home, "Vaults", "Brif"),
+			}
+			for _, c := range candidates {
+				if _, err := os.Stat(c); err == nil {
+					return c
+				}
+			}
+		}
 		return `C:\Users\Jose\Documents\Vaultsa\Brif\Brif`
 	}
 	return ""

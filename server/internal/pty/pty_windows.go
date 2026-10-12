@@ -51,7 +51,7 @@ type WindowsPTY struct {
 	closed bool
 }
 
-func Start(command string, dir string, cols, rows uint16) (*WindowsPTY, error) {
+func Start(command string, dir string, cols, rows uint16) (PTY, error) {
 	if cols == 0 {
 		cols = 120
 	}

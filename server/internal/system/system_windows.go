@@ -4,9 +4,7 @@
 package system
 
 import (
-	"fmt"
 	"math"
-	"net"
 	"os"
 	"sort"
 	"time"
@@ -47,37 +45,6 @@ type ProcessMemoryCounters struct {
 	PeakPagefileUsage          uintptr
 }
 
-type ProcessInfo struct {
-	PID   uint32  `json:"pid"`
-	Name  string  `json:"name"`
-	RAMMB float64 `json:"ramMB"`
-}
-
-type MemoryStats struct {
-	TotalGB     float64 `json:"totalGB"`
-	UsedGB      float64 `json:"usedGB"`
-	FreeGB      float64 `json:"freeGB"`
-	Percent     int     `json:"percent"`
-	TotalPageGB float64 `json:"totalPageGB"`
-	UsedPageGB  float64 `json:"usedPageGB"`
-	PagePercent int     `json:"pagePercent"`
-}
-
-type ServiceInfo struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Port    int    `json:"port"`
-	Running bool   `json:"running"`
-	PingMs  int64  `json:"pingMs"`
-}
-
-type SystemStats struct {
-	Memory       MemoryStats   `json:"memory"`
-	Services     []ServiceInfo `json:"services"`
-	TopProcesses []ProcessInfo `json:"topProcesses"`
-	CheckedAt    time.Time     `json:"checkedAt"`
-}
-
 func GetStats(includeTop ...bool) SystemStats {
 	var mem memoryStatusEx
 	mem.Length = uint32(unsafe.Sizeof(mem))
@@ -99,18 +66,7 @@ func GetStats(includeTop ...bool) SystemStats {
 		pagePct = int(math.Round((usedPageGB / totalPageGB) * 100))
 	}
 
-	services := []ServiceInfo{
-		checkService("mysql", "MySQL Local", 3306),
-		checkService("redis", "Redis (Celery)", 6379),
-		checkService("flower", "Flower Dashboard", 5555),
-	}
-
-	var top []ProcessInfo
-	if len(includeTop) > 0 && includeTop[0] {
-		top = GetTopProcesses(5)
-	}
-
-	return SystemStats{
+	stats := SystemStats{
 		Memory: MemoryStats{
 			TotalGB:     math.Round(totalGB*10) / 10,
 			UsedGB:      math.Round(usedGB*10) / 10,
@@ -120,13 +76,22 @@ func GetStats(includeTop ...bool) SystemStats {
 			UsedPageGB:  math.Round(usedPageGB*10) / 10,
 			PagePercent: pagePct,
 		},
-		Services:     services,
-		TopProcesses: top,
-		CheckedAt:    time.Now(),
+		Services: []ServiceInfo{
+			checkService("mysql", "MySQL 8.0 (Local)", 3306),
+			checkService("aditum", "Aditum Main Dev", 8080),
+			checkService("brif", "Brif Scrapper Web", 8000),
+		},
+		CheckedAt: time.Now(),
 	}
+
+	if len(includeTop) > 0 && includeTop[0] {
+		stats.TopProcesses = getTopProcesses(10)
+	}
+
+	return stats
 }
 
-func GetTopProcesses(limit int) []ProcessInfo {
+func getTopProcesses(limit int) []ProcessInfo {
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
 		return nil
@@ -137,6 +102,7 @@ func GetTopProcesses(limit int) []ProcessInfo {
 	entry.Size = uint32(unsafe.Sizeof(entry))
 
 	var list []ProcessInfo
+
 	if err := windows.Process32First(snapshot, &entry); err == nil {
 		for {
 			pid := entry.ProcessID
@@ -182,14 +148,4 @@ func KillProcess(pid uint32) error {
 		return err
 	}
 	return p.Kill()
-}
-
-func checkService(id, name string, port int) ServiceInfo {
-	start := time.Now()
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond)
-	if err != nil {
-		return ServiceInfo{ID: id, Name: name, Port: port, Running: false}
-	}
-	_ = conn.Close()
-	return ServiceInfo{ID: id, Name: name, Port: port, Running: true, PingMs: time.Since(start).Milliseconds()}
 }

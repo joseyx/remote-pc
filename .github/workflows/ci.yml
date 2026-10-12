@@ -8,8 +8,12 @@ on:
 
 jobs:
   backend-go:
-    name: Backend Go (Unit Tests & Build)
-    runs-on: windows-latest
+    name: Backend Go (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
 
     steps:
       - name: Checkout Code
@@ -29,12 +33,42 @@ jobs:
         working-directory: ./server
         run: go test -v -race -timeout 3m ./...
 
-      - name: Compile Executable
-        working-directory: ./server
-        run: go build -ldflags="-s -w" -o remotepc-server.exe ./cmd/server
-
-      - name: Test CLI Subcommands
+      - name: Compile Executable (Windows)
+        if: runner.os == 'Windows'
         working-directory: ./server
         run: |
+          go build -ldflags="-s -w" -o remotepc-server.exe ./cmd/server
           .\remotepc-server.exe version
           .\remotepc-server.exe help
+
+      - name: Compile Executable (macOS / Linux)
+        if: runner.os != 'Windows'
+        working-directory: ./server
+        run: |
+          go build -ldflags="-s -w" -o remotepc-server ./cmd/server
+          ./remotepc-server version
+          ./remotepc-server help
+
+  cross-compile:
+    name: Cross-Compilation Matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build for Linux ARM64
+        working-directory: ./server
+        run: GOOS=linux GOARCH=arm64 go build -o /dev/null ./cmd/server
+
+      - name: Build for macOS Apple Silicon (Darwin ARM64)
+        working-directory: ./server
+        run: GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/server
+
+      - name: Build for Windows AMD64
+        working-directory: ./server
+        run: GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/server
