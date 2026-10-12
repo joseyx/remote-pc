@@ -5,6 +5,44 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [1.1.0] - 2026-10-12
+
+### 🚀 Añadido (Added)
+- **Auto-Actualizador Integrado (`orbit update` & Web Cockpit)**:
+  - Detección automática y periódica de nuevas versiones desde GitHub Releases cada 15 minutos en el Web Cockpit.
+  - Modal interactivo de actualización con visualización del changelog oficial y botón para aplicar en caliente.
+  - Reemplazo seguro in-place del ejecutable en ejecución (`ApplyUpdate`) con rotación `.old` en Windows y limpieza en el siguiente arranque.
+  - Subcomandos de consola: `orbit check-update` y `orbit update`.
+- **Orbit Doctor - Diagnósticos del Sistema (`orbit doctor`)**:
+  - Suite de diagnóstico integral de conectividad (LAN, Tailscale, ZeroTier, VPN).
+  - Verificación de puertos y listeners locales, detección de reglas del Firewall de Windows.
+  - Chequeo de salud del gestor de terminales PTY, shell predeterminado y persistencia de datos.
+  - Salida formateada con colores en consola y endpoint API (`GET /api/system/doctor`).
+- **Servicio en Segundo Plano & Autoarranque (Daemon)**:
+  - Subcomandos completos: `orbit service install`, `orbit service start`, `orbit service stop`, `orbit service status`, `orbit service uninstall`.
+  - Soporte multiplataforma: Windows Startup Registry / Scheduled Tasks, macOS Launchd (`LaunchAgents`) y Linux Systemd user services.
+  - Control de servicio y estado en tiempo real desde el Web Cockpit y Command Palette (`Ctrl+K`).
+- **Emparejamiento Rápido por Código QR (QR Pairing)**:
+  - Generación de código QR dinámico en el Cockpit para conectar instantáneamente la app móvil Orbit Mobile sin tipear IPs ni tokens manualmente.
+  - Sincronización automática del QR en pantalla ante rotaciones de token o cambios de red.
+- **Hardening de Seguridad, Control de Tokens & PIN Maestro**:
+  - Rotación dinámica de tokens en caliente (`orbit token rotate`, `POST /api/system/token/rotate`) con invalidación inmediata del token previo y sincronización thread-safe (`sync.RWMutex`).
+  - Configuración de PIN maestro de seguridad (`orbit pin set/status/remove`, `POST /api/system/pin/set`) necesario para consultar o rotar el token.
+  - Bloqueo de pantalla interactivo del Web Cockpit (`Alt + L` / `cockpit-lock-overlay`) con efecto glassmorphism, desbloqueable mediante PIN o token.
+- **Migración Automática & Robustez de Almacenamiento**:
+  - Lógica inteligente de resolución de carpetas (`config.GetDataDir()`): priorización estricta de carpetas con datos reales sobre directorios vacíos.
+  - Migración automática y transparente de handoffs, notas y configuración al instalar `Orbit-Setup.exe` en `%LOCALAPPDATA%\Orbit`.
+  - Script oficial de desinstalación limpia para Unix (`scripts/uninstall.sh`) empaquetado en todas las releases de Linux y macOS.
+- **Rebranding Oficial a Orbit & Assets de Marca**:
+  - Rebranding completo del ecosistema a **Orbit** con alias retrocompatible `remotepc-server`.
+  - Logotipo oficial vectorial SVG, favicon y assets de marca integrados en el Cockpit, instalador (`orbit.ico`) y app móvil.
+
+### 🐛 Corregido (Fixed)
+- **Aislamiento de Almacenamiento en Subdirectorios**: Corrección del escenario donde ejecutar el binario desde subcarpetas (`server/`) creaba una carpeta `data` huérfana vacía que ocultaba los handoffs y notas del usuario.
+- **Fallbacks en Calendario y Metadatos**: Búsqueda recursiva de respaldo para notas Markdown y `bubbles_metadata.json` ante cambios de directorio de ejecución.
+
+---
+
 ## [1.0.0] - 2026-10-11
 
 ### Añadido (Added)
