@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Squircle Background -->
+    <path
+        android:pathData="M 10,0 L 38,0 A 10,10 0 0,1 48,10 L 48,38 A 10,10 0 0,1 38,48 L 10,48 A 10,10 0 0,1 0,38 L 0,10 A 10,10 0 0,1 10,0 Z"
+        android:fillColor="#0A0E17" />
+
+    <!-- Secondary Counter-Orbit Track -->
+    <group
+        android:pivotX="24"
+        android:pivotY="24"
+        android:rotation="-30">
+        <path
+            android:pathData="M 24,15 A 16,8 0 1,0 24,33 A 16,8 0 1,0 24,15"
+            android:strokeColor="#818CF8"
+            android:strokeAlpha="0.45"
+            android:strokeWidth="1.2"
+            android:strokeLineCap="round" />
+    </group>
+
+    <!-- Main Orbit Planetary Ring -->
+    <group
+        android:pivotX="24"
+        android:pivotY="24"
+        android:rotation="35">
+        <path
+            android:pathData="M 24,14 A 17,8.5 0 1,0 24,34 A 17,8.5 0 1,0 24,14"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="2.2"
+            android:strokeLineCap="round" />
+        
+        <!-- Satellite Node -->
+        <path
+            android:pathData="M 37,24 a 1.6,1.6 0 1,0 0.1,0 Z"
+            android:fillColor="#E0F2FE" />
+    </group>
+
+    <!-- Central Terminal Prompt Glyphs ( > _ ) -->
+    <group>
+        <!-- Chevron '>' -->
+        <path
+            android:pathData="M 19,18 L 25,24 L 19,30"
+            android:strokeColor="#F8FAFC"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <!-- Underscore '_' -->
+        <path
+            android:pathData="M 27,30 L 32,30"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"orbit/internal/config"
+	"orbit/internal/daemon"
 	"orbit/internal/mcp"
 	"orbit/internal/obsidian"
 	"orbit/internal/vpn"
@@ -425,25 +425,32 @@ func checkStorage(cfg *config.Config) CheckItem {
 }
 
 func checkDaemon(cfg *config.Config) CheckItem {
-	port := cfg.Port
-	if port == "" {
-		port = "8080"
-	}
+	st := daemon.GetStatus(cfg, "")
+	port := st.Port
 
-	client := &http.Client{Timeout: 600 * time.Millisecond}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%s/api/health", port))
-	if err == nil && resp.StatusCode == http.StatusOK {
-		_ = resp.Body.Close()
+	if st.Running {
+		details := "Orbit Cockpit y la API REST están operando en línea"
+		if st.Installed {
+			details = fmt.Sprintf("Servicio registrado para autoarranque (%s). Proceso activo.", st.ServiceType)
+		} else {
+			details = "Ejecutándose en primer plano (Usa 'orbit service install' para autoarranque silencioso)."
+		}
+		msg := fmt.Sprintf("Servidor activo y respondiendo en http://localhost:%s/", port)
+		if st.PID > 0 {
+			msg = fmt.Sprintf("Servidor activo en http://localhost:%s/ (PID: %d)", port, st.PID)
+		}
 		return CheckItem{
 			Category: "Orbit",
 			Name:     "Daemon Server",
 			Status:   StatusOK,
-			Message:  fmt.Sprintf("Servidor activo y respondiendo en http://localhost:%s/", port),
-			Details:  "Orbit Cockpit y la API REST están operando en línea",
+			Message:  msg,
+			Details:  details,
 		}
 	}
-	if resp != nil {
-		_ = resp.Body.Close()
+
+	remediation := "Ejecuta 'orbit service start' para iniciar en segundo plano o 'orbit' en consola"
+	if !st.Installed {
+		remediation = "Ejecuta 'orbit service install' para autoarranque con el sistema o 'orbit' en consola"
 	}
 
 	return CheckItem{
@@ -452,7 +459,7 @@ func checkDaemon(cfg *config.Config) CheckItem {
 		Status:      StatusWarning,
 		Message:     fmt.Sprintf("Daemon no está corriendo en el puerto %s", port),
 		Details:     "La interfaz web y los sockets no están activos en este momento",
-		Remediation: "Ejecuta 'orbit' sin argumentos para iniciar el servidor daemon",
+		Remediation: remediation,
 	}
 }
 

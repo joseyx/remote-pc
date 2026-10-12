@@ -1077,4 +1077,129 @@ async function loadDoctorDiagnostics() {
     }
 }
 
+// ==========================================
+// Orbit Daemon Service Manager
+// ==========================================
+let serviceStatusData = null;
+
+async function openServiceModal() {
+    const modal = document.getElementById('modal-service');
+    if (modal) modal.classList.add('open');
+    await fetchServiceStatus();
+}
+
+function closeServiceModal() {
+    const modal = document.getElementById('modal-service');
+    if (modal) modal.classList.remove('open');
+}
+
+async function fetchServiceStatus() {
+    const card = document.getElementById('service-status-card');
+    const actions = document.getElementById('service-action-container');
+    if (card) {
+        card.innerHTML = `<span style="color: var(--text-dim);">Consultando estado del servicio...</span>`;
+    }
+
+    try {
+        const res = await fetch('/api/system/service');
+        if (!res.ok) throw new Error(await res.text());
+        serviceStatusData = await res.json();
+        renderServiceStatusUI(serviceStatusData);
+    } catch (e) {
+        if (card) card.innerHTML = `<span style="color: var(--red);">Error al obtener estado: ${escapeHtml(e.message || String(e))}</span>`;
+    }
+}
+
+function renderServiceStatusUI(st) {
+    const card = document.getElementById('service-status-card');
+    const actions = document.getElementById('service-action-container');
+    if (!card || !actions) return;
+
+    const instBadge = st.installed
+        ? `<span style="color: var(--green); font-weight: 600;">✓ Registrado en Autoarranque</span>`
+        : `<span style="color: var(--amber); font-weight: 600;">! No Registrado en Autoarranque</span>`;
+
+    const runBadge = st.running
+        ? `<span style="color: var(--green); font-weight: 600;">🟢 Activo ${st.pid ? `(PID ${st.pid})` : ''}</span>`
+        : `<span style="color: var(--red); font-weight: 600;">🔴 Inactivo</span>`;
+
+    card.innerHTML = `
+        <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Autoarranque OS:</span>
+            ${instBadge}
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Estado Proceso:</span>
+            ${runBadge}
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Tipo de Servicio:</span>
+            <span style="color: var(--text-main);">${escapeHtml(st.serviceType || 'N/A')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Puerto HTTP:</span>
+            <span style="color: var(--accent);">${escapeHtml(st.port)} (http://localhost:${escapeHtml(st.port)}/)</span>
+        </div>
+        ${st.uptime ? `
+        <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Tiempo Activo:</span>
+            <span style="color: var(--text-main);">${escapeHtml(st.uptime)}</span>
+        </div>` : ''}
+        ${st.exePath ? `
+        <div style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border-subtle); font-size: 11px; color: var(--text-dim); word-break: break-all;">
+            <span>Ejecutable:</span> ${escapeHtml(st.exePath)}
+        </div>` : ''}
+    `;
+
+    actions.innerHTML = '';
+
+    if (!st.installed) {
+        const installBtn = document.createElement('button');
+        installBtn.className = 'btn btn-sm btn-primary';
+        installBtn.innerHTML = '⚡ Registrar Autoarranque';
+        installBtn.onclick = () => executeServiceAction('install');
+        actions.appendChild(installBtn);
+    } else {
+        const uninstallBtn = document.createElement('button');
+        uninstallBtn.className = 'btn btn-sm';
+        uninstallBtn.style.color = 'var(--red)';
+        uninstallBtn.innerHTML = '🗑️ Desinstalar Autoarranque';
+        uninstallBtn.onclick = () => executeServiceAction('uninstall');
+        actions.appendChild(uninstallBtn);
+    }
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn btn-sm';
+    refreshBtn.innerHTML = '🔄 Actualizar';
+    refreshBtn.onclick = fetchServiceStatus;
+    actions.appendChild(refreshBtn);
+}
+
+async function executeServiceAction(action) {
+    showToast(`Ejecutando acción '${action}'...`);
+    try {
+        const res = await fetch('/api/system/service', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${serverInfo ? serverInfo.authToken : ''}`
+            },
+            body: JSON.stringify({ action })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            appAlert(`Error: ${data.error || 'Fallo al ejecutar acción'}`, 'Error de Servicio', '❌');
+        } else {
+            showToast(data.message || 'Acción completada con éxito');
+            if (data.status) {
+                renderServiceStatusUI(data.status);
+            } else {
+                await fetchServiceStatus();
+            }
+        }
+    } catch (e) {
+        appAlert(`Error de red: ${e.message}`, 'Error de Comunicación', '❌');
+    }
+}
+
 

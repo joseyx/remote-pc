@@ -19,6 +19,7 @@ import (
 	"orbit/internal/bubble"
 	"orbit/internal/calendar"
 	"orbit/internal/config"
+	"orbit/internal/daemon"
 	"orbit/internal/doctor"
 	"orbit/internal/git"
 	"orbit/internal/obsidian"
@@ -73,6 +74,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/system/doctor", s.handleSystemDoctor)
 	mux.HandleFunc("GET /api/system/version", s.handleSystemVersion)
 	mux.HandleFunc("POST /api/system/update", s.withAuth(s.handleSystemUpdate))
+	mux.HandleFunc("GET /api/system/service", s.handleSystemServiceStatus)
+	mux.HandleFunc("POST /api/system/service", s.withAuth(s.handleSystemServiceAction))
 	mux.HandleFunc("GET /api/system/stats", s.handleSystemStats)
 	mux.HandleFunc("POST /api/system/process/kill", s.withAuth(s.handleKillProcess))
 	mux.HandleFunc("POST /api/services/{id}/start", s.withAuth(s.handleStartService))
@@ -353,6 +356,73 @@ func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		os.Exit(0)
 	}()
+}
+
+func (s *Server) handleSystemServiceStatus(w http.ResponseWriter, r *http.Request) {
+	st := daemon.GetStatus(s.cfg, s.version)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(st)
+}
+
+func (s *Server) handleSystemServiceAction(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Action string `json:"action"` // "install", "uninstall", "start", "stop", "restart"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "Payload JSON inválido"})
+		return
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		exePath = os.Args[0]
+	}
+
+	var actionErr error
+	var msg string
+
+	switch req.Action {
+	case "install":
+		actionErr = daemon.Install(s.cfg, exePath)
+		msg = "Orbit registrado exitosamente para autoarranque con el sistema."
+	case "uninstall":
+		actionErr = daemon.Uninstall(s.cfg)
+		msg = "Servicio de autoarranque de Orbit desinstalado exitosamente."
+	case "start":
+		actionErr = daemon.Start(s.cfg, exePath)
+		msg = "Orbit Daemon iniciado en segundo plano."
+	case "stop":
+		actionErr = daemon.Stop(s.cfg)
+		msg = "Orbit Daemon detenido."
+	case "restart":
+		actionErr = daemon.Restart(s.cfg, exePath)
+		msg = "Orbit Daemon reiniciado."
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": fmt.Sprintf("Acción desconocida: %s", req.Action)})
+		return
+	}
+
+	if actionErr != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false,
+			"error":   actionErr.Error(),
+		})
+		return
+	}
+
+	st := daemon.GetStatus(s.cfg, s.version)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+		"message": msg,
+		"status":  st,
+	})
 }
 
 func (s *Server) handleVPNStatus(w http.ResponseWriter, r *http.Request) {

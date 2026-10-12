@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"orbit/internal/config"
+	"orbit/internal/daemon"
 	"orbit/internal/mcp"
 )
 
@@ -46,7 +48,8 @@ func Install(exePath string) error {
 	fmt.Println(" ✓ Instalación de Orbit completada con éxito.")
 	fmt.Println(" Ahora puedes:")
 	fmt.Println(" 1. Ejecutar 'orbit' (o 'remotepc-server') desde cualquier consola.")
-	fmt.Println(" 2. Usar las herramientas MCP de Orbit directamente en Claude Code.")
+	fmt.Println(" 2. Iniciar en segundo plano o registrar autoarranque con: 'orbit service install'")
+	fmt.Println(" 3. Usar las herramientas MCP de Orbit directamente en Claude Code.")
 	fmt.Println("=====================================================")
 	return nil
 }
@@ -75,6 +78,9 @@ func Uninstall(exePath string) error {
 
 	// 3. Remover acceso directo
 	RemoveDesktopShortcut()
+
+	// 4. Remover servicio de autoarranque en segundo plano
+	_ = daemon.Uninstall(config.LoadConfig())
 
 	fmt.Println("=====================================================")
 	fmt.Println(" ✓ Desinstalación completada.")

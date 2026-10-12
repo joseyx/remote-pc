@@ -11,11 +11,13 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	"orbit/internal/api"
 	"orbit/internal/config"
+	"orbit/internal/daemon"
 	"orbit/internal/doctor"
 	"orbit/internal/installer"
 	"orbit/internal/mcp"
@@ -39,6 +41,10 @@ func main() {
 			cfg := config.LoadConfig()
 			report := doctor.RunDiagnostics(cfg, Version)
 			fmt.Print(doctor.FormatCLI(report))
+			return
+
+		case "service", "daemon":
+			serviceCLI(exePath)
 			return
 
 		case "check-update":
@@ -198,6 +204,7 @@ func printUsage() {
 	fmt.Println("Comandos disponibles:")
 	fmt.Println("  (sin comando)      Inicia el servidor daemon y el Cockpit web")
 	fmt.Println("  doctor             Ejecuta un diagnóstico completo del entorno e integraciones")
+	fmt.Println("  service [comando]  Gestiona el demonio de fondo (install, uninstall, start, stop, status)")
 	fmt.Println("  check-update       Verifica si existe una versión más reciente de Orbit")
 	fmt.Println("  update [--force]   Actualiza Orbit automáticamente a la última versión")
 	fmt.Println("  mcp                Ejecuta el servidor MCP JSON-RPC 2.0 por stdio (para Claude)")
@@ -216,6 +223,88 @@ func printUsage() {
 	fmt.Println("  -port <puerto>     Puerto HTTP a utilizar (por defecto: 8080)")
 	fmt.Println("  -token <token>     Token de autenticación Bearer")
 	fmt.Println("  -host <ip>         Dirección IP para escuchar (por defecto: 0.0.0.0)")
+}
+
+func serviceCLI(exePath string) {
+	cfg := config.LoadConfig()
+
+	action := "status"
+	if len(os.Args) > 2 {
+		action = strings.ToLower(os.Args[2])
+	}
+
+	switch action {
+	case "install":
+		fmt.Println("Registrando Orbit como servicio en segundo plano...")
+		if err := daemon.Install(cfg, exePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error instalando servicio: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ Orbit se ha instalado exitosamente para autoarranque con el sistema.")
+		st := daemon.GetStatus(cfg, Version)
+		fmt.Print(daemon.FormatCLI(st))
+
+	case "uninstall", "remove":
+		fmt.Println("Desinstalando servicio de Orbit...")
+		if err := daemon.Uninstall(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error desinstalando servicio: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ Servicio de Orbit desinstalado exitosamente.")
+
+	case "start":
+		fmt.Println("Iniciando Orbit Daemon en segundo plano...")
+		if err := daemon.Start(cfg, exePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error iniciando servicio: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ Orbit Daemon iniciado correctamente.")
+		st := daemon.GetStatus(cfg, Version)
+		fmt.Print(daemon.FormatCLI(st))
+
+	case "stop":
+		fmt.Println("Deteniendo Orbit Daemon...")
+		if err := daemon.Stop(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error deteniendo servicio: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ Orbit Daemon detenido.")
+
+	case "restart":
+		fmt.Println("Reiniciando Orbit Daemon...")
+		if err := daemon.Restart(cfg, exePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error reiniciando servicio: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✓ Orbit Daemon reiniciado.")
+		st := daemon.GetStatus(cfg, Version)
+		fmt.Print(daemon.FormatCLI(st))
+
+	case "status":
+		st := daemon.GetStatus(cfg, Version)
+		fmt.Print(daemon.FormatCLI(st))
+
+	case "help", "-h", "--help":
+		printServiceUsage()
+
+	default:
+		fmt.Fprintf(os.Stderr, "Acción desconocida '%s'.\n\n", action)
+		printServiceUsage()
+		os.Exit(1)
+	}
+}
+
+func printServiceUsage() {
+	fmt.Println("Uso: orbit service [comando]")
+	fmt.Println()
+	fmt.Println("Comandos de servicio:")
+	fmt.Println("  status      Muestra el estado del servicio y métricas de salud (por defecto)")
+	fmt.Println("  install     Registra Orbit para autoarranque en segundo plano con el sistema")
+	fmt.Println("  uninstall   Desregistra el servicio y detiene el proceso en segundo plano")
+	fmt.Println("  start       Inicia el demonio en segundo plano silenciosamente")
+	fmt.Println("  stop        Detiene el proceso en segundo plano")
+	fmt.Println("  restart     Reinicia el proceso en segundo plano")
+	fmt.Println("  help        Muestra esta ayuda")
 }
 
 func openBrowser(url string) error {
