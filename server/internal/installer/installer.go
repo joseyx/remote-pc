@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"remotepc-server/internal/mcp"
+	"orbit/internal/mcp"
 )
 
 // Install performs self-installation: adds to PATH, configures MCP, and creates shortcuts
@@ -21,7 +21,7 @@ func Install(exePath string) error {
 	exeDir := filepath.Dir(exePath)
 
 	fmt.Println("=====================================================")
-	fmt.Println("             Remote PC - Self-Installer              ")
+	fmt.Println("             Orbit - Self-Installer                  ")
 	fmt.Println("=====================================================")
 	fmt.Printf(" Ejecutable : %s\n", exePath)
 	fmt.Printf(" Directorio : %s\n", exeDir)
@@ -43,10 +43,10 @@ func Install(exePath string) error {
 	}
 
 	fmt.Println("=====================================================")
-	fmt.Println(" ✓ Instalación completada con éxito.")
+	fmt.Println(" ✓ Instalación de Orbit completada con éxito.")
 	fmt.Println(" Ahora puedes:")
-	fmt.Println(" 1. Ejecutar 'remotepc-server' desde cualquier consola.")
-	fmt.Println(" 2. Usar las herramientas MCP de Remote PC directamente en Claude Code.")
+	fmt.Println(" 1. Ejecutar 'orbit' (o 'remotepc-server') desde cualquier consola.")
+	fmt.Println(" 2. Usar las herramientas MCP de Orbit directamente en Claude Code.")
 	fmt.Println("=====================================================")
 	return nil
 }
@@ -64,7 +64,7 @@ func Uninstall(exePath string) error {
 	exeDir := filepath.Dir(exePath)
 
 	fmt.Println("=====================================================")
-	fmt.Println("            Remote PC - Desinstalador                ")
+	fmt.Println("            Orbit - Desinstalador                    ")
 	fmt.Println("=====================================================")
 
 	// 1. Remover de PATH

@@ -325,22 +325,30 @@ func ensureServerRunning(port string) bool {
 
 	candidatePaths := []string{
 		exePath,
+		filepath.Join(exeDir, "orbit.exe"),
+		filepath.Join(exeDir, "orbit"),
 		filepath.Join(exeDir, "remotepc-server.exe"),
 		filepath.Join(exeDir, "remotepc-server"),
 	}
 
 	if home != "" {
 		candidatePaths = append(candidatePaths,
+			filepath.Join(home, ".local", "bin", "orbit"),
 			filepath.Join(home, ".local", "bin", "remotepc-server"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "orbit.exe"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "orbit"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "server", "orbit.exe"),
+			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "server", "orbit"),
 			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "remotepc-server.exe"),
 			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "remotepc-server"),
-			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "server", "remotepc-server.exe"),
-			filepath.Join(home, "Documents", "Personal Projects", "Remote PC", "server", "remotepc-server"),
 		)
 	}
 
 	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
-		candidatePaths = append(candidatePaths, filepath.Join(localApp, "RemotePC", "remotepc-server.exe"))
+		candidatePaths = append(candidatePaths,
+			filepath.Join(localApp, "Orbit", "orbit.exe"),
+			filepath.Join(localApp, "RemotePC", "remotepc-server.exe"),
+		)
 	}
 
 	for _, p := range candidatePaths {
@@ -397,7 +405,7 @@ func apiRequest(path, method string, body interface{}, target interface{}, retri
 				return apiRequest(path, method, body, target, true)
 			}
 		}
-		return fmt.Errorf("error conectando con Remote PC en %s: %w. Asegúrate de que remotepc-server esté en ejecución", url, err)
+		return fmt.Errorf("error conectando con Orbit en %s: %w. Asegúrate de que 'orbit' esté en ejecución", url, err)
 	}
 	defer resp.Body.Close()
 

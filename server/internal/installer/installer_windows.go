@@ -141,17 +141,20 @@ func RemoveFromUserPath(dir string) error {
 	return nil
 }
 
-// CreateDesktopShortcut creates a shortcut to Remote PC on the user's Desktop
+// CreateDesktopShortcut creates a shortcut to Orbit on the user's Desktop
 func CreateDesktopShortcut(exePath string) error {
 	exePath = filepath.Clean(exePath)
 	exeDir := filepath.Dir(exePath)
 
 	userProfile := os.Getenv("USERPROFILE")
 	desktopDir := filepath.Join(userProfile, "Desktop")
-	shortcutPath := filepath.Join(desktopDir, "Remote PC.lnk")
+	shortcutPath := filepath.Join(desktopDir, "Orbit.lnk")
+
+	// Clean legacy shortcut if present
+	_ = os.Remove(filepath.Join(desktopDir, "Remote PC.lnk"))
 
 	psScript := fmt.Sprintf(
-		`$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%s'); $s.TargetPath = '%s'; $s.WorkingDirectory = '%s'; $s.Description = 'Remote PC Host & Web Dashboard'; $s.Save()`,
+		`$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%s'); $s.TargetPath = '%s'; $s.WorkingDirectory = '%s'; $s.Description = 'Orbit - Developer Cockpit & MCP Host'; $s.Save()`,
 		shortcutPath, exePath, exeDir,
 	)
 
@@ -168,9 +171,12 @@ func CreateDesktopShortcut(exePath string) error {
 // RemoveDesktopShortcut deletes the desktop shortcut if it exists
 func RemoveDesktopShortcut() {
 	userProfile := os.Getenv("USERPROFILE")
-	shortcutPath := filepath.Join(userProfile, "Desktop", "Remote PC.lnk")
-	if _, err := os.Stat(shortcutPath); err == nil {
-		_ = os.Remove(shortcutPath)
-		fmt.Printf("[Shortcut] ✓ Acceso directo eliminado: %s\n", shortcutPath)
+	desktopDir := filepath.Join(userProfile, "Desktop")
+	for _, name := range []string{"Orbit.lnk", "Remote PC.lnk"} {
+		p := filepath.Join(desktopDir, name)
+		if _, err := os.Stat(p); err == nil {
+			_ = os.Remove(p)
+			fmt.Printf("[Shortcut] ✓ Acceso directo eliminado: %s\n", p)
+		}
 	}
 }

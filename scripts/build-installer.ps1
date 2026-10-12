@@ -1,12 +1,12 @@
-# Remote PC - Build & Package Installer Script
-# Compiles the native Go binary and packages it into dist\RemotePC-Setup.exe using Inno Setup 6.
+# Orbit - Build & Package Installer Script
+# Compiles the native Go binary and packages it into dist\Orbit-Setup.exe using Inno Setup 6.
 
 $ErrorActionPreference = "Stop"
 
 $rootDir = Split-Path -Parent $PSScriptRoot
 
 Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host "       Remote PC - Build & Installer Packaging       " -ForegroundColor Cyan
+Write-Host "          Orbit - Build & Installer Packaging        " -ForegroundColor Cyan
 Write-Host "=====================================================" -ForegroundColor Cyan
 
 # 1. Locate Inno Setup Compiler (iscc.exe)
@@ -40,21 +40,24 @@ if (-not $isccPath) {
 Write-Host "[1/4] Compilador Inno Setup encontrado: $isccPath" -ForegroundColor Green
 
 # 2. Compile Go binary
-Write-Host "[2/4] Compilando remotepc-server.exe (Go con optimizaciones -s -w)..." -ForegroundColor Yellow
+Write-Host "[2/4] Compilando orbit.exe (Go con optimizaciones -s -w)..." -ForegroundColor Yellow
 $serverDir = Join-Path $rootDir "server"
 Push-Location $serverDir
 try {
-    go build -ldflags="-s -w" -o remotepc-server.exe ./cmd/server
+    go build -ldflags="-s -w" -o orbit.exe ./cmd/server
     if ($LASTEXITCODE -ne 0) {
         throw "Error al compilar el binario de Go."
     }
+    # Duplicate as remotepc-server.exe for backwards compatibility
+    Copy-Item "orbit.exe" "remotepc-server.exe" -Force
 } finally {
     Pop-Location
 }
 
 # Copy to root directory for local convenience
+Copy-Item (Join-Path $serverDir "orbit.exe") -Destination (Join-Path $rootDir "orbit.exe") -Force
 Copy-Item (Join-Path $serverDir "remotepc-server.exe") -Destination (Join-Path $rootDir "remotepc-server.exe") -Force
-Write-Host "      [OK] Binario compilado exitosamente." -ForegroundColor Green
+Write-Host "      [OK] Binario compilado exitosamente: orbit.exe (y remotepc-server.exe)" -ForegroundColor Green
 
 # 3. Create dist output directory
 $distDir = Join-Path $rootDir "dist"
@@ -64,7 +67,7 @@ if (-not (Test-Path $distDir)) {
 
 # 4. Compile Inno Setup Script
 Write-Host "[3/4] Compilando instalador con Inno Setup..." -ForegroundColor Yellow
-$issPath = Join-Path $rootDir "installer\RemotePC-Setup.iss"
+$issPath = Join-Path $rootDir "installer\Orbit-Setup.iss"
 
 & "$isccPath" "$issPath"
 if ($LASTEXITCODE -ne 0) {
@@ -73,7 +76,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 5. Summary
-$setupExe = Join-Path $distDir "RemotePC-Setup.exe"
+$setupExe = Join-Path $distDir "Orbit-Setup.exe"
 if (Test-Path $setupExe) {
     $item = Get-Item $setupExe
     $hash = (Get-FileHash $setupExe -Algorithm SHA256).Hash
@@ -82,7 +85,7 @@ if (Test-Path $setupExe) {
 
     Write-Host ""
     Write-Host "=====================================================" -ForegroundColor Cyan
-    Write-Host " [OK] Instalador generado exitosamente!" -ForegroundColor Green
+    Write-Host " [OK] Instalador de Orbit generado exitosamente!" -ForegroundColor Green
     Write-Host "-----------------------------------------------------" -ForegroundColor Cyan
     Write-Host " Archivo : $setupExe" -ForegroundColor White
     Write-Host " Tamano  : $sizeMB MB ($bytes bytes)" -ForegroundColor White

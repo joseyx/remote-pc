@@ -37,17 +37,17 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: ./server
         run: |
-          go build -ldflags="-s -w" -o remotepc-server.exe ./cmd/server
-          .\remotepc-server.exe version
-          .\remotepc-server.exe help
+          go build -ldflags="-s -w" -o orbit.exe ./cmd/server
+          .\orbit.exe version
+          .\orbit.exe help
 
       - name: Compile Executable (macOS / Linux)
         if: runner.os != 'Windows'
         working-directory: ./server
         run: |
-          go build -ldflags="-s -w" -o remotepc-server ./cmd/server
-          ./remotepc-server version
-          ./remotepc-server help
+          go build -ldflags="-s -w" -o orbit ./cmd/server
+          ./orbit version
+          ./orbit help
 
   cross-compile:
     name: Cross-Compilation Matrix

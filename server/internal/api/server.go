@@ -15,16 +15,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"remotepc-server/internal/bubble"
-	"remotepc-server/internal/calendar"
-	"remotepc-server/internal/config"
-	"remotepc-server/internal/git"
-	"remotepc-server/internal/obsidian"
-	"remotepc-server/internal/services"
-	"remotepc-server/internal/session"
-	"remotepc-server/internal/system"
-	"remotepc-server/internal/vpn"
-	"remotepc-server/internal/web"
+	"orbit/internal/bubble"
+	"orbit/internal/calendar"
+	"orbit/internal/config"
+	"orbit/internal/git"
+	"orbit/internal/obsidian"
+	"orbit/internal/services"
+	"orbit/internal/session"
+	"orbit/internal/system"
+	"orbit/internal/vpn"
+	"orbit/internal/web"
 )
 
 var upgrader = websocket.Upgrader{

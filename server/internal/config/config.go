@@ -21,6 +21,10 @@ type Config struct {
 
 // GetDataDir determines the central storage folder for runtime data (notes, metadata, state)
 func GetDataDir() string {
+	if envDir := os.Getenv("ORBIT_DATA_DIR"); envDir != "" {
+		_ = os.MkdirAll(envDir, 0755)
+		return envDir
+	}
 	if envDir := os.Getenv("REMOTE_PC_DATA_DIR"); envDir != "" {
 		_ = os.MkdirAll(envDir, 0755)
 		return envDir
@@ -41,11 +45,20 @@ func GetDataDir() string {
 	}
 
 	if runtime.GOOS == "darwin" && home != "" {
-		candidates = append(candidates, filepath.Join(home, "Library", "Application Support", "RemotePC", "data"))
+		candidates = append(candidates,
+			filepath.Join(home, "Library", "Application Support", "Orbit", "data"),
+			filepath.Join(home, "Library", "Application Support", "RemotePC", "data"),
+		)
 	} else if runtime.GOOS != "windows" && home != "" {
-		candidates = append(candidates, filepath.Join(home, ".local", "share", "remotepc", "data"))
+		candidates = append(candidates,
+			filepath.Join(home, ".local", "share", "orbit", "data"),
+			filepath.Join(home, ".local", "share", "remotepc", "data"),
+		)
 	} else if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
-		candidates = append(candidates, filepath.Join(localApp, "RemotePC", "data"))
+		candidates = append(candidates,
+			filepath.Join(localApp, "Orbit", "data"),
+			filepath.Join(localApp, "RemotePC", "data"),
+		)
 	}
 
 	for _, c := range candidates {
@@ -111,6 +124,8 @@ func LoadConfig() *Config {
 
 	if *portFlag != "" {
 		cfg.Port = *portFlag
+	} else if envPort := os.Getenv("ORBIT_PORT"); envPort != "" {
+		cfg.Port = envPort
 	} else if envPort := os.Getenv("REMOTE_PC_PORT"); envPort != "" {
 		cfg.Port = envPort
 	}
@@ -121,6 +136,8 @@ func LoadConfig() *Config {
 
 	if *tokenFlag != "" {
 		cfg.AuthToken = *tokenFlag
+	} else if envToken := os.Getenv("ORBIT_TOKEN"); envToken != "" {
+		cfg.AuthToken = envToken
 	} else if envToken := os.Getenv("REMOTE_PC_TOKEN"); envToken != "" {
 		cfg.AuthToken = envToken
 	} else if cfg.AuthToken == "" {

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"remotepc-server/internal/pty"
+	"orbit/internal/pty"
 )
 
 type SessionInfo struct {

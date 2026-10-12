@@ -1,27 +1,27 @@
 <div align="center">
 
-# 🚀 Remote PC
+# 🚀 Orbit
 
-### Centro de Operaciones de Ingeniería, Host ConPTY y Servidor AI MCP Nativo
+### The Local-First Developer Cockpit & Native AI MCP Orchestrator
 
 [![CI - Test & Build](https://github.com/joseyx/remote-pc/actions/workflows/ci.yml/badge.svg)](https://github.com/joseyx/remote-pc/actions/workflows/ci.yml)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Android](https://img.shields.io/badge/Android-Kotlin%20%2B%20Compose-3DDC84?style=flat&logo=android)](https://developer.android.com)
 [![Protocol](https://img.shields.io/badge/AI%20Protocol-MCP%20JSON--RPC%202.0-8A2BE2?style=flat)](https://modelcontextprotocol.io/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6?style=flat)](https://github.com/joseyx/remote-pc)
-[![Installer](https://img.shields.io/badge/Installer-Inno%20Setup%20%2B%20Unix%20Script-orange?style=flat)](dist/RemotePC-Setup.exe)
+[![Installer](https://img.shields.io/badge/Installer-Inno%20Setup%20%2B%20Unix%20Script-orange?style=flat)](dist/Orbit-Setup.exe)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 <p align="center">
   <b>Controla Claude Code, terminales interactivas (ConPTY / POSIX PTY) y flujos multi-proyecto desde tu teléfono Android o navegador web.</b><br>
-  Integración nativa con <b>Model Context Protocol (MCP)</b>, Git Worktrees, bóvedas de Obsidian, bases de datos multi-esquema y Windscribe VPN.
+  Integración nativa con <b>Model Context Protocol (MCP)</b>, Git Worktrees aislados, bóvedas de Obsidian, bases de datos multi-esquema y Windscribe VPN.
 </p>
 
 [Instalación Rápida](#-instalación-rápida) •
 [Integración MCP](#-servidor-mcp-nativo-para-agentes-ia) •
 [Características](#-características-principales) •
 [Arquitectura](#-arquitectura-del-sistema) •
-[Comandos CLI](#-comandos-cli-de-remotepc-server) •
+[Comandos CLI](#-comandos-cli-de-orbit) •
 [App Android](#-aplicación-móvil-android) •
 [API REST & WS](#-referencia-de-la-api-rest-y-websockets)
 
@@ -29,11 +29,11 @@
 
 </div>
 
-## 💡 ¿Qué es Remote PC?
+## 💡 ¿Qué es Orbit?
 
-**Remote PC** es una suite completa de desarrollo remoto diseñada para eliminar la fricción al trabajar con herramientas de inteligencia artificial (**Claude Code**, Antigravity) y proyectos de software complejos con múltiples ramas y worktrees. 
+**Orbit** es una suite completa de desarrollo y orquestación diseñada para eliminar la fricción al trabajar con herramientas de inteligencia artificial (**Claude Code**, Antigravity) y proyectos de software complejos con múltiples ramas y worktrees.
 
-A diferencia de clientes SSH genéricos que rompen cursores y colores ANSI, Remote PC emula consolas interactivas mediante **Windows Pseudo Console (ConPTY)** en Windows y **POSIX pseudo-terminals (`creack/pty`)** en macOS y Linux, persistiendo sesiones en segundo plano al estilo tmux con búfer circular de 2 MB y permitiendo la interacción bidireccional desde **Android**, **Web** y **Agentes de IA**.
+A diferencia de clientes SSH genéricos que rompen cursores y secuencias ANSI, Orbit emula consolas interactivas mediante **Windows Pseudo Console (ConPTY)** en Windows y **POSIX pseudo-terminals (`creack/pty`)** en macOS y Linux, persistiendo sesiones en segundo plano al estilo tmux con búfer circular de 2 MB y permitiendo la interacción bidireccional desde **Android**, **Web (Orbit Cockpit)** y **Agentes de IA**.
 
 > [!TIP]
 > **100% Autónomo y Privado:** Sin servidores en la nube de terceros, sin telemetría y con latencia ultrabaja en red local (Wi-Fi) o redes privadas virtuales (Tailscale).
@@ -43,12 +43,12 @@ A diferencia de clientes SSH genéricos que rompen cursores y colores ANSI, Remo
 ## ⚡ Instalación Rápida
 
 ### Opción 1: Windows (Instalador Gráfico Asistido)
-1. Descarga el instalador compilado [`dist/RemotePC-Setup.exe`](dist/RemotePC-Setup.exe) (**4.7 MB**).
+1. Descarga el instalador compilado [`dist/Orbit-Setup.exe`](dist/Orbit-Setup.exe) (**4.7 MB**).
 2. Ejecuta el asistente de instalación:
-   - Se instala por usuario en `%LOCALAPPDATA%\RemotePC` (no requiere permisos de Administrador).
-   - `[x]` Agrega automáticamente `remotepc-server` al `PATH` del usuario.
+   - Se instala por usuario en `%LOCALAPPDATA%\Orbit` (no requiere permisos de Administrador).
+   - `[x]` Agrega automáticamente `orbit` y alias `remotepc-server` al `PATH` del usuario.
    - `[x]` Configura el servidor MCP en **Claude Code** y **Claude Desktop** de forma desatendida.
-3. ¡Listo! Abre cualquier terminal y ejecuta `remotepc-server` para iniciar.
+3. ¡Listo! Abre cualquier terminal y ejecuta `orbit` para iniciar el Cockpit.
 
 ### Opción 2: macOS & Linux (Script Automatizado)
 Instala y configura el binario y el servidor MCP en un solo comando:
@@ -66,36 +66,36 @@ curl -fsSL https://raw.githubusercontent.com/joseyx/remote-pc/main/scripts/insta
 git clone https://github.com/joseyx/remote-pc.git
 cd "remote-pc"
 
-# 2. Compilar el servidor Go
+# 2. Compilar el binario Go
 cd server
-go build -ldflags="-s -w" -o ../bin/remotepc-server ./cmd/server
+go build -ldflags="-s -w" -o ../bin/orbit ./cmd/server
 cd ..
 
-# 3. Registrar MCP en tu sistema
-./bin/remotepc-server setup-mcp
+# 3. Registrar MCP en Claude Code y Claude Desktop
+./bin/orbit setup-mcp
 
-# 4. Iniciar el servidor
-./bin/remotepc-server
+# 4. Iniciar Orbit Cockpit
+./bin/orbit
 ```
 
 ---
 
 ## 🤖 Servidor MCP Nativo para Agentes IA
 
-Remote PC implementa el protocolo **Model Context Protocol (MCP)** directamente en Go por `stdio`, permitiendo a **Claude Code**, **Claude Desktop** y otros agentes interactuar con tu entorno de desarrollo sin necesidad de instalar Python ni librerías externas.
+Orbit implementa el protocolo **Model Context Protocol (MCP)** directamente en Go por `stdio`, permitiendo a **Claude Code**, **Claude Desktop** y otros agentes interactuar con tu entorno de desarrollo sin necesidad de instalar Python ni librerías externas.
 
 ### Configuración en 1 Clic
-```powershell
-remotepc-server setup-mcp
+```bash
+orbit setup-mcp
 ```
 Este comando detecta y configura automáticamente tus clientes:
 - **Claude Code CLI**: Agregado a `~/.claude.json`.
-- **Claude Desktop**: Configurado en `%APPDATA%\Claude\claude_desktop_config.json`.
+- **Claude Desktop**: Configurado en `%APPDATA%\Claude` (Windows), `~/Library/Application Support/Claude` (macOS) o `~/.config/Claude` (Linux).
 
 Verifica el estado en cualquier momento con:
 ```bash
 claude mcp list
-# remote-pc: C:\...\remotepc-server.exe mcp - √ Connected
+# orbit: C:\...\orbit.exe mcp - √ Connected
 ```
 
 ### Catálogo de Herramientas MCP (10 Herramientas Nativas)
@@ -113,105 +113,86 @@ claude mcp list
 | `get_bubble_context` | Obtiene el estado Git detallado (rama, commits ahead/behind, archivos modificados) de la tarea actual. |
 | `create_workspace_bubble` | Crea un nuevo worktree y branch aislado para una tarea (soporta Aditum y Brif). |
 
-> [!NOTE]
-> **Auto-arranque en segundo plano:** Si el servidor de Remote PC no está abierto cuando Claude invoca una herramienta MCP, `remotepc-server mcp` inicia silenciosamente el daemon en segundo plano sin interrumpir al agente.
+---
+
+## ✨ Características Principales
+
+```
+                  ┌──────────────────────────────────────────┐
+                  │              ORBIT COCKPIT               │
+                  │   (Terminales, Bubbles, MCP, Obsidian)   │
+                  └────────────────────┬─────────────────────┘
+                                       │
+         ┌─────────────────────────────┼─────────────────────────────┐
+         ▼                             ▼                             ▼
+┌──────────────────┐          ┌──────────────────┐          ┌──────────────────┐
+│   Dual PTY Host  │          │   Agentic Hub    │          │  Workspace Hub   │
+│ ConPTY & POSIX   │          │  MCP JSON-RPC    │          │ Git Worktrees    │
+│ Buffer 2MB Tmux  │          │ Auto-Handoffs    │          │ Puertos & DBs    │
+└──────────────────┘          └──────────────────┘          └──────────────────┘
+```
+
+1. **Terminales Persistentes Multiplataforma**: Sesiones de consola interactivas protegidas contra caídas de red y cierres accidentales. El búfer circular almacena los últimos 2 MB de historial.
+2. **Workspace Bubbles & Git Worktrees**: Cambia de tarea sin contaminar tu directorio de trabajo. Crea ramas y carpetas de trabajo aisladas en segundos.
+3. **Orbit Cockpit (Web Dashboard)**: Interfaz de usuario de alta densidad informativa inspirada en GitHub Dark, con paleta de comandos (`Ctrl+K`), terminal rápida Quake (`F12`), y monitor de recursos.
+4. **Orbit Mobile (App Android Nativa)**: Cliente móvil en Kotlin + Jetpack Compose con atajos táctiles para Claude Code (`/compact`, `/pr`, `Ctrl+C`).
+5. **Bridge con Obsidian**: Búsqueda e inspección instantánea de notas técnicas en tus bóvedas locales.
+6. **Monitoreo de Sistema & VPN**: Estado en tiempo real de RAM, servicios de bases de datos locales (PostgreSQL, Docker) y túnel VPN Windscribe.
 
 ---
 
-## 🌟 Características Principales
-
-### 🖥️ Windows Pseudo Console (ConPTY) Nativo
-- **Emulación Completa**: Soporte íntegro para secuencias ANSI, colores de 24 bits, menús interactivos, spinners y cursores dinámicos de Claude Code.
-- **Persistencia tmux-style**: Las sesiones continúan vivas en segundo plano en tu PC aunque desconectes el teléfono o cierres el navegador.
-- **Búfer Circular de 2 MB**: Guarda el historial de salida reciente para enviarlo al instante al reconectar.
-
-### 🫧 Eco Workspace Hub & Worktrees
-- **Aislamiento por Tareas (*Bubbles*)**: Separación de contextos para proyectos multi-rama (**Aditum**, **Brif** y generales).
-- **Git Worktrees Automáticos**: Creación y destrucción limpia de worktrees aislados con asignación inteligente de puertos dev dinámicos (`:8081` a `:8099`).
-- **Clonado Local MySQL en ~25s**: Replicación instantánea de esquemas desde semilla ultraligera sin Docker.
-- **Live Preview Embebido**: Pestaña con iframe embebido apuntando a `http://localhost:<PORT>` para inspeccionar APIs, Swagger UI o dashboards web.
-
-### 📓 Integración con Bóvedas de Obsidian (Runbooks)
-- Detección automática de bóvedas locales desde `%APPDATA%\obsidian\obsidian.json`.
-- Búsqueda instantánea de incidentes, runbooks y documentación técnica.
-- Lector de Markdown integrado (`marked.js`) y editor en caliente.
-
-### 🛡️ Controlador Integrado de Windscribe VPN
-- Diseñado para superar bloqueos geográficos de APIs de IA sin afectar la conexión LAN móvil-PC.
-- Selección en caliente (*on-the-fly switch*) de múltiples locaciones (Miami, New York, Frankfurt, etc.) y protocolos (WireGuard, Stealth:443, OpenVPN, WSTunnel).
-- **Aislamiento de Interfaces**: Prioriza IPs Wi-Fi/Ethernet físicas sobre adaptadores VPN para garantizar estabilidad en el emparejamiento con Android.
-
-### 📱 Aplicación Móvil Android (100% Nativa)
-- Construida en **Kotlin** con **Jetpack Compose** y **Material Design 3**.
-- **Barra de Atajos para Claude Code**: Teclas rápidas (`ESC`, `TAB`, `Ctrl+C`, `Ctrl+D`, flechas) y acciones (`✓ YES`, `✗ NO`, `/cost`, `/compact`, `/clear`).
-- **Scroll Táctil Cinético Sub-píxel**: Desplazamiento ultra fluido con inercia física y botón flotante de retorno rápido al cursor.
-- **Explorador Remoto de Archivos**: Navega por los discos de tu PC para abrir sesiones en la carpeta exacta del proyecto.
-
----
-
-## 🏛️ Arquitectura del Sistema
+## 🏗️ Arquitectura del Sistema
 
 ```mermaid
-flowchart TD
-    subgraph PC["🖥️ Workstation Windows (Host)"]
-        subgraph ServerDaemon["remotepc-server (Go Backend)"]
-            ConPTY["ConPTY Engine (kernel32.dll)"]
-            SessionMgr["Session Manager (Persistencia tmux)"]
-            RingBuf["Ring Buffer (2MB History)"]
-            BubbleMgr["🫧 Bubble Manager (Worktrees & Puertos)"]
-            CalendarMgr["📅 Calendar & Daily Notes Manager"]
-            MCPEngine["🤖 Native MCP Server (stdio JSON-RPC 2.0)"]
-            GitPkg["🔀 Git Status, Diff & Branches"]
-            ObsidianPkg["📓 Obsidian Vault Discovery"]
-            VpnMgr["🛡️ Windscribe CLI Controller"]
-            WsServer["WebSocket Server (/ws/session/:id)"]
-            RestAPI["REST API (/api/...)"]
-            WebDash["Embedded Web Dashboard (xterm.js)"]
-        end
-
-        DataDir["📂 data/ (Notas, Metadatos, Estados)"]
-        ClaudeCLI["🤖 Claude Code CLI / PowerShell"]
-        ClaudeDesktop["🤖 Claude Desktop Client"]
-        WindscribeApp["🛡️ Windscribe VPN Service"]
-        MySQL["🗄️ MySQL 8.0 Local (Multi-Schema)"]
-
-        ServerDaemon <--> DataDir
-        ConPTY --> ClaudeCLI
-        MCPEngine <--> ClaudeCLI
-        MCPEngine <--> ClaudeDesktop
-        VpnMgr --> WindscribeApp
-        BubbleMgr --> MySQL
+graph TD
+    subgraph Clientes
+        Mobile[App Android Kotlin/Compose]
+        Browser[Orbit Cockpit Web Dashboard]
+        ClaudeAgent[Claude Code / Claude Desktop]
     end
 
-    subgraph Mobile["📱 Dispositivo Android (Cliente)"]
-        ComposeUI["Jetpack Compose UI (Material 3)"]
-        TermView["Terminal View + Kinetic Sub-pixel Scroll"]
-        ClaudeBar["Claude Shortcut Bar (ESC, Tab, Ctrl+C, Yes/No)"]
-        ApiClient["OkHttp / Coroutines WebSocket Client"]
+    subgraph Orbit Daemon [Orbit Server Daemon (Go)]
+        API[Enrutador REST / API Server]
+        WSHub[Hub WebSockets / Multiplexor PTY]
+        MCPServer[Servidor MCP stdio JSON-RPC 2.0]
+        SessionMgr[Gestor de Sesiones & PTY Ring Buffer]
+        BubbleMgr[Gestor de Workspace Bubbles]
+        CalendarMgr[Calendario & Handoffs Registry]
+        ObsidianMgr[Obsidian Vault Discovery]
     end
 
-    subgraph Browser["🌐 Navegador Web (Dashboard Local/Remoto)"]
-        EcoWeb["Eco Liquid Glass Dashboard (/index.html)"]
-        EcoTabs["Live Mirror · Preview · Diff · Obsidian"]
+    subgraph SO & Herramientas
+        PTY[Motor PTY: ConPTY (Win) / creack/pty (Unix)]
+        GitCLI[Git CLI & Monorepo Worktrees]
+        ObsidianFS[Bóvedas Markdown de Obsidian]
     end
 
-    ApiClient <-->|Local Wi-Fi / Tailscale| WsServer
-    ApiClient <-->|HTTP REST Requests| RestAPI
-    Browser <-->|HTTP / WebSockets| ServerDaemon
+    ClaudeAgent <-->|stdio JSON-RPC| MCPServer
+    MCPServer <-->|Internal API| BubbleMgr
+    MCPServer <-->|Internal API| CalendarMgr
+
+    Mobile <-->|HTTP / WebSockets| API
+    Browser <-->|HTTP / WebSockets| API
+    API --> WSHub
+    WSHub --> SessionMgr
+    SessionMgr --> PTY
+    BubbleMgr --> GitCLI
+    ObsidianMgr --> ObsidianFS
 ```
 
 ---
 
-## 💻 Comandos CLI de `remotepc-server`
+## 💻 Comandos CLI de `orbit`
 
-El binario incluye comandos de autoservicio para terminal:
+El ejecutable incluye herramientas completas de autoservicio para terminal:
 
 ```text
 Uso:
-  remotepc-server [comando] [opciones]
+  orbit [comando] [opciones]
+  (alias retrocompatible: remotepc-server [comando] [opciones])
 
 Comandos disponibles:
-  (sin comando)      Inicia el servidor daemon y la interfaz web en segundo plano
+  (sin comando)      Inicia el servidor daemon y el Cockpit web
   mcp                Ejecuta el servidor MCP JSON-RPC 2.0 por stdio (para Claude)
   setup-mcp          Configura el servidor MCP en Claude Code y Claude Desktop
   uninstall-mcp      Remueve la configuración MCP de Claude Code y Claude Desktop
@@ -219,12 +200,12 @@ Comandos disponibles:
   remove-path        Remueve el directorio del binario del PATH del usuario
   install            Instalación completa (PATH + MCP + Acceso directo)
   uninstall          Desinstalación limpia del entorno y MCP
-  version            Muestra la versión de Remote PC
+  version            Muestra la versión de Orbit
   help               Muestra la ayuda de comandos
 
 Opciones del servidor:
-  -open              Abre el dashboard web en el navegador al iniciar (defecto: true)
-  -no-open           No abre el dashboard web automáticamente
+  -open              Abre el Cockpit web en el navegador al iniciar (defecto: true)
+  -no-open           No abre el Cockpit web automáticamente
   -port <puerto>     Puerto HTTP a utilizar (defecto: 8080)
   -token <token>     Token de autenticación Bearer
   -host <ip>         Dirección IP para escuchar (defecto: 0.0.0.0)
@@ -235,15 +216,15 @@ Opciones del servidor:
 ## 📁 Estructura del Repositorio
 
 ```text
-Remote PC/
-├── android/                    # Cliente móvil Android (Kotlin + Compose)
+remote-pc/
+├── android/                    # Cliente móvil Android Orbit Mobile (Kotlin + Compose)
 │   ├── app/src/main/java/com/remotepc/app/
 │   │   ├── data/               # Modelos de sesión, VPN y red (OkHttp/WebSocket)
 │   │   ├── ui/                 # Interfaz Compose (Terminal, Atajos Claude, VPN Card)
 │   │   └── AndroidManifest.xml
 │   ├── build.gradle.kts
 │   └── README.md
-├── server/                     # Backend Go (ConPTY daemon, Web Dashboard, MCP Server)
+├── server/                     # Backend Go (Dual PTY host, Cockpit Web, Servidor MCP)
 │   ├── cmd/server/             # main.go con router de CLI y servidor
 │   ├── internal/
 │   │   ├── api/                # Enrutador HTTP REST y WebSocket
@@ -251,110 +232,59 @@ Remote PC/
 │   │   ├── calendar/           # Calendario de Handoffs, Daily Notes y Standup
 │   │   ├── config/             # Carga y resolución central de datos (data/)
 │   │   ├── git/                # Helpers de Git (status, diff, branch, log)
-│   │   ├── installer/          # Registro de Windows (PATH), accesos directos
+│   │   ├── installer/          # Registro de Windows y symlinks Unix (~/.local/bin)
 │   │   ├── mcp/                # Servidor MCP JSON-RPC 2.0 nativo (10 herramientas)
 │   │   ├── obsidian/           # Búsqueda y lectura de Vaults de Obsidian
-│   │   ├── pty/                # Windows ConPTY API (CreatePseudoConsole)
+│   │   ├── pty/                # ConPTY (Windows) & POSIX PTY (macOS/Linux)
 │   │   ├── session/            # Gestor de terminales, buffer circular y persistencia
+│   │   ├── system/             # Monitor de CPU/RAM multiplataforma (Win32, sysctl, proc)
 │   │   ├── vpn/                # Integración con Windscribe CLI
-│   │   └── web/                # Dashboard Web embebido (HTML/CSS/JS + xterm.js + marked)
-│   ├── scripts/                # Scripts auxiliares en Python (fallback MCP y CLI)
+│   │   └── web/                # Orbit Cockpit Web (HTML/CSS/JS + xterm.js + marked)
 │   └── README.md
-├── installer/                  # Definición del Instalador Gráfico
-│   └── RemotePC-Setup.iss      # Script Inno Setup 6 (asistente de instalación por usuario)
+├── installer/                  # Definición del Instalador Gráfico de Windows
+│   └── Orbit-Setup.iss         # Script Inno Setup 6 (asistente de instalación por usuario)
 ├── scripts/                    # Scripts de Automatización y Developer Experience
-│   ├── build-installer.ps1     # Compila el binario y empaqueta dist/RemotePC-Setup.exe
+│   ├── build-installer.ps1     # Compila el binario y empaqueta dist/Orbit-Setup.exe
+│   ├── install.sh              # Instalador universal en Bash para macOS y Linux
 │   └── clean.ps1               # Limpieza de temporales, builds y logs
 ├── data/                       # [IGNORADO EN GIT] Almacenamiento central de runtime
 │   ├── calendar_notes/         # Notas markdown diarias y handoffs_registry.json
 │   ├── bubbles_metadata.json   # Metadatos, prioridades y orden de bubbles
 │   ├── sessions_state.json     # Historial persistente de terminales
 │   └── server.config.json      # Configuración de puerto y token de la máquina
-├── dist/                       # [IGNORADO EN GIT] Instalador empaquetado (RemotePC-Setup.exe)
+├── dist/                       # [IGNORADO EN GIT] Instalador empaquetado (Orbit-Setup.exe)
 ├── start-server.bat            # Lanzador rápido desde Windows
 ├── server.config.json.example  # Plantilla de configuración de ejemplo
 ├── .gitignore
 ├── CONTRIBUTING.md             # Guía de contribución
 ├── CODE_OF_CONDUCT.md         # Código de conducta
 ├── SECURITY.md                 # Política de seguridad y reporte de vulnerabilidades
-├── CHANGELOG.md                # Historial de cambios y versiones
-├── LICENSE                     # Licencia MIT
-└── README.md
+└── CHANGELOG.md                # Historial de cambios y versiones
 ```
 
 ---
 
-## 📱 Aplicación Móvil Android
+## 📱 Aplicación Móvil Android (Orbit Mobile)
 
-### Compilación e Instalación
+La app de Android te da control total de tu estación de trabajo desde cualquier lugar con conexión local o túnel WireGuard/Tailscale.
+
+### Compilar e Instalar APK
 ```bash
 cd android
 ./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+# El APK se genera en: android/app/build/outputs/apk/debug/app-debug.apk
 ```
-
-### Emparejamiento con la PC
-1. Abre **Remote PC** en tu dispositivo Android.
-2. Toca el icono de **Ajustes** (engranaje) en la barra superior.
-3. Ingresa los datos mostrados por tu servidor en consola:
-   - **Host / IP**: La IP LAN de tu PC (ej. `192.168.1.100` o IP de Tailscale).
-   - **Puerto**: `8080`.
-   - **Auth Token**: Tu token seguro.
-4. Toca **Test Connection** para verificar la comunicación y luego **Save & Return**.
-5. Pulsa el botón flotante **`+`** para lanzar sesiones de terminal o presiona **Claude Code** para interactuar de inmediato con tus agentes.
-
----
-
-## 📡 Referencia de la API REST y WebSockets
-
-Todos los endpoints (excepto `/api/health` y `/`) requieren la cabecera `Authorization: Bearer <TOKEN>` o el parámetro `?token=<TOKEN>`.
-
-### Sesiones de Terminal
-* `GET /api/sessions`: Lista de sesiones activas (ID, nombre, CWD, PID, estado de ejecución).
-* `POST /api/sessions`: Crea una nueva terminal ConPTY (`{ name, cwd, command, cols, rows }`).
-* `DELETE /api/sessions/{id}`: Termina el proceso y libera la consola virtual.
-* `WS /ws/session/{id}`: Canal WebSocket bidireccional para entrada/salida binaria y redimensionamiento dinámico.
-
-### Calendario y Handoffs de Agentes
-* `GET /api/calendar/month`: Resumen mensual de notas y handoffs registrados.
-* `GET /api/calendar/note?date=YYYY-MM-DD`: Obtiene la nota markdown y los handoffs estructurados del día.
-* `POST /api/calendar/handoff`: Registra un handoff diario con Git snapshot automático.
-* `PUT /api/calendar/handoff`: Modifica un handoff existente.
-* `DELETE /api/calendar/handoff?id=...`: Elimina un handoff.
-* `GET /api/calendar/standup`: Consulta los pendientes del día anterior o fecha de referencia.
-* `POST /api/calendar/todo`: Agrega una tarea accionable con checkbox.
-* `POST /api/calendar/note/append`: Anexa texto a la nota diaria.
-
-### Workspace Bubbles & Git
-* `GET /api/bubbles`: Lista todos los bubbles, worktrees y dev servers.
-* `POST /api/bubbles`: Crea un nuevo worktree y branch aislado.
-* `GET /api/bubbles/{id}/git/status`: Estado detallado de Git (rama, commits ahead/behind, cambios staged/unstaged).
-* `POST /api/bubbles/{id}/dev/start`: Inicia el servidor de desarrollo asignado a la tarea.
-* `POST /api/bubbles/{id}/dev/stop`: Detiene el servidor de desarrollo.
-
-### VPN & Sistema
-* `GET /api/vpn/status`: Estado de Windscribe VPN (conectado, IP, locación, protocolo).
-* `POST /api/vpn/connect`: Conecta el VPN a una locación y protocolo específicos.
-* `POST /api/vpn/disconnect`: Desconecta el túnel VPN.
-* `GET /api/server-info`: Información general (hostname, uptime, IPs físicas, estado de VPN).
-* `GET /api/health`: Comprobación rápida de disponibilidad (`status: ok`).
 
 ---
 
 ## 🔒 Seguridad y Privacidad
 
-- **Zero Cloud Dependence**: Ningún comando de terminal, archivo de proyecto ni token de autenticación se envía a servidores en la nube de terceros.
-- **Tokens Criptográficos**: Generación automática de tokens Bearer de 128 bits guardados localmente en `data/server.config.json`.
-- **Aislamiento de Red**: Filtrado automático de interfaces de red virtuales para garantizar que únicamente se expongan interfaces LAN físicas.
+- **Autenticación Bearer Obligatoria**: Todas las llamadas REST y Handshakes de WebSocket requieren token secreto.
+- **Acceso Directo Sin Nube**: Sin dependencias de servicios externos ni telemetría.
+- **Instalación Segura sin Elevación**: Diseñado para instalarse en `%LOCALAPPDATA%\Orbit` o `~/.local/bin` sin requerir permisos de Administrador ni root.
 
 ---
 
-## 🤝 Contribuciones
+## 📜 Licencia
 
-Las contribuciones son bienvenidas. Para comenzar, consulta nuestra [Guía de Contribución](CONTRIBUTING.md) y el [Código de Conducta](CODE_OF_CONDUCT.md).
-
----
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+Distribuido bajo la Licencia **MIT**. Consulta el archivo [`LICENSE`](LICENSE) para más detalles.

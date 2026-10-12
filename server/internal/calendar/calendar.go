@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"remotepc-server/internal/git"
+	"orbit/internal/git"
 )
 
 type HandoffItem struct {

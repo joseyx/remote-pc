@@ -1,11 +1,17 @@
 @echo off
-title Remote PC Server Host
+title Orbit - Developer Cockpit & MCP Host
 echo =====================================================
-echo           Remote PC Server Host Launcher             
+echo            Orbit - Cockpit & MCP Launcher            
 echo =====================================================
 cd /d "%~dp0"
 
-if exist "remotepc-server.exe" (
+if exist "orbit.exe" (
+    echo Iniciando orbit.exe...
+    orbit.exe -open
+) else if exist "server\orbit.exe" (
+    echo Iniciando server\orbit.exe...
+    server\orbit.exe -open
+) else if exist "remotepc-server.exe" (
     echo Iniciando remotepc-server.exe...
     remotepc-server.exe -open
 ) else if exist "server\remotepc-server.exe" (

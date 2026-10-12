@@ -20,7 +20,7 @@ func SetupMCP(exePath string) error {
 	}
 	exePath = filepath.Clean(exePath)
 
-	fmt.Printf("[MCP] Configurando Remote PC MCP con ejecutable: %s\n", exePath)
+	fmt.Printf("[MCP] Configurando Orbit MCP con ejecutable: %s\n", exePath)
 
 	// 1. Configurar Claude Code CLI
 	setupClaudeCode(exePath)
@@ -33,7 +33,7 @@ func SetupMCP(exePath string) error {
 
 // UninstallMCP removes the MCP server configuration from Claude Code and Claude Desktop
 func UninstallMCP() error {
-	fmt.Println("[MCP] Desinstalando Remote PC MCP de Claude Code y Claude Desktop...")
+	fmt.Println("[MCP] Desinstalando Orbit MCP de Claude Code y Claude Desktop...")
 
 	uninstallClaudeCode()
 	uninstallClaudeDesktop()
@@ -70,8 +70,8 @@ func getClaudeDesktopConfigPath() string {
 func setupClaudeCode(exePath string) {
 	// Intentar primero con el comando oficial de Claude CLI si está disponible
 	if claudeCmd, err := exec.LookPath("claude"); err == nil && claudeCmd != "" {
-		fmt.Println("[MCP] Ejecutando: claude mcp add --scope user remote-pc ...")
-		cmd := exec.Command("claude", "mcp", "add", "--scope", "user", "remote-pc", "--", exePath, "mcp")
+		fmt.Println("[MCP] Ejecutando: claude mcp add --scope user orbit ...")
+		cmd := exec.Command("claude", "mcp", "add", "--scope", "user", "orbit", "--", exePath, "mcp")
 		out, err := cmd.CombinedOutput()
 		if err == nil {
 			fmt.Printf("[MCP] ✓ Claude Code configurado vía CLI exitosamente: %s\n", string(out))
@@ -107,15 +107,19 @@ func setupClaudeCode(exePath string) {
 		root["mcpServers"] = mcpServers
 	}
 
-	mcpServers["remote-pc"] = map[string]interface{}{
+	serverConfig := map[string]interface{}{
 		"type":    "stdio",
 		"command": exePath,
 		"args":    []string{"mcp"},
 	}
 
+	// Register Orbit as primary and remote-pc as compatibility alias
+	mcpServers["orbit"] = serverConfig
+	mcpServers["remote-pc"] = serverConfig
+
 	if data, err := json.MarshalIndent(root, "", "  "); err == nil {
 		if err := os.WriteFile(claudeJsonPath, data, 0644); err == nil {
-			fmt.Printf("[MCP] ✓ Registrado en %s\n", claudeJsonPath)
+			fmt.Printf("[MCP] ✓ Registrado 'orbit' en %s\n", claudeJsonPath)
 		} else {
 			fmt.Printf("[MCP] Error al escribir en %s: %v\n", claudeJsonPath, err)
 		}
@@ -146,14 +150,18 @@ func setupClaudeDesktop(exePath string) {
 		root["mcpServers"] = mcpServers
 	}
 
-	mcpServers["remote-pc"] = map[string]interface{}{
+	serverConfig := map[string]interface{}{
 		"command": exePath,
 		"args":    []string{"mcp"},
 	}
 
+	// Register Orbit as primary and remote-pc as compatibility alias
+	mcpServers["orbit"] = serverConfig
+	mcpServers["remote-pc"] = serverConfig
+
 	if data, err := json.MarshalIndent(root, "", "  "); err == nil {
 		if err := os.WriteFile(configPath, data, 0644); err == nil {
-			fmt.Printf("[MCP] ✓ Registrado en Claude Desktop: %s\n", configPath)
+			fmt.Printf("[MCP] ✓ Registrado 'orbit' en Claude Desktop: %s\n", configPath)
 		} else {
 			fmt.Printf("[MCP] Error al escribir en Claude Desktop (%s): %v\n", configPath, err)
 		}
@@ -162,8 +170,8 @@ func setupClaudeDesktop(exePath string) {
 
 func uninstallClaudeCode() {
 	if claudeCmd, err := exec.LookPath("claude"); err == nil && claudeCmd != "" {
-		cmd := exec.Command("claude", "mcp", "remove", "--scope", "user", "remote-pc")
-		_ = cmd.Run()
+		_ = exec.Command("claude", "mcp", "remove", "--scope", "user", "orbit").Run()
+		_ = exec.Command("claude", "mcp", "remove", "--scope", "user", "remote-pc").Run()
 	}
 
 	home, err := os.UserHomeDir()
@@ -186,12 +194,11 @@ func uninstallClaudeCode() {
 	}
 
 	if mcpServers, ok := root["mcpServers"].(map[string]interface{}); ok && mcpServers != nil {
-		if _, exists := mcpServers["remote-pc"]; exists {
-			delete(mcpServers, "remote-pc")
-			if newData, err := json.MarshalIndent(root, "", "  "); err == nil {
-				_ = os.WriteFile(claudeJsonPath, newData, 0644)
-				fmt.Printf("[MCP] ✓ Eliminado 'remote-pc' de %s\n", claudeJsonPath)
-			}
+		delete(mcpServers, "orbit")
+		delete(mcpServers, "remote-pc")
+		if newData, err := json.MarshalIndent(root, "", "  "); err == nil {
+			_ = os.WriteFile(claudeJsonPath, newData, 0644)
+			fmt.Printf("[MCP] ✓ Eliminado 'orbit' de %s\n", claudeJsonPath)
 		}
 	}
 }
@@ -213,12 +220,11 @@ func uninstallClaudeDesktop() {
 	}
 
 	if mcpServers, ok := root["mcpServers"].(map[string]interface{}); ok && mcpServers != nil {
-		if _, exists := mcpServers["remote-pc"]; exists {
-			delete(mcpServers, "remote-pc")
-			if newData, err := json.MarshalIndent(root, "", "  "); err == nil {
-				_ = os.WriteFile(configPath, newData, 0644)
-				fmt.Printf("[MCP] ✓ Eliminado 'remote-pc' de Claude Desktop (%s)\n", configPath)
-			}
+		delete(mcpServers, "orbit")
+		delete(mcpServers, "remote-pc")
+		if newData, err := json.MarshalIndent(root, "", "  "); err == nil {
+			_ = os.WriteFile(configPath, newData, 0644)
+			fmt.Printf("[MCP] ✓ Eliminado 'orbit' de Claude Desktop (%s)\n", configPath)
 		}
 	}
 }

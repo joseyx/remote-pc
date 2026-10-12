@@ -1,4 +1,4 @@
-module remotepc-server
+module orbit
 
 go 1.22
 

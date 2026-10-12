@@ -15,7 +15,7 @@ func BroadcastSettingChange() {
 	// Not applicable on Unix
 }
 
-// AddToUserPath installs remotepc-server into ~/.local/bin and ensures PATH is configured
+// AddToUserPath installs orbit into ~/.local/bin and ensures PATH is configured
 func AddToUserPath(dir string) error {
 	dir = filepath.Clean(dir)
 	home, err := os.UserHomeDir()
@@ -28,17 +28,22 @@ func AddToUserPath(dir string) error {
 		return fmt.Errorf("no se pudo crear %s: %w", localBin, err)
 	}
 
-	// Symlink to ~/.local/bin/remotepc-server
-	targetSymlink := filepath.Join(localBin, "remotepc-server")
-	sourceExe := filepath.Join(dir, "remotepc-server")
+	// Symlink to ~/.local/bin/orbit and legacy ~/.local/bin/remotepc-server
+	targetSymlink := filepath.Join(localBin, "orbit")
+	legacySymlink := filepath.Join(localBin, "remotepc-server")
+
+	sourceExe := filepath.Join(dir, "orbit")
 	if _, err := os.Stat(sourceExe); os.IsNotExist(err) {
-		// If binary name differs or called directly with executable path
-		if fi, err := os.Stat(dir); err == nil && !fi.IsDir() {
+		alt := filepath.Join(dir, "remotepc-server")
+		if _, err := os.Stat(alt); err == nil {
+			sourceExe = alt
+		} else if fi, err := os.Stat(dir); err == nil && !fi.IsDir() {
 			sourceExe = dir
 		}
 	}
 
-	_ = os.Remove(targetSymlink) // Remove previous symlink if present
+	// Create primary 'orbit' symlink
+	_ = os.Remove(targetSymlink)
 	if err := os.Symlink(sourceExe, targetSymlink); err != nil {
 		fmt.Printf("[PATH] Aviso: no se pudo crear symlink en %s (%v). Copiando binario...\n", targetSymlink, err)
 		data, readErr := os.ReadFile(sourceExe)
@@ -48,6 +53,10 @@ func AddToUserPath(dir string) error {
 	} else {
 		fmt.Printf("[PATH] ✓ Symlink creado en: %s -> %s\n", targetSymlink, sourceExe)
 	}
+
+	// Create retrocompatible 'remotepc-server' symlink
+	_ = os.Remove(legacySymlink)
+	_ = os.Symlink(targetSymlink, legacySymlink)
 
 	// Check if localBin is in current PATH
 	envPath := os.Getenv("PATH")
@@ -77,7 +86,7 @@ func AddToUserPath(dir string) error {
 		if _, err := os.Stat(rc); err == nil {
 			content, err := os.ReadFile(rc)
 			if err == nil && !strings.Contains(string(content), "$HOME/.local/bin") {
-				newContent := string(content) + "\n# Remote PC Server CLI\n" + pathExportLine + "\n"
+				newContent := string(content) + "\n# Orbit Developer Cockpit CLI\n" + pathExportLine + "\n"
 				if err := os.WriteFile(rc, []byte(newContent), 0644); err == nil {
 					fmt.Printf("[PATH] ✓ Se agregó %s a: %s\n", localBin, rc)
 					updatedAny = true
@@ -87,12 +96,11 @@ func AddToUserPath(dir string) error {
 	}
 
 	if !updatedAny {
-		// If neither .zshrc nor .bashrc existed, create the appropriate one based on OS default
 		targetRc := filepath.Join(home, ".bashrc")
 		if runtime.GOOS == "darwin" {
 			targetRc = filepath.Join(home, ".zshrc")
 		}
-		newContent := "# Remote PC Server CLI\n" + pathExportLine + "\n"
+		newContent := "# Orbit Developer Cockpit CLI\n" + pathExportLine + "\n"
 		_ = os.WriteFile(targetRc, []byte(newContent), 0644)
 		fmt.Printf("[PATH] ✓ Creado y configurado PATH en: %s\n", targetRc)
 	}
@@ -108,10 +116,12 @@ func RemoveFromUserPath(dir string) error {
 		return err
 	}
 
-	targetSymlink := filepath.Join(home, ".local", "bin", "remotepc-server")
-	if _, err := os.Lstat(targetSymlink); err == nil {
-		_ = os.Remove(targetSymlink)
-		fmt.Printf("[PATH] ✓ Eliminado: %s\n", targetSymlink)
+	for _, name := range []string{"orbit", "remotepc-server"} {
+		link := filepath.Join(home, ".local", "bin", name)
+		if _, err := os.Lstat(link); err == nil {
+			_ = os.Remove(link)
+			fmt.Printf("[PATH] ✓ Eliminado: %s\n", link)
+		}
 	}
 
 	rcFiles := []string{
@@ -129,7 +139,7 @@ func RemoveFromUserPath(dir string) error {
 		var filtered []string
 		modified := false
 		for _, line := range lines {
-			if strings.Contains(line, "Remote PC Server CLI") || strings.Contains(line, `$HOME/.local/bin:$PATH`) {
+			if strings.Contains(line, "Orbit") || strings.Contains(line, "Remote PC") || strings.Contains(line, `$HOME/.local/bin:$PATH`) {
 				modified = true
 				continue
 			}
@@ -153,11 +163,11 @@ func CreateDesktopShortcut(exePath string) error {
 	}
 
 	if runtime.GOOS == "darwin" {
-		// macOS: Symlink on Desktop if Desktop exists
 		desktop := filepath.Join(home, "Desktop")
 		if _, err := os.Stat(desktop); err == nil {
-			link := filepath.Join(desktop, "Remote PC")
+			link := filepath.Join(desktop, "Orbit")
 			_ = os.Remove(link)
+			_ = os.Remove(filepath.Join(desktop, "Remote PC"))
 			_ = os.Symlink(exePath, link)
 			fmt.Printf("[Shortcut] ✓ Acceso directo creado en: %s\n", link)
 		}
@@ -167,8 +177,8 @@ func CreateDesktopShortcut(exePath string) error {
 	// Linux .desktop entry
 	desktopContent := fmt.Sprintf(`[Desktop Entry]
 Type=Application
-Name=Remote PC
-Comment=Remote PC Host & Web Dashboard
+Name=Orbit
+Comment=Orbit - Developer Cockpit & MCP Orchestrator
 Exec=%s
 Terminal=false
 Categories=Development;Utility;
@@ -176,13 +186,15 @@ Categories=Development;Utility;
 
 	appsDir := filepath.Join(home, ".local", "share", "applications")
 	_ = os.MkdirAll(appsDir, 0755)
-	appFile := filepath.Join(appsDir, "remotepc.desktop")
+	appFile := filepath.Join(appsDir, "orbit.desktop")
 	_ = os.WriteFile(appFile, []byte(desktopContent), 0644)
+	_ = os.Remove(filepath.Join(appsDir, "remotepc.desktop"))
 
 	desktopDir := filepath.Join(home, "Desktop")
 	if _, err := os.Stat(desktopDir); err == nil {
-		deskFile := filepath.Join(desktopDir, "remotepc.desktop")
+		deskFile := filepath.Join(desktopDir, "orbit.desktop")
 		_ = os.WriteFile(deskFile, []byte(desktopContent), 0755)
+		_ = os.Remove(filepath.Join(desktopDir, "remotepc.desktop"))
 		fmt.Printf("[Shortcut] ✓ Acceso directo de escritorio creado en: %s\n", deskFile)
 	}
 
@@ -197,11 +209,13 @@ func RemoveDesktopShortcut() {
 	}
 
 	if runtime.GOOS == "darwin" {
-		link := filepath.Join(home, "Desktop", "Remote PC")
-		_ = os.Remove(link)
+		_ = os.Remove(filepath.Join(home, "Desktop", "Orbit"))
+		_ = os.Remove(filepath.Join(home, "Desktop", "Remote PC"))
 		return
 	}
 
+	_ = os.Remove(filepath.Join(home, "Desktop", "orbit.desktop"))
 	_ = os.Remove(filepath.Join(home, "Desktop", "remotepc.desktop"))
+	_ = os.Remove(filepath.Join(home, ".local", "share", "applications", "orbit.desktop"))
 	_ = os.Remove(filepath.Join(home, ".local", "share", "applications", "remotepc.desktop"))
 }
