@@ -3,6 +3,22 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.2.0] - 2026-10-12
+
+### 🚀 Añadido (Added)
+- **Abstracción Universal de Workspaces**:
+  - Soporte multi-proyecto para cualquier repositorio Git del usuario persistido en `data/workspaces.json`.
+  - Gestor visual de proyectos en el Cockpit con explorador de carpetas locales del host y pestañas dinámicas.
+  - Aislamiento automático de Git worktrees (`.worktrees/<taskId>`) y configuración de dev servers por proyecto.
+  - Endpoints CRUD (`/api/workspaces`) y verificación integral de workspaces en `orbit doctor`.
+- **Pipeline de Migración Automática (`orbit migrate`)**:
+  - Migración desatendida y sin pérdida de datos para instalaciones existentes y upgrades directos.
+  - Auto-descubrimiento y consolidación de proyectos previos (Aditum, Brif, etc.), handoffs y notas diarias en `%LOCALAPPDATA%\Orbit`.
+  - Gancho de migración automático al iniciar el servidor y paso integrado en `Orbit-Setup.exe`.
+- **Rediseño Limpio del Web Cockpit Header**:
+  - Reorganización de la barra superior en 3 bloques despejados: Telemetría (RAM + VPN), Herramientas Rápidas (`Ctrl+K`, `Quake`, `Cierre de Día`) y Menú Unificado `⚙️ Sistema`.
+  - Menú desplegable centralizado con accesos a QR Pairing, Seguridad/PIN, copia rápida de Token y URL LAN, alternador de alertas sonoras, diagnóstico Doctor y recarga.
+
 ---
 
 ## [1.1.0] - 2026-10-12
