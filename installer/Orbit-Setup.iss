@@ -55,9 +55,10 @@ Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Configuración de variables de entorno y MCP durante la instalación
+; Configuración de variables de entorno, MCP y migración de datos durante la instalación
 Filename: "{app}\{#MyAppExeName}"; Parameters: "add-path"; Tasks: addtopath; StatusMsg: "Configurando variable PATH del usuario..."; Flags: runhidden
 Filename: "{app}\{#MyAppExeName}"; Parameters: "setup-mcp"; Tasks: setupmcp; StatusMsg: "Configurando integración MCP con Claude Code y Claude Desktop..."; Flags: runhidden
+Filename: "{app}\{#MyAppExeName}"; Parameters: "migrate"; StatusMsg: "Migrando datos y proyectos anteriores a la versión abstraída..."; Flags: runhidden
 ; Opción de iniciar la aplicación al finalizar
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 

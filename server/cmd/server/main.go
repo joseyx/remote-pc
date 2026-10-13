@@ -21,6 +21,7 @@ import (
 	"orbit/internal/doctor"
 	"orbit/internal/installer"
 	"orbit/internal/mcp"
+	"orbit/internal/migration"
 	"orbit/internal/session"
 	"orbit/internal/updater"
 )
@@ -37,6 +38,16 @@ func main() {
 	if len(os.Args) > 1 {
 		subcommand := os.Args[1]
 		switch subcommand {
+		case "migrate":
+			cfg := config.LoadConfig()
+			summary, err := migration.MigrateData(cfg.DataDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error durante la migración: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Print(migration.FormatCLI(summary))
+			return
+
 		case "doctor":
 			cfg := config.LoadConfig()
 			report := doctor.RunDiagnostics(cfg, Version)
@@ -134,6 +145,9 @@ func main() {
 	shouldOpen := *openFlag && !*noOpenFlag
 
 	cfg := config.LoadConfig()
+	if sum, err := migration.AutoMigrate(cfg.DataDir); err == nil && sum != nil && sum.WorkspacesCount > 0 {
+		log.Printf("[Migration] Auto-migración completada: %d workspaces configurados", sum.WorkspacesCount)
+	}
 	sessionsFile := filepath.Join(cfg.DataDir, "sessions_state.json")
 	if _, err := os.Stat(sessionsFile); os.IsNotExist(err) {
 		for _, fb := range []string{

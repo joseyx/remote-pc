@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"orbit/internal/bubble"
 	"orbit/internal/config"
 	"orbit/internal/daemon"
 	"orbit/internal/mcp"
@@ -87,6 +88,9 @@ func RunDiagnostics(cfg *config.Config, version string) *Report {
 
 	// 10. Orbit Daemon Active Status
 	report.Items = append(report.Items, checkDaemon(cfg))
+
+	// 11. Universal Workspaces Abstraction
+	report.Items = append(report.Items, checkWorkspaces(cfg))
 
 	// Count metrics
 	for _, it := range report.Items {
@@ -494,6 +498,51 @@ func getLANIPs() []string {
 		}
 	}
 	return ips
+}
+
+func checkWorkspaces(cfg *config.Config) CheckItem {
+	dataDir := cfg.DataDir
+	if dataDir == "" {
+		dataDir = config.GetDataDir()
+	}
+
+	wsFile := filepath.Join(dataDir, "workspaces.json")
+	data, err := os.ReadFile(wsFile)
+	if err != nil {
+		return CheckItem{
+			Category:    "Workspaces",
+			Name:        "Abstracción de Workspaces",
+			Status:      StatusWarning,
+			Message:     "workspaces.json no inicializado aún",
+			Details:     "Los proyectos se cargarán en modo por defecto o con 'orbit migrate'",
+			Remediation: "Ejecuta 'orbit migrate' para auto-descubrir y registrar tus repositorios en disco",
+		}
+	}
+
+	var list []bubble.WorkspaceInfo
+	if err := json.Unmarshal(data, &list); err != nil {
+		return CheckItem{
+			Category:    "Workspaces",
+			Name:        "Abstracción de Workspaces",
+			Status:      StatusError,
+			Message:     fmt.Sprintf("Error leyendo workspaces.json: %v", err),
+			Details:     fmt.Sprintf("Ruta: %s", wsFile),
+			Remediation: "Verifica la sintaxis JSON de workspaces.json o ejecuta 'orbit migrate'",
+		}
+	}
+
+	names := make([]string, 0, len(list))
+	for _, ws := range list {
+		names = append(names, ws.Name)
+	}
+
+	return CheckItem{
+		Category: "Workspaces",
+		Name:     "Abstracción de Workspaces",
+		Status:   StatusOK,
+		Message:  fmt.Sprintf("%d proyectos registrados en workspaces.json", len(list)),
+		Details:  fmt.Sprintf("Proyectos activos: %s", strings.Join(names, ", ")),
+	}
 }
 
 // FormatCLI formats the diagnostic report as a clean ANSI console text.
