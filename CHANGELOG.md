@@ -3,6 +3,20 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.2.1] - 2026-10-13
+
+### 🐛 Corregido (Fixed)
+- **Desincronización de Terminal ConPTY**:
+  - Deduplicación y debounce en eventos de resize (`fitActiveTerminal` y `fitSplitTerminal`) para prevenir spam de `ResizePseudoConsole` a Windows ConPTY y evitar sobreescritura de caracteres en TUIs interactivas como Claude Code.
+  - Sincronización precisa de 250ms tras animaciones de la barra lateral.
+- **Repintado de Pantalla (`Ctrl+L`)**:
+  - La acción de limpiar buffer (`clearActiveTerminal`) ahora envía Form Feed (`\x0c` / `Ctrl+L`) al PTY para forzar el repintado íntegro de la aplicación interactiva activa.
+  - Añadido botón de acceso rápido `Ctrl+L` en la barra inferior del terminal.
+- **Ocultamiento de Barra Lateral**:
+  - Corrección de visibilidad estricta (`visibility: hidden !important`) en `.sidebar.collapsed` evitando filtrado de botones en el borde de la pantalla.
+
+---
+
 ## [1.2.0] - 2026-10-12
 
 ### 🚀 Añadido (Added)
