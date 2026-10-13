@@ -16,6 +16,10 @@ let isDraggingSplit = false;
 let primaryRatio = 0.5;
 let contextMenuSessionId = null;
 let contextMenuSessionName = '';
+let lastSentCols = 0;
+let lastSentRows = 0;
+let lastSentCols2 = 0;
+let lastSentRows2 = 0;
 
 
 
@@ -356,6 +360,8 @@ function connectToSession(sessionId) {
         return;
     }
     currentConnectedSessionId = sessionId;
+    lastSentCols = 0;
+    lastSentRows = 0;
 
     if (termWs) {
         termWs.onopen = null;
@@ -466,7 +472,11 @@ function fitActiveTerminal() {
         try {
             fitAddon.fit();
             if (termObj.cols > 0 && termObj.rows > 0) {
-                termWs.send(JSON.stringify({ type: "resize", cols: termObj.cols, rows: termObj.rows }));
+                if (termObj.cols !== lastSentCols || termObj.rows !== lastSentRows) {
+                    lastSentCols = termObj.cols;
+                    lastSentRows = termObj.rows;
+                    termWs.send(JSON.stringify({ type: "resize", cols: termObj.cols, rows: termObj.rows }));
+                }
             }
         } catch (e) {}
     }
@@ -704,6 +714,8 @@ function connectToSplitSession(sessionId) {
         return;
     }
     currentSplitConnectedSessionId = sessionId;
+    lastSentCols2 = 0;
+    lastSentRows2 = 0;
 
     if (termWs2) {
         termWs2.onopen = null;
@@ -806,7 +818,11 @@ function fitSplitTerminal() {
         try {
             fitAddon2.fit();
             if (termObj2.cols > 0 && termObj2.rows > 0) {
-                termWs2.send(JSON.stringify({ type: "resize", cols: termObj2.cols, rows: termObj2.rows }));
+                if (termObj2.cols !== lastSentCols2 || termObj2.rows !== lastSentRows2) {
+                    lastSentCols2 = termObj2.cols;
+                    lastSentRows2 = termObj2.rows;
+                    termWs2.send(JSON.stringify({ type: "resize", cols: termObj2.cols, rows: termObj2.rows }));
+                }
             }
         } catch (e) {}
     }
@@ -906,6 +922,7 @@ async function triggerKillFromCtx() {
 
 function clearActiveTerminal() {
     if (termObj) termObj.clear();
+    sendTerminalKey('\x0c');
 }
 
 function sendTerminalKey(keyStr) {

@@ -15,15 +15,19 @@ function toggleSidebar() {
     setTimeout(() => {
         if (isSplitActive) updateSplitDimensions();
         else fitActiveTerminal();
-    }, 230);
+    }, 250);
 }
 
+let windowResizeTimer = null;
 function handleWindowResize() {
-    if (isSplitActive) {
-        updateSplitDimensions();
-    } else if (activeTab === 'terminal') {
-        fitActiveTerminal();
-    }
+    clearTimeout(windowResizeTimer);
+    windowResizeTimer = setTimeout(() => {
+        if (isSplitActive) {
+            updateSplitDimensions();
+        } else if (activeTab === 'terminal') {
+            fitActiveTerminal();
+        }
+    }, 120);
 
     const statsModal = document.getElementById('modal-sys-stats');
     if (statsModal && statsModal.classList.contains('open') && statsModal.style.display !== 'none') {

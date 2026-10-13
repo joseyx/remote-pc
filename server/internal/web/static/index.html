@@ -437,7 +437,8 @@
 
                         <!-- Mobile Key Helper Bar -->
                         <div class="term-mobile-bar">
-                            <button class="btn btn-sm" onclick="sendTerminalKey('\x03')">Ctrl+C</button>
+                            <button class="btn btn-sm" onclick="sendTerminalKey('\x03')" title="Cancelar comando (Ctrl+C)">Ctrl+C</button>
+                            <button class="btn btn-sm" onclick="clearActiveTerminal()" title="Repintar y limpiar pantalla (Ctrl+L)">Ctrl+L</button>
                             <button class="btn btn-sm" onclick="sendTerminalKey('\t')">Tab</button>
                             <button class="btn btn-sm" onclick="sendTerminalKey('\x1b')">Esc</button>
                             <button class="btn btn-sm" onclick="sendTerminalKey('\x1b[A')">↑</button>
