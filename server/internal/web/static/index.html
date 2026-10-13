@@ -40,63 +40,131 @@
         </div>
 
         <div class="header-controls">
-            <!-- System Stats Widget (RAM & Local DBs) -->
-            <button class="btn btn-sm" id="header-sys-stats" onclick="toggleSystemStatsModal()" style="display: flex; align-items: center; gap: 5px; cursor: pointer;" title="Abrir / Cerrar monitor detallado de recursos y servicios locales">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> <strong id="val-sys-ram">...</strong>
-                <span id="sys-services-badge" style="font-size: 11px; margin-left: 2px;"></span>
-            </button>
+            <!-- Bloque 1: Telemetría y Estado -->
+            <div class="header-group header-telemetry">
+                <!-- System Stats Widget (RAM & Local DBs) -->
+                <button class="btn btn-sm" id="header-sys-stats" onclick="toggleSystemStatsModal()" style="display: flex; align-items: center; gap: 5px; cursor: pointer;" title="Abrir / Cerrar monitor detallado de recursos y servicios locales">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> <strong id="val-sys-ram">...</strong>
+                    <span id="sys-services-badge" style="font-size: 11px; margin-left: 2px;"></span>
+                </button>
 
-            <!-- Command Palette Shortcut (Ctrl+K) -->
-            <button class="btn btn-sm" onclick="openCommandPalette()" title="Paleta de comandos (Ctrl+K)">
-                <span style="color: var(--accent); font-weight: 700;">⌘</span> Ctrl+K
-            </button>
-
-            <!-- Quake Dropdown Terminal Shortcut (F12) -->
-            <button class="btn btn-sm" onclick="toggleQuakeTerminal()" title="Terminal rápida desplegable (F12 o Ctrl+\`)">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> Quake
-            </button>
-
-            <!-- Sound Alerts Toggle -->
-            <button class="btn btn-sm" id="btn-toggle-notif" onclick="toggleNotifications()" title="Alertas sonoras al finalizar comandos (Activado)">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
-            </button>
-
-            <!-- End of Day / Handoff Quick Button -->
-            <button class="btn btn-sm btn-primary" id="header-handoff-btn" onclick="openEndOfDayModal()" title="Cierre de Jornada & Handoffs de Agentes">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg> Cierre de Día
-            </button>
-
-            <!-- Windscribe VPN Quick Badge -->
-            <button class="btn btn-sm" id="header-vpn-btn" onclick="openVPNModal()" title="Windscribe VPN Status">
-                <span class="vpn-dot" id="header-vpn-dot"></span>
-                <span id="header-vpn-text">VPN: Checking...</span>
-            </button>
-
-            <!-- Server LAN IP -->
-            <div class="btn btn-sm" style="cursor: default;" id="header-lan-ip">
-                <span>LAN:</span> <strong id="val-lan-ip">...</strong>
+                <!-- Windscribe VPN Quick Badge -->
+                <button class="btn btn-sm" id="header-vpn-btn" onclick="openVPNModal()" title="Windscribe VPN Status">
+                    <span class="vpn-dot" id="header-vpn-dot"></span>
+                    <span id="header-vpn-text">VPN: Checking...</span>
+                </button>
             </div>
 
-            <!-- Copy Token -->
-            <button class="btn btn-sm" onclick="copyToken()" title="Copiar Token de Acceso">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                Token
-            </button>
+            <div class="header-group-divider"></div>
 
-            <!-- Security & Token Settings -->
-            <button class="btn btn-sm" onclick="openSecurityModal()" title="Configuración de Seguridad, Token y PIN">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Seguridad
-            </button>
+            <!-- Bloque 2: Herramientas Frecuentes de Trabajo -->
+            <div class="header-group header-actions">
+                <!-- Command Palette Shortcut (Ctrl+K) -->
+                <button class="btn btn-sm" onclick="openCommandPalette()" title="Paleta de comandos (Ctrl+K)">
+                    <span style="color: var(--accent); font-weight: 700;">⌘</span> Ctrl+K
+                </button>
 
-            <!-- Pair Phone Modal -->
-            <button class="btn btn-sm" onclick="openPairModal()" title="Emparejar Orbit Mobile con QR">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><path d="M12 18h.01"></path></svg> Pair Phone
-            </button>
+                <!-- Quake Dropdown Terminal Shortcut (F12) -->
+                <button class="btn btn-sm" onclick="toggleQuakeTerminal()" title="Terminal rápida desplegable (F12 o Ctrl+\`)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> Quake
+                </button>
 
-            <!-- Refresh -->
-            <button class="btn btn-sm" onclick="refreshAll()" title="Refresh Hub">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
-            </button>
+                <!-- End of Day / Handoff Quick Button -->
+                <button class="btn btn-sm btn-primary" id="header-handoff-btn" onclick="openEndOfDayModal()" title="Cierre de Jornada & Handoffs de Agentes">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg> Cierre de Día
+                </button>
+            </div>
+
+            <div class="header-group-divider"></div>
+
+            <!-- Bloque 3: Menú Unificado de Sistema -->
+            <div class="header-group header-system">
+                <div class="dropdown-wrapper" id="sys-dropdown-wrapper">
+                    <button class="btn btn-sm" id="btn-sys-menu" onclick="toggleSystemMenu(event)" title="Ajustes, utilidades y conectividad del sistema">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <span>Sistema</span>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 2px;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-right" id="sys-dropdown-menu">
+                        <div class="dropdown-header">
+                            <span>Orbit Host</span>
+                            <span class="dropdown-sub" id="sys-menu-host-badge" style="color: var(--green); font-size: 10px;">● ONLINE</span>
+                        </div>
+                        
+                        <!-- LAN IP item -->
+                        <div class="dropdown-item" onclick="copyLanUrl()" title="Copiar URL LAN al portapapeles">
+                            <div class="item-icon">🌐</div>
+                            <div class="item-content">
+                                <span class="item-label">Dirección LAN</span>
+                                <span class="item-sub" id="val-lan-ip">...</span>
+                            </div>
+                            <span class="item-action">Copiar</span>
+                        </div>
+
+                        <!-- Token item -->
+                        <div class="dropdown-item" onclick="copyToken()" title="Copiar Token de Acceso">
+                            <div class="item-icon">📋</div>
+                            <div class="item-content">
+                                <span class="item-label">Token de Acceso</span>
+                                <span class="item-sub">Autenticación API / Móvil</span>
+                            </div>
+                            <span class="item-action">Copiar</span>
+                        </div>
+
+                        <div class="dropdown-divider"></div>
+
+                        <!-- Pair Phone -->
+                        <div class="dropdown-item" onclick="openPairModal(); closeSystemMenu();" title="Emparejar Orbit Mobile con QR">
+                            <div class="item-icon">📱</div>
+                            <div class="item-content">
+                                <span class="item-label">Emparejar Móvil</span>
+                                <span class="item-sub">Escanear código QR</span>
+                            </div>
+                        </div>
+
+                        <!-- Security & PIN -->
+                        <div class="dropdown-item" onclick="openSecurityModal(); closeSystemMenu();" title="Configuración de Seguridad, Token y PIN">
+                            <div class="item-icon">🔒</div>
+                            <div class="item-content">
+                                <span class="item-label">Seguridad y PIN</span>
+                                <span class="item-sub">Tokens, PIN de bloqueo</span>
+                            </div>
+                        </div>
+
+                        <div class="dropdown-divider"></div>
+
+                        <!-- Sound Alerts -->
+                        <div class="dropdown-item" onclick="toggleNotifications()" id="btn-toggle-notif" title="Alternar alertas sonoras al finalizar comandos">
+                            <div class="item-icon" id="sys-menu-notif-icon">🔔</div>
+                            <div class="item-content">
+                                <span class="item-label">Alertas Sonoras</span>
+                                <span class="item-sub">Notificar fin de comandos</span>
+                            </div>
+                            <span class="item-badge badge-active" id="sys-menu-notif-badge">ON</span>
+                        </div>
+
+                        <!-- Doctor -->
+                        <div class="dropdown-item" onclick="openDoctorModal(); closeSystemMenu();" title="Ejecutar diagnóstico Orbit Doctor">
+                            <div class="item-icon">🩺</div>
+                            <div class="item-content">
+                                <span class="item-label">Diagnóstico (Doctor)</span>
+                                <span class="item-sub">Verificar salud del sistema</span>
+                            </div>
+                        </div>
+
+                        <div class="dropdown-divider"></div>
+
+                        <!-- Refresh -->
+                        <div class="dropdown-item" onclick="refreshAll(); closeSystemMenu();" title="Recargar Cockpit">
+                            <div class="item-icon">🔄</div>
+                            <div class="item-content">
+                                <span class="item-label">Recargar Cockpit</span>
+                                <span class="item-sub">Actualizar sesiones y estado</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </header>
 

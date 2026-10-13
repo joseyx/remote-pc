@@ -1502,4 +1502,49 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+// ==========================================
+// System Header Dropdown Menu & LAN Utilities
+// ==========================================
+function toggleSystemMenu(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    const wrapper = document.getElementById('sys-dropdown-wrapper');
+    if (!wrapper) return;
+    wrapper.classList.toggle('open');
+}
+
+function closeSystemMenu() {
+    const wrapper = document.getElementById('sys-dropdown-wrapper');
+    if (wrapper) wrapper.classList.remove('open');
+}
+
+// Global click outside to close dropdown
+document.addEventListener('click', (e) => {
+    const wrapper = document.getElementById('sys-dropdown-wrapper');
+    if (wrapper && wrapper.classList.contains('open')) {
+        if (!wrapper.contains(e.target)) {
+            closeSystemMenu();
+        }
+    }
+});
+
+// Escape key closes system dropdown
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeSystemMenu();
+    }
+});
+
+function copyLanUrl() {
+    if (!serverInfo) return;
+    const primaryIp = (serverInfo.lanIps && serverInfo.lanIps.length > 0) ? serverInfo.lanIps[0] : window.location.hostname;
+    const port = serverInfo.port || '8080';
+    const url = `http://${primaryIp}:${port}`;
+    navigator.clipboard.writeText(url);
+    showToast("URL LAN copiada: " + url);
+}
+
+
 

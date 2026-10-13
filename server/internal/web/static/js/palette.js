@@ -104,6 +104,7 @@ function buildCmdPaletteItems() {
         { cat: 'Sistema', title: 'Alternar VPN Windscribe', desc: 'Abrir diálogo de conexión VPN', icon: '🛡️', shortcut: '', action: () => { closeCommandPalette(); openVPNModal(); } },
         { cat: 'Sistema', title: 'Conectar Teléfono Móvil', desc: 'Ver QR y credenciales de pairing', icon: '📱', shortcut: '', action: () => { closeCommandPalette(); openPairModal(); } },
         { cat: 'Sistema', title: 'Copiar Token de Acceso', desc: 'Copiar token de autorización', icon: '📋', shortcut: '', action: () => { closeCommandPalette(); copyToken(); } },
+        { cat: 'Sistema', title: 'Copiar URL LAN', desc: 'Copiar dirección http://<ip>:<puerto> para acceso local', icon: '🌐', shortcut: '', action: () => { closeCommandPalette(); copyLanUrl(); } },
         { cat: 'Sistema', title: 'Servicio en Segundo Plano (Orbit Daemon)', desc: 'Configurar autoarranque silencioso con el sistema operativo', icon: '⚙️', shortcut: '', action: () => { closeCommandPalette(); openServiceModal(); } },
         { cat: 'Seguridad', title: 'Seguridad, Token & PIN', desc: 'Gestionar token de acceso y PIN de confirmación', icon: '🔐', shortcut: '', action: () => { closeCommandPalette(); openSecurityModal(); } },
         { cat: 'Seguridad', title: 'Bloquear Pantalla del Cockpit', desc: 'Proteger pantalla activa hasta ingresar el PIN', icon: '🔒', shortcut: 'Alt+L', action: () => { closeCommandPalette(); lockCockpit(); } },

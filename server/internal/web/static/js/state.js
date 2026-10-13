@@ -183,8 +183,17 @@ function escapeHtml(str) {
 
 function toggleNotifications() {
     audioNotifEnabled = !audioNotifEnabled;
+    const icon = document.getElementById('sys-menu-notif-icon');
+    const badge = document.getElementById('sys-menu-notif-badge');
+    if (icon) {
+        icon.textContent = audioNotifEnabled ? '🔔' : '🔕';
+    }
+    if (badge) {
+        badge.textContent = audioNotifEnabled ? 'ON' : 'OFF';
+        badge.className = 'item-badge ' + (audioNotifEnabled ? 'badge-active' : 'badge-inactive');
+    }
     const btn = document.getElementById('btn-toggle-notif');
-    if (btn) {
+    if (btn && !icon) {
         btn.textContent = audioNotifEnabled ? '🔔' : '🔕';
         btn.title = audioNotifEnabled ? 'Alertas sonoras (Activado)' : 'Alertas sonoras (Silenciado)';
     }
