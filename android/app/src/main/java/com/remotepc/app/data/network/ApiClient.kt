@@ -138,6 +138,44 @@ class ApiClient(private val config: AppConfig) {
         }
     }
 
+    suspend fun listWorkspaces(): List<WorkspaceInfo> = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/workspaces").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to list workspaces: ${response.code}")
+            val body = response.body?.string() ?: "[]"
+            json.decodeFromString(body)
+        }
+    }
+
+    suspend fun getWorkspaceBranches(workspaceId: String): List<BranchInfo> = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(workspaceId, "UTF-8")
+        val request = newRequestBuilder("/api/workspaces/$encoded/branches").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to list branches: ${response.code}")
+            val body = response.body?.string() ?: "[]"
+            json.decodeFromString(body)
+        }
+    }
+
+    suspend fun listSqlDumps(): List<SqlDumpInfo> = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/system/sql-dumps").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to list SQL dumps: ${response.code}")
+            val body = response.body?.string() ?: "[]"
+            json.decodeFromString(body)
+        }
+    }
+
+    suspend fun linkWorkspaceRepo(workspaceId: String, repoUrl: String): Boolean = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(workspaceId, "UTF-8")
+        val bodyStr = """{"repoUrl":"$repoUrl"}"""
+        val body = bodyStr.toRequestBody("application/json".toMediaType())
+        val request = newRequestBuilder("/api/workspaces/$encoded/link-repo").post(body).build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
     suspend fun startDevServer(bubbleId: String): Boolean = withContext(Dispatchers.IO) {
         val request = newRequestBuilder("/api/bubbles/$bubbleId/dev/start").post("".toRequestBody(null)).build()
         client.newCall(request).execute().use { response ->

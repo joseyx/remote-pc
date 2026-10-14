@@ -606,6 +606,126 @@ function renderWizardWorkspaceTabs() {
     }).join('');
 }
 
+let workspaceBranchesCache = {};
+let discoveredSqlDumps = [];
+
+async function loadWorkspaceBranches(wsId) {
+    const loadingEl = document.getElementById(`${wsId}-branch-loading`);
+    if (loadingEl) loadingEl.style.display = 'inline';
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch(`/api/workspaces/${encodeURIComponent(wsId)}/branches`, { headers });
+        if (!res.ok) return;
+        const branches = await res.json();
+        workspaceBranchesCache[wsId] = branches || [];
+        populateBranchSelect(wsId);
+    } catch (e) {
+        console.error("Error al cargar ramas:", e);
+    } finally {
+        if (loadingEl) loadingEl.style.display = 'none';
+    }
+}
+
+function populateBranchSelect(wsId) {
+    const select = document.getElementById(`${wsId}-existing-branch-select`);
+    if (!select) return;
+    const branches = workspaceBranchesCache[wsId] || [];
+    let html = `<option value="">-- Seleccionar rama existente (${branches.length}) --</option>`;
+    branches.forEach(b => {
+        const tag = b.isRemote ? 'origin' : 'local';
+        html += `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)} [${tag}]</option>`;
+    });
+    select.innerHTML = html;
+}
+
+function toggleBranchSource(wsId) {
+    const isExisting = document.querySelector(`input[name="${wsId}-branch-type"][value="existing"]`)?.checked;
+    const existingContainer = document.getElementById(`${wsId}-existing-branch-container`);
+    const newContainer = document.getElementById(`${wsId}-new-branch-container`);
+    if (existingContainer) existingContainer.style.display = isExisting ? 'block' : 'none';
+    if (newContainer) newContainer.style.display = isExisting ? 'none' : 'block';
+
+    if (isExisting && (!workspaceBranchesCache[wsId] || workspaceBranchesCache[wsId].length === 0)) {
+        loadWorkspaceBranches(wsId);
+    }
+}
+
+function onSelectExistingBranch(wsId) {
+    const select = document.getElementById(`${wsId}-existing-branch-select`);
+    const branch = select?.value;
+    if (!branch) return;
+
+    if (wsId === 'aditum') {
+        const taskIdInput = document.getElementById('aditum-task-id');
+        if (taskIdInput) {
+            taskIdInput.value = branch;
+            updateAditumPortPreview();
+        }
+    } else if (wsId === 'brif') {
+        const taskIdInput = document.getElementById('brif-task-id');
+        if (taskIdInput) taskIdInput.value = branch;
+    } else {
+        const taskIdInput = document.getElementById('generic-task-id');
+        if (taskIdInput) taskIdInput.value = branch;
+    }
+}
+
+async function loadSqlDumps() {
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/system/sql-dumps', { headers });
+        if (!res.ok) return;
+        discoveredSqlDumps = await res.json();
+        populateSqlDumpsSelect();
+    } catch (e) {
+        console.error("Error al obtener dumps SQL:", e);
+    }
+}
+
+function populateSqlDumpsSelect() {
+    const select = document.getElementById('aditum-detected-dumps-select');
+    if (!select) return;
+    let html = `<option value="">-- Seleccionar archivo dump en Descargas / Work (${discoveredSqlDumps.length}) --</option>`;
+    discoveredSqlDumps.forEach(d => {
+        html += `<option value="${escapeHtml(d.path)}">${escapeHtml(d.name)} (${escapeHtml(d.sizeStr)})</option>`;
+    });
+    select.innerHTML = html;
+}
+
+function onSelectDetectedDump() {
+    const select = document.getElementById('aditum-detected-dumps-select');
+    const path = select?.value;
+    if (path) {
+        const fileInput = document.getElementById('aditum-custom-dump-file');
+        if (fileInput) fileInput.value = path;
+    }
+}
+
+function toggleAditumSeedCustom() {
+    const mode = document.getElementById('aditum-seed-mode').value;
+    const dumpContainer = document.getElementById('aditum-custom-dump-container');
+    const schemaContainer = document.getElementById('aditum-custom-schema-container');
+    const hint = document.getElementById('aditum-seed-hint');
+
+    if (dumpContainer) dumpContainer.style.display = (mode === 'custom_dump') ? 'block' : 'none';
+    if (schemaContainer) schemaContainer.style.display = (mode === 'custom_schema') ? 'block' : 'none';
+
+    if (mode === 'custom_dump') {
+        hint.textContent = "Se creará el schema y se importará directamente el archivo .sql o .sql.gz seleccionado.";
+        if (!discoveredSqlDumps || discoveredSqlDumps.length === 0) {
+            loadSqlDumps();
+        }
+    } else if (mode === 'custom_schema') {
+        hint.textContent = "Se clonará la estructura y datos desde otro schema MySQL existente en localhost:3306.";
+    } else if (mode === 'slim') {
+        hint.textContent = "⭐ Clonado ultra rápido de aditum_slim (~25s) para desarrollo cotidiano.";
+    } else {
+        hint.textContent = "Clonado completo de la base de datos aditum viva (~3.5 GB, 3-10 min).";
+    }
+}
+
 function openNewBubbleModal(prefWs = null) {
     if (prefWs) {
         wizardWs = prefWs;
@@ -620,6 +740,24 @@ function openNewBubbleModal(prefWs = null) {
     renderWizardWorkspaceTabs();
     setWizardWorkspace(wizardWs);
     suggestNextAditumIndex();
+
+    // Reset radio buttons and loads
+    ['aditum', 'brif', 'generic'].forEach(id => {
+        const radioNew = document.querySelector(`input[name="${id}-branch-type"][value="new"]`);
+        if (radioNew) radioNew.checked = true;
+        toggleBranchSource(id);
+    });
+
+    // Reset seed mode
+    const seedMode = document.getElementById('aditum-seed-mode');
+    if (seedMode) {
+        seedMode.value = 'slim';
+        toggleAditumSeedCustom();
+    }
+
+    // Preload branches in background
+    loadWorkspaceBranches(wizardWs);
+
     document.getElementById('modal-new-bubble').classList.add('open');
 }
 
@@ -650,6 +788,8 @@ function setWizardWorkspace(wsId) {
             if (portEl && ws.defaultPort) portEl.value = ws.defaultPort;
         }
     }
+
+    loadWorkspaceBranches(wsId);
 }
 
 function suggestNextAditumIndex() {
@@ -704,28 +844,49 @@ async function submitCreateBubble() {
 
         let body = {};
         if (wizardWs === 'aditum') {
-            const taskId = document.getElementById('aditum-task-id').value.trim();
+            const isExistingBranch = document.querySelector('input[name="aditum-branch-type"][value="existing"]')?.checked;
+            const existingBranch = document.getElementById('aditum-existing-branch-select')?.value.trim();
+            const taskId = document.getElementById('aditum-task-id').value.trim() || existingBranch;
             if (!taskId) {
-                appAlert("Por favor ingresa un ID de tarea (ej. TAR-1130)", "Campo Requerido", "⚠️");
+                appAlert("Por favor ingresa un ID de tarea (ej. TAR-1130) o selecciona una rama existente", "Campo Requerido", "⚠️");
                 btn.disabled = false;
                 btn.textContent = "⚡ Crear y Configurar Bubble";
                 return;
             }
             const index = parseInt(document.getElementById('aditum-index').value) || 1;
             const baseBranch = document.getElementById('aditum-base-branch').value.trim() || 'development';
-            const useSlim = document.getElementById('aditum-seed-mode').value === 'slim';
+            const seedMode = document.getElementById('aditum-seed-mode').value;
 
             body = {
                 workspace: 'aditum',
                 taskId: taskId,
                 index: index,
                 baseBranch: baseBranch,
-                useSlim: useSlim
+                useSlim: seedMode === 'slim'
             };
+
+            if (isExistingBranch && existingBranch) {
+                body.cloneBranch = existingBranch;
+            }
+            if (seedMode === 'custom_dump') {
+                const dumpFile = document.getElementById('aditum-custom-dump-file').value.trim();
+                if (!dumpFile) {
+                    appAlert("Por favor selecciona o especifica la ruta del dump SQL", "Dump Requerido", "⚠️");
+                    btn.disabled = false;
+                    btn.textContent = "⚡ Crear y Configurar Bubble";
+                    return;
+                }
+                body.seedDump = dumpFile;
+            } else if (seedMode === 'custom_schema') {
+                const schema = document.getElementById('aditum-custom-schema-input').value.trim();
+                if (schema) body.seedSchema = schema;
+            }
         } else if (wizardWs === 'brif') {
-            const taskId = document.getElementById('brif-task-id').value.trim();
+            const isExistingBranch = document.querySelector('input[name="brif-branch-type"][value="existing"]')?.checked;
+            const existingBranch = document.getElementById('brif-existing-branch-select')?.value.trim();
+            const taskId = document.getElementById('brif-task-id').value.trim() || existingBranch;
             if (!taskId) {
-                appAlert("Por favor ingresa un nombre de tarea o spider (ej. dialogos-mx)", "Campo Requerido", "⚠️");
+                appAlert("Por favor ingresa un nombre de tarea o selecciona una rama", "Campo Requerido", "⚠️");
                 btn.disabled = false;
                 btn.textContent = "⚡ Crear y Configurar Bubble";
                 return;
@@ -739,11 +900,16 @@ async function submitCreateBubble() {
                 isWorktree: isWorktree,
                 baseBranch: baseBranch
             };
+            if (isExistingBranch && existingBranch) {
+                body.cloneBranch = existingBranch;
+            }
         } else {
             // Generic workspace
-            const taskId = document.getElementById('generic-task-id').value.trim();
+            const isExistingBranch = document.querySelector('input[name="generic-branch-type"][value="existing"]')?.checked;
+            const existingBranch = document.getElementById('generic-existing-branch-select')?.value.trim();
+            const taskId = document.getElementById('generic-task-id').value.trim() || existingBranch;
             if (!taskId) {
-                appAlert("Por favor ingresa un identificador de tarea o rama (ej. feat-login)", "Campo Requerido", "⚠️");
+                appAlert("Por favor ingresa un identificador de tarea o selecciona una rama", "Campo Requerido", "⚠️");
                 btn.disabled = false;
                 btn.textContent = "⚡ Crear y Configurar Bubble";
                 return;
@@ -761,6 +927,9 @@ async function submitCreateBubble() {
                 baseBranch: baseBranch,
                 port: port
             };
+            if (isExistingBranch && existingBranch) {
+                body.cloneBranch = existingBranch;
+            }
         }
 
         const res = await fetch('/api/bubbles', { method: 'POST', headers, body: JSON.stringify(body) });
@@ -822,6 +991,7 @@ function renderWorkspacesListInModal() {
                     <div style="font-size: 11px; color: var(--text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px;" title="${escapeHtml(ws.basePath)}">
                         📁 ${escapeHtml(ws.basePath)}
                     </div>
+                    ${ws.repoUrl ? `<div style="font-size: 11px; color: var(--accent); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(ws.repoUrl)}">🔗 ${escapeHtml(ws.repoUrl)}</div>` : ''}
                     <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px; display: flex; gap: 12px;">
                         <span>Rama base: <code style="color: var(--text-main);">${escapeHtml(ws.defaultBase || 'main')}</code></span>
                         ${ws.devCommand ? `<span>Dev: <code style="color: var(--green);">${escapeHtml(ws.devCommand)}</code></span>` : ''}
@@ -846,6 +1016,7 @@ function resetWorkspaceForm() {
     document.getElementById('ws-input-name').value = '';
     document.getElementById('ws-input-id').value = '';
     document.getElementById('ws-input-path').value = '';
+    document.getElementById('ws-input-repo').value = '';
     document.getElementById('ws-input-base').value = 'main';
     document.getElementById('ws-input-port').value = '';
     document.getElementById('ws-input-cmd').value = '';
@@ -863,6 +1034,7 @@ function editWorkspace(id) {
     document.getElementById('ws-input-name').value = ws.name || '';
     document.getElementById('ws-input-id').value = ws.id || '';
     document.getElementById('ws-input-path').value = ws.basePath || '';
+    document.getElementById('ws-input-repo').value = ws.repoUrl || '';
     document.getElementById('ws-input-base').value = ws.defaultBase || 'main';
     document.getElementById('ws-input-port').value = ws.defaultPort || '';
     document.getElementById('ws-input-cmd').value = ws.devCommand || '';
@@ -878,6 +1050,7 @@ async function saveWorkspaceFromForm() {
     const name = document.getElementById('ws-input-name').value.trim();
     const id = document.getElementById('ws-input-id').value.trim() || name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     const basePath = document.getElementById('ws-input-path').value.trim();
+    const repoUrl = document.getElementById('ws-input-repo').value.trim();
     const defaultBase = document.getElementById('ws-input-base').value.trim() || 'main';
     const defaultPort = parseInt(document.getElementById('ws-input-port').value) || 0;
     const devCommand = document.getElementById('ws-input-cmd').value.trim();
@@ -897,6 +1070,7 @@ async function saveWorkspaceFromForm() {
         name: name,
         type: id,
         basePath: basePath,
+        repoUrl: repoUrl,
         defaultBase: defaultBase,
         defaultPort: defaultPort,
         devCommand: devCommand,
@@ -926,6 +1100,17 @@ async function saveWorkspaceFromForm() {
         }
 
         if (res.ok) {
+            if (repoUrl) {
+                try {
+                    await fetch(`/api/workspaces/${encodeURIComponent(editId || id)}/link-repo`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ repoUrl: repoUrl })
+                    });
+                } catch (e) {
+                    console.warn("Error vinculando remote origin:", e);
+                }
+            }
             showToast(editId ? "Workspace actualizado con éxito." : "Workspace añadido con éxito.");
             resetWorkspaceForm();
             await fetchWorkspaces();

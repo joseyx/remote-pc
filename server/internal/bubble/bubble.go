@@ -51,16 +51,32 @@ type WorkspaceInfo struct {
 	Description string        `json:"description,omitempty"`
 	DevCommand  string        `json:"devCommand,omitempty"`
 	DefaultPort int           `json:"defaultPort,omitempty"`
+	RepoURL     string        `json:"repoUrl,omitempty"`
+}
+
+type BranchInfo struct {
+	Name     string `json:"name"`
+	IsRemote bool   `json:"isRemote"`
+}
+
+type SqlDumpInfo struct {
+	Path     string    `json:"path"`
+	Name     string    `json:"name"`
+	Size     int64     `json:"size"`
+	SizeStr  string    `json:"sizeStr"`
+	ModTime  time.Time `json:"modTime"`
 }
 
 type CreateBubbleRequest struct {
-	Workspace  WorkspaceType `json:"workspace"`
-	TaskID     string        `json:"taskId"`     // e.g. "TAR-1120" (Aditum), "dialogos-mx" (Brif), or "feature-login"
-	Name       string        `json:"name"`       // optional human name
-	BaseBranch string        `json:"baseBranch"` // e.g. "development", "main"
-	UseSlim    bool          `json:"useSlim"`    // For Aditum: seed aditum_slim (true by default)
-	SeedSchema string        `json:"seedSchema"` // Custom seed schema if any
-	Index      int           `json:"index"`      // Port index 1-99 for Aditum
-	IsWorktree bool          `json:"isWorktree"` // true if isolated worktree, false if in-place branch
-	Port       int           `json:"port,omitempty"` // Custom port override
+	Workspace   WorkspaceType `json:"workspace"`
+	TaskID      string        `json:"taskId"`                // e.g. "TAR-1120" (Aditum), "dialogos-mx" (Brif), or "feature-login"
+	Name        string        `json:"name"`                  // optional human name
+	BaseBranch  string        `json:"baseBranch"`            // e.g. "development", "main"
+	CloneBranch string        `json:"cloneBranch,omitempty"` // If set, checkout/clone this existing branch directly
+	UseSlim     bool          `json:"useSlim"`               // For Aditum: seed aditum_slim (true by default)
+	SeedSchema  string        `json:"seedSchema,omitempty"`  // Custom seed schema if any
+	SeedDump    string        `json:"seedDump,omitempty"`    // Custom SQL dump file path if any
+	Index       int           `json:"index"`                 // Port index 1-99 for Aditum
+	IsWorktree  bool          `json:"isWorktree"`            // true if isolated worktree, false if in-place branch
+	Port        int           `json:"port,omitempty"`        // Custom port override
 }

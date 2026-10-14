@@ -159,6 +159,28 @@ func (m *Manager) saveWorkspacesLocked() error {
 	return os.WriteFile(m.workspacesPath, data, 0644)
 }
 
+func detectRepoURL(basePath string) string {
+	cmd := exec.Command("git", "-C", basePath, "config", "--get", "remote.origin.url")
+	out, err := cmd.Output()
+	if err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	return ""
+}
+
+func resolveWorkspaceRepo(ws *WorkspaceInfo) {
+	if ws.RepoURL == "" && ws.BasePath != "" {
+		repoDir := ws.BasePath
+		if ws.Type == WorkspaceBrif {
+			scrapperPath := filepath.Join(ws.BasePath, "brif-scrapper")
+			if _, err := os.Stat(scrapperPath); err == nil {
+				repoDir = scrapperPath
+			}
+		}
+		ws.RepoURL = detectRepoURL(repoDir)
+	}
+}
+
 func (m *Manager) AddWorkspace(ws WorkspaceInfo) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -176,6 +198,10 @@ func (m *Manager) AddWorkspace(ws WorkspaceInfo) error {
 	ws.BasePath = filepath.Clean(ws.BasePath)
 	if _, err := os.Stat(ws.BasePath); err != nil {
 		return fmt.Errorf("la ruta no existe: %s", ws.BasePath)
+	}
+
+	if ws.RepoURL == "" {
+		resolveWorkspaceRepo(&ws)
 	}
 
 	m.workspaces[ws.Type] = ws
@@ -228,6 +254,9 @@ func (m *Manager) UpdateWorkspace(id string, ws WorkspaceInfo) error {
 	if ws.VaultAlias != "" {
 		existing.VaultAlias = ws.VaultAlias
 	}
+	if ws.RepoURL != "" {
+		existing.RepoURL = ws.RepoURL
+	}
 
 	m.workspaces[wsKey] = existing
 	if err := m.saveWorkspacesLocked(); err != nil {
@@ -236,6 +265,57 @@ func (m *Manager) UpdateWorkspace(id string, ws WorkspaceInfo) error {
 
 	m.scanWorkspaceLocked(existing)
 	return nil
+}
+
+func (m *Manager) LinkRepo(workspaceID, repoURL string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	wsKey := WorkspaceType(workspaceID)
+	ws, ok := m.workspaces[wsKey]
+	if !ok {
+		for k, v := range m.workspaces {
+			if v.ID == workspaceID {
+				wsKey = k
+				ws = v
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok {
+		return fmt.Errorf("workspace no encontrado: %s", workspaceID)
+	}
+
+	repoURL = strings.TrimSpace(repoURL)
+	repoDir := ws.BasePath
+	if ws.Type == WorkspaceBrif {
+		scrapperPath := filepath.Join(ws.BasePath, "brif-scrapper")
+		if _, err := os.Stat(scrapperPath); err == nil {
+			repoDir = scrapperPath
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
+		_ = exec.Command("git", "-C", repoDir, "init").Run()
+	}
+
+	cmdCheck := exec.Command("git", "-C", repoDir, "remote", "get-url", "origin")
+	if err := cmdCheck.Run(); err == nil {
+		cmdSet := exec.Command("git", "-C", repoDir, "remote", "set-url", "origin", repoURL)
+		if out, err := cmdSet.CombinedOutput(); err != nil {
+			return fmt.Errorf("error al actualizar remote origin: %w (%s)", err, string(out))
+		}
+	} else {
+		cmdAdd := exec.Command("git", "-C", repoDir, "remote", "add", "origin", repoURL)
+		if out, err := cmdAdd.CombinedOutput(); err != nil {
+			return fmt.Errorf("error al agregar remote origin: %w (%s)", err, string(out))
+		}
+	}
+
+	ws.RepoURL = repoURL
+	m.workspaces[wsKey] = ws
+	return m.saveWorkspacesLocked()
 }
 
 func (m *Manager) DeleteWorkspace(id string) error {
@@ -270,10 +350,12 @@ func (m *Manager) GetWorkspace(id string) (WorkspaceInfo, bool) {
 
 	wsKey := WorkspaceType(id)
 	if ws, ok := m.workspaces[wsKey]; ok {
+		resolveWorkspaceRepo(&ws)
 		return ws, true
 	}
 	for _, ws := range m.workspaces {
 		if ws.ID == id {
+			resolveWorkspaceRepo(&ws)
 			return ws, true
 		}
 	}
@@ -285,12 +367,194 @@ func (m *Manager) ListWorkspaces() []WorkspaceInfo {
 	defer m.mu.RUnlock()
 	res := make([]WorkspaceInfo, 0, len(m.workspaces))
 	for _, ws := range m.workspaces {
+		resolveWorkspaceRepo(&ws)
 		res = append(res, ws)
 	}
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].Name < res[j].Name
 	})
 	return res
+}
+
+func (m *Manager) GetWorkspaceBranches(workspaceID string) ([]BranchInfo, error) {
+	m.mu.RLock()
+	ws, ok := m.workspaces[WorkspaceType(workspaceID)]
+	if !ok {
+		for _, v := range m.workspaces {
+			if v.ID == workspaceID {
+				ws = v
+				ok = true
+				break
+			}
+		}
+	}
+	m.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("workspace no encontrado: %s", workspaceID)
+	}
+
+	repoDir := ws.BasePath
+	if ws.Type == WorkspaceBrif {
+		scrapperPath := filepath.Join(ws.BasePath, "brif-scrapper")
+		if _, err := os.Stat(scrapperPath); err == nil {
+			repoDir = scrapperPath
+		}
+	}
+
+	cmd := exec.Command("git", "-C", repoDir, "branch", "-a", "--format=%(refname:short)")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("error al listar ramas: %w", err)
+	}
+
+	lines := strings.Split(string(out), "\n")
+	branchMap := make(map[string]bool)
+	var result []BranchInfo
+
+	for _, line := range lines {
+		name := strings.TrimSpace(line)
+		if name == "" || strings.HasPrefix(name, "origin/HEAD") || strings.Contains(name, "HEAD detached") {
+			continue
+		}
+		isRemote := strings.HasPrefix(name, "origin/")
+		cleanName := strings.TrimPrefix(name, "origin/")
+		if !branchMap[cleanName] {
+			branchMap[cleanName] = true
+			result = append(result, BranchInfo{
+				Name:     cleanName,
+				IsRemote: isRemote,
+			})
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		a := result[i].Name
+		b := result[j].Name
+		prio := func(s string) int {
+			switch strings.ToLower(s) {
+			case "development":
+				return 1
+			case "develop":
+				return 2
+			case "main":
+				return 3
+			case "master":
+				return 4
+			default:
+				return 100
+			}
+		}
+		pa, pb := prio(a), prio(b)
+		if pa != pb {
+			return pa < pb
+		}
+		return strings.ToLower(a) < strings.ToLower(b)
+	})
+
+	return result, nil
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func (m *Manager) DiscoverSqlDumps() []SqlDumpInfo {
+	var candidates []string
+
+	home, err := os.UserHomeDir()
+	if err == nil {
+		candidates = append(candidates, filepath.Join(home, "Downloads"))
+	}
+	candidates = append(candidates, `C:\Users\Jose\Downloads`, `C:\Users\Jose\Documents\Work`, `C:\Users\Jose\bin`)
+
+	m.mu.RLock()
+	for _, ws := range m.workspaces {
+		if ws.BasePath != "" {
+			candidates = append(candidates, ws.BasePath)
+		}
+	}
+	m.mu.RUnlock()
+
+	seen := make(map[string]bool)
+	var dumps []SqlDumpInfo
+
+	scanDir := func(dir string, maxDepth int, currentDepth int) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			fullPath := filepath.Join(dir, entry.Name())
+			if entry.IsDir() {
+				if currentDepth < maxDepth && !strings.HasPrefix(entry.Name(), ".") && entry.Name() != "node_modules" && entry.Name() != "target" && entry.Name() != ".git" {
+					subEntries, err := os.ReadDir(fullPath)
+					if err == nil {
+						for _, sub := range subEntries {
+							if !sub.IsDir() {
+								lower := strings.ToLower(sub.Name())
+								if strings.HasSuffix(lower, ".sql") || strings.HasSuffix(lower, ".sql.gz") {
+									subPath := filepath.Join(fullPath, sub.Name())
+									norm := strings.ToLower(filepath.Clean(subPath))
+									if !seen[norm] {
+										seen[norm] = true
+										if fi, err := sub.Info(); err == nil {
+											dumps = append(dumps, SqlDumpInfo{
+												Path:    subPath,
+												Name:    sub.Name(),
+												Size:    fi.Size(),
+												SizeStr: formatBytes(fi.Size()),
+												ModTime: fi.ModTime(),
+											})
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			} else {
+				lower := strings.ToLower(entry.Name())
+				if strings.HasSuffix(lower, ".sql") || strings.HasSuffix(lower, ".sql.gz") {
+					norm := strings.ToLower(filepath.Clean(fullPath))
+					if !seen[norm] {
+						seen[norm] = true
+						if fi, err := entry.Info(); err == nil {
+							dumps = append(dumps, SqlDumpInfo{
+								Path:    fullPath,
+								Name:    entry.Name(),
+								Size:    fi.Size(),
+								SizeStr: formatBytes(fi.Size()),
+								ModTime: fi.ModTime(),
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for _, c := range candidates {
+		norm := filepath.Clean(c)
+		if fi, err := os.Stat(norm); err == nil && fi.IsDir() {
+			scanDir(norm, 1, 0)
+		}
+	}
+
+	sort.Slice(dumps, func(i, j int) bool {
+		return dumps[i].ModTime.After(dumps[j].ModTime)
+	})
+
+	return dumps
 }
 
 func (m *Manager) ListBubbles() []*Bubble {
@@ -623,19 +887,27 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 	switch req.Workspace {
 	case WorkspaceAditum:
 		startScript := `/c/Users/Jose/bin/start-worktree.sh`
-		args := []string{startScript, req.TaskID}
+		target := req.TaskID
+		if req.CloneBranch != "" {
+			target = strings.TrimPrefix(req.CloneBranch, "origin/")
+		}
+		args := []string{startScript, target}
 
 		if req.Index > 0 {
 			args = append(args, strconv.Itoa(req.Index))
 		}
 		if req.BaseBranch != "" {
-			args = append(args, req.BaseBranch)
+			args = append(args, strings.TrimPrefix(req.BaseBranch, "origin/"))
 		}
-		if !req.UseSlim {
-			args = append(args, "--full")
-		}
-		if req.SeedSchema != "" {
-			args = append(args, fmt.Sprintf("--seed=%s", req.SeedSchema))
+		if req.SeedDump != "" {
+			args = append(args, fmt.Sprintf("--dump=%s", req.SeedDump))
+		} else {
+			if !req.UseSlim {
+				args = append(args, "--full")
+			}
+			if req.SeedSchema != "" {
+				args = append(args, fmt.Sprintf("--seed=%s", req.SeedSchema))
+			}
 		}
 
 		cmd := exec.Command(bashPath, args...)
@@ -648,15 +920,18 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 		// Rescan to discover the newly created worktree
 		m.scanGitWorktrees(WorkspaceAditum, `C:\Users\Jose\Documents\Work\Aditum`)
 
-		// Find created bubble matching taskID
+		// Find created bubble matching target
 		var created *Bubble
 		for _, b := range m.bubbles {
-			if strings.Contains(strings.ToLower(b.Path), strings.ToLower(req.TaskID)) {
+			if strings.Contains(strings.ToLower(b.Path), strings.ToLower(target)) || (req.TaskID != "" && strings.Contains(strings.ToLower(b.Path), strings.ToLower(req.TaskID))) {
 				created = b
 				break
 			}
 		}
 		if created != nil {
+			if req.Name != "" {
+				created.Name = req.Name
+			}
 			return created, nil
 		}
 		return nil, fmt.Errorf("worktree script completed but bubble could not be matched. Log:\n%s", string(out))
@@ -668,43 +943,48 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 		if baseBranch == "" {
 			baseBranch = "develop"
 		}
+		baseBranch = strings.TrimPrefix(baseBranch, "origin/")
 
+		branchName := req.TaskID
+		if req.CloneBranch != "" {
+			branchName = strings.TrimPrefix(req.CloneBranch, "origin/")
+		} else if !strings.HasPrefix(branchName, "feat/") && !strings.HasPrefix(branchName, "fix/") {
+			branchName = "feat/" + branchName
+		}
+
+		safeDirName := strings.ReplaceAll(branchName, "/", "-")
 		if req.IsWorktree {
 			// Worktree mode for Brif
-			targetDir := filepath.Join(`C:\Users\Jose\Documents\Work`, fmt.Sprintf("brif-scrapper-%s", req.TaskID))
-			branchName := req.TaskID
-			if !strings.HasPrefix(branchName, "feat/") && !strings.HasPrefix(branchName, "fix/") {
-				branchName = "feat/" + branchName
-			}
+			targetDir := filepath.Join(`C:\Users\Jose\Documents\Work`, fmt.Sprintf("brif-scrapper-%s", safeDirName))
 
 			cmd := exec.Command("git", "-C", scrapperPath, "worktree", "add", "-b", branchName, targetDir, fmt.Sprintf("origin/%s", baseBranch))
 			out, err := cmd.CombinedOutput()
 			if err != nil {
-				// Retry checking out existing branch if origin/develop already has it
-				cmd = exec.Command("git", "-C", scrapperPath, "worktree", "add", targetDir, branchName)
+				// Retry checking out existing branch
+				cmd = exec.Command("git", "-C", scrapperPath, "worktree", "add", "-B", branchName, targetDir, fmt.Sprintf("origin/%s", branchName))
 				out2, err2 := cmd.CombinedOutput()
 				if err2 != nil {
-					return nil, fmt.Errorf("git worktree add failed: %w (%s / %s)", err, string(out), string(out2))
+					cmd = exec.Command("git", "-C", scrapperPath, "worktree", "add", targetDir, branchName)
+					out3, err3 := cmd.CombinedOutput()
+					if err3 != nil {
+						return nil, fmt.Errorf("git worktree add failed: %w (%s / %s / %s)", err, string(out), string(out2), string(out3))
+					}
 				}
 			}
 
 			m.scanGitWorktrees(WorkspaceBrif, scrapperPath)
 			for _, b := range m.bubbles {
 				if filepath.Clean(b.Path) == filepath.Clean(targetDir) {
+					if req.Name != "" {
+						b.Name = req.Name
+					}
 					return b, nil
 				}
 			}
 		} else {
 			// In-place linear mode for Brif (just checkout or create branch directly in brif-scrapper)
-			branchName := req.TaskID
-			if !strings.HasPrefix(branchName, "feat/") && !strings.HasPrefix(branchName, "fix/") {
-				branchName = "feat/" + branchName
-			}
-
-			// Try checkout -b
 			cmd := exec.Command("git", "-C", scrapperPath, "checkout", "-b", branchName, fmt.Sprintf("origin/%s", baseBranch))
 			if err := cmd.Run(); err != nil {
-				// Try plain checkout if branch already exists
 				_ = exec.Command("git", "-C", scrapperPath, "checkout", branchName).Run()
 			}
 
@@ -737,12 +1017,17 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 		if baseBranch == "" {
 			baseBranch = "main"
 		}
+		baseBranch = strings.TrimPrefix(baseBranch, "origin/")
 
 		branchName := req.TaskID
+		if req.CloneBranch != "" {
+			branchName = strings.TrimPrefix(req.CloneBranch, "origin/")
+		}
 		if branchName == "" {
 			return nil, fmt.Errorf("se requiere un identificador de tarea o rama (taskId)")
 		}
 
+		safeDirName := strings.ReplaceAll(branchName, "/", "-")
 		if req.IsWorktree {
 			// Ensure .worktrees directory exists inside ws.BasePath
 			worktreesBase := filepath.Join(ws.BasePath, ".worktrees")
@@ -756,7 +1041,7 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 				}
 			}
 
-			targetDir := filepath.Join(worktreesBase, req.TaskID)
+			targetDir := filepath.Join(worktreesBase, safeDirName)
 
 			// Try git worktree add -b <branchName> <targetDir> <baseBranch>
 			cmd := exec.Command("git", "-C", ws.BasePath, "worktree", "add", "-b", branchName, targetDir, baseBranch)
@@ -765,10 +1050,12 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 				// Retry with origin/<baseBranch> or existing branch
 				cmd = exec.Command("git", "-C", ws.BasePath, "worktree", "add", "-b", branchName, targetDir, fmt.Sprintf("origin/%s", baseBranch))
 				if out2, err2 := cmd.CombinedOutput(); err2 != nil {
-					// Fallback to checking out existing local branch
-					cmd = exec.Command("git", "-C", ws.BasePath, "worktree", "add", targetDir, branchName)
+					cmd = exec.Command("git", "-C", ws.BasePath, "worktree", "add", "-B", branchName, targetDir, fmt.Sprintf("origin/%s", branchName))
 					if out3, err3 := cmd.CombinedOutput(); err3 != nil {
-						return nil, fmt.Errorf("error al crear worktree git: %v (%s | %s | %s)", err, string(out), string(out2), string(out3))
+						cmd = exec.Command("git", "-C", ws.BasePath, "worktree", "add", targetDir, branchName)
+						if out4, err4 := cmd.CombinedOutput(); err4 != nil {
+							return nil, fmt.Errorf("error al crear worktree git: %v (%s | %s | %s | %s)", err, string(out), string(out2), string(out3), string(out4))
+						}
 					}
 				}
 			}

@@ -107,6 +107,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/workspaces", s.withAuth(s.handleCreateWorkspace))
 	mux.HandleFunc("PUT /api/workspaces/{id}", s.withAuth(s.handleUpdateWorkspace))
 	mux.HandleFunc("DELETE /api/workspaces/{id}", s.withAuth(s.handleDeleteWorkspace))
+	mux.HandleFunc("GET /api/workspaces/{id}/branches", s.withAuth(s.handleGetWorkspaceBranches))
+	mux.HandleFunc("POST /api/workspaces/{id}/link-repo", s.withAuth(s.handleLinkWorkspaceRepo))
+	mux.HandleFunc("GET /api/system/sql-dumps", s.withAuth(s.handleListSqlDumps))
 	mux.HandleFunc("GET /api/bubbles", s.withAuth(s.handleListBubbles))
 	mux.HandleFunc("POST /api/bubbles", s.withAuth(s.handleCreateBubble))
 	mux.HandleFunc("PATCH /api/bubbles/{id}", s.withAuth(s.handleUpdateBubbleMetadata))
@@ -984,6 +987,46 @@ func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleGetWorkspaceBranches(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	branches, err := s.bubbleMgr.GetWorkspaceBranches(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(branches)
+}
+
+type LinkRepoReq struct {
+	RepoURL string `json:"repoUrl"`
+}
+
+func (s *Server) handleLinkWorkspaceRepo(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req LinkRepoReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.RepoURL == "" {
+		http.Error(w, "repoUrl is required", http.StatusBadRequest)
+		return
+	}
+	if err := s.bubbleMgr.LinkRepo(id, req.RepoURL); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "repoUrl": req.RepoURL})
+}
+
+func (s *Server) handleListSqlDumps(w http.ResponseWriter, r *http.Request) {
+	dumps := s.bubbleMgr.DiscoverSqlDumps()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(dumps)
 }
 
 func (s *Server) handleListBubbles(w http.ResponseWriter, r *http.Request) {

@@ -252,6 +252,7 @@ fun BubblesScreen(
 
     if (showCreateDialog) {
         CreateBubbleDialog(
+            apiClient = apiClient,
             onDismiss = { showCreateDialog = false },
             onCreated = { req ->
                 showCreateDialog = false

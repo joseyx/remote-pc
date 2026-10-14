@@ -687,8 +687,31 @@
 
                 <!-- ADITUM FIELDS -->
                 <div id="wizard-fields-aditum" style="display: none;">
-                    <div class="form-group">
-                        <label class="form-label">ID de Tarea (Jira / Linear)</label>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Origen de la Rama</span>
+                            <span id="aditum-branch-loading" style="font-size: 11px; color: var(--accent); display: none;">Cargando ramas...</span>
+                        </label>
+                        <div style="display: flex; gap: 12px; margin-bottom: 6px;">
+                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="radio" name="aditum-branch-type" value="new" checked onchange="toggleBranchSource('aditum')">
+                                Nueva rama desde base
+                            </label>
+                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="radio" name="aditum-branch-type" value="existing" onchange="toggleBranchSource('aditum')">
+                                Clonar rama existente
+                            </label>
+                        </div>
+                        <div id="aditum-existing-branch-container" style="display: none; margin-bottom: 8px;">
+                            <select id="aditum-existing-branch-select" class="form-control" onchange="onSelectExistingBranch('aditum')">
+                                <option value="">-- Seleccionar rama existente --</option>
+                            </select>
+                            <span class="form-hint">Ramas remotas (origin/*) y locales detectadas en el repositorio.</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="aditum-new-branch-container">
+                        <label class="form-label">ID de Tarea (Jira / Linear) o Nombre de Rama</label>
                         <input type="text" id="aditum-task-id" class="form-control" placeholder="Ej. TAR-1130" oninput="updateAditumPortPreview()">
                         <span class="form-hint">Se creará la rama <code>feature/&lt;TAR-ID&gt;</code> y su worktree aislado.</span>
                     </div>
@@ -707,11 +730,34 @@
 
                     <div class="form-group" style="margin-top: 6px;">
                         <label class="form-label">Semilla de Base de Datos MySQL 8.0</label>
-                        <select id="aditum-seed-mode" class="form-control">
+                        <select id="aditum-seed-mode" class="form-control" onchange="toggleAditumSeedCustom()">
                             <option value="slim">⭐ aditum_slim (Recomendado, clonado rápido en ~25s)</option>
                             <option value="full">aditum (Dump completo de producción ~3.5 GB)</option>
+                            <option value="custom_dump">📂 Archivo Dump SQL personalizado (.sql / .sql.gz)</option>
+                            <option value="custom_schema">🏷️ Schema MySQL existente</option>
                         </select>
-                        <span class="form-hint">Se creará el schema <code>aditum_&lt;branch&gt;</code> automáticamente sin tocar Docker.</span>
+                        <span class="form-hint" id="aditum-seed-hint">Se creará el schema <code>aditum_&lt;branch&gt;</code> automáticamente sin tocar Docker.</span>
+                    </div>
+
+                    <!-- CUSTOM DUMP CONTAINER -->
+                    <div id="aditum-custom-dump-container" style="display: none; margin-top: 6px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label class="form-label" style="margin-bottom: 0;">Seleccionar Dump Detectado</label>
+                            <span style="cursor: pointer; font-size: 11px; color: var(--accent);" onclick="loadSqlDumps()">🔄 Buscar de nuevo</span>
+                        </div>
+                        <select id="aditum-detected-dumps-select" class="form-control" onchange="onSelectDetectedDump()">
+                            <option value="">-- Seleccionar archivo dump en Descargas / Work --</option>
+                        </select>
+                        <div style="margin-top: 8px;">
+                            <label class="form-label" style="font-size: 11px; color: var(--text-muted);">O especificar ruta manual del archivo:</label>
+                            <input type="text" id="aditum-custom-dump-file" class="form-control" placeholder="C:\Users\Jose\Downloads\Dump20260701.sql">
+                        </div>
+                    </div>
+
+                    <!-- CUSTOM SCHEMA CONTAINER -->
+                    <div id="aditum-custom-schema-container" style="display: none; margin-top: 6px;">
+                        <label class="form-label">Nombre del Schema Semilla Existente</label>
+                        <input type="text" id="aditum-custom-schema-input" class="form-control" placeholder="Ej. aditum_tar_1095">
                     </div>
                 </div>
 
@@ -726,7 +772,29 @@
                         <span class="form-hint" id="brif-mode-hint">Trabajo directo y ágil en tu repositorio principal sin carpetas extra.</span>
                     </div>
 
-                    <div class="form-group" style="margin-top: 6px;">
+                    <div class="form-group" style="margin-top: 6px; margin-bottom: 8px;">
+                        <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Origen de la Rama</span>
+                            <span id="brif-branch-loading" style="font-size: 11px; color: var(--accent); display: none;">Cargando ramas...</span>
+                        </label>
+                        <div style="display: flex; gap: 12px; margin-bottom: 6px;">
+                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="radio" name="brif-branch-type" value="new" checked onchange="toggleBranchSource('brif')">
+                                Nueva rama desde base
+                            </label>
+                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="radio" name="brif-branch-type" value="existing" onchange="toggleBranchSource('brif')">
+                                Clonar rama existente
+                            </label>
+                        </div>
+                        <div id="brif-existing-branch-container" style="display: none; margin-bottom: 8px;">
+                            <select id="brif-existing-branch-select" class="form-control" onchange="onSelectExistingBranch('brif')">
+                                <option value="">-- Seleccionar rama existente --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 6px;" id="brif-new-branch-container">
                         <label class="form-label">Nombre de Tarea o Slug de Spider</label>
                         <input type="text" id="brif-task-id" class="form-control" placeholder="Ej. dialogos-mx, fix/entelequia-duplicada">
                         <span class="form-hint">Prefijos automáticos: <code>feat/</code> o <code>fix/</code> si no los incluyes.</span>
@@ -749,7 +817,29 @@
                         <span class="form-hint" id="generic-mode-hint">Crea una carpeta de trabajo independiente para desarrollo en paralelo.</span>
                     </div>
 
-                    <div class="form-group" style="margin-top: 6px;">
+                    <div class="form-group" style="margin-top: 6px; margin-bottom: 8px;">
+                        <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Origen de la Rama</span>
+                            <span id="generic-branch-loading" style="font-size: 11px; color: var(--accent); display: none;">Cargando ramas...</span>
+                        </label>
+                        <div style="display: flex; gap: 12px; margin-bottom: 6px;">
+                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="radio" name="generic-branch-type" value="new" checked onchange="toggleBranchSource('generic')">
+                                Nueva rama desde base
+                            </label>
+                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="radio" name="generic-branch-type" value="existing" onchange="toggleBranchSource('generic')">
+                                Clonar rama existente
+                            </label>
+                        </div>
+                        <div id="generic-existing-branch-container" style="display: none; margin-bottom: 8px;">
+                            <select id="generic-existing-branch-select" class="form-control" onchange="onSelectExistingBranch('generic')">
+                                <option value="">-- Seleccionar rama existente --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 6px;" id="generic-new-branch-container">
                         <label class="form-label">ID de Tarea o Rama Git</label>
                         <input type="text" id="generic-task-id" class="form-control" placeholder="Ej. feat-login, fix-auth, issue-102">
                         <span class="form-hint">Identificador para la rama y la carpeta aislada.</span>
@@ -829,6 +919,12 @@
                             </button>
                         </div>
                         <span class="form-hint">Ruta local de la carpeta raíz de tu repositorio.</span>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label class="form-label">Repositorio Git Remoto (URL)</label>
+                        <input type="text" id="ws-input-repo" class="form-control" placeholder="Ej. https://github.com/usuario/repo.git">
+                        <span class="form-hint">URL de GitHub, GitLab o remote origin vinculado al proyecto.</span>
                     </div>
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
