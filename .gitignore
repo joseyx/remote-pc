@@ -10,6 +10,7 @@ dist/
 
 # Runtime Data & Storage (notes, handoffs, sessions and machine token)
 data/
+!android/**/data/
 server.config.json
 sessions_state.json
 sessions_state.json.tmp

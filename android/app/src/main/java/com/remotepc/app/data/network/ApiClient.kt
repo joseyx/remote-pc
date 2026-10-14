@@ -1,20 +1,18 @@
 package com.remotepc.app.data.network
 
-import com.remotepc.app.data.model.CreateSessionRequest
-import com.remotepc.app.data.model.DirectoryResponse
-import com.remotepc.app.data.model.Session
-import com.remotepc.app.data.model.VpnStatus
-import com.remotepc.app.data.model.ConnectVpnRequest
-import com.remotepc.app.data.model.VpnOptionsResponse
+import com.remotepc.app.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class ApiClient(private val config: AppConfig) {
@@ -26,6 +24,7 @@ class ApiClient(private val config: AppConfig) {
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        coerceInputValues = true
     }
 
     private fun newRequestBuilder(path: String): Request.Builder {
@@ -37,6 +36,7 @@ class ApiClient(private val config: AppConfig) {
         return builder
     }
 
+    // Health
     suspend fun checkHealth(): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = newRequestBuilder("/api/health").get().build()
@@ -48,6 +48,17 @@ class ApiClient(private val config: AppConfig) {
         }
     }
 
+    // Server Info
+    suspend fun getServerInfo(): ServerInfoResponse = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/server-info").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to get server info: ${response.code}")
+            val body = response.body?.string() ?: "{}"
+            json.decodeFromString(body)
+        }
+    }
+
+    // Sessions
     suspend fun listSessions(): List<Session> = withContext(Dispatchers.IO) {
         val request = newRequestBuilder("/api/sessions").get().build()
         client.newCall(request).execute().use { response ->
@@ -75,8 +86,155 @@ class ApiClient(private val config: AppConfig) {
         }
     }
 
+    suspend fun getSessionHistory(sessionId: String): String = withContext(Dispatchers.IO) {
+        try {
+            val request = newRequestBuilder("/api/sessions/$sessionId/history").get().build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext ""
+                val body = response.body?.string() ?: return@withContext ""
+                val parsed = json.parseToJsonElement(body).jsonObject
+                parsed["snippet"]?.jsonPrimitive?.content ?: ""
+            }
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    suspend fun renameSession(sessionId: String, name: String): Boolean = withContext(Dispatchers.IO) {
+        val bodyStr = """{"name":"$name"}"""
+        val body = bodyStr.toRequestBody("application/json".toMediaType())
+        val request = newRequestBuilder("/api/sessions/$sessionId").patch(body).build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
+    // Bubbles & Worktrees
+    suspend fun listBubbles(scan: Boolean = true): List<Bubble> = withContext(Dispatchers.IO) {
+        val path = if (scan) "/api/bubbles?scan=true" else "/api/bubbles"
+        val request = newRequestBuilder(path).get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to list bubbles: ${response.code}")
+            val body = response.body?.string() ?: "[]"
+            json.decodeFromString(body)
+        }
+    }
+
+    suspend fun createBubble(req: CreateBubbleRequest): Bubble = withContext(Dispatchers.IO) {
+        val mediaType = "application/json".toMediaType()
+        val body = json.encodeToString(req).toRequestBody(mediaType)
+        val request = newRequestBuilder("/api/bubbles").post(body).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to create bubble: ${response.code} ${response.body?.string()}")
+            val responseBody = response.body?.string() ?: throw IOException("Empty response")
+            json.decodeFromString(responseBody)
+        }
+    }
+
+    suspend fun deleteBubble(bubbleId: String): Boolean = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/bubbles/$bubbleId").delete().build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
+    suspend fun startDevServer(bubbleId: String): Boolean = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/bubbles/$bubbleId/dev/start").post("".toRequestBody(null)).build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
+    suspend fun stopDevServer(bubbleId: String): Boolean = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/bubbles/$bubbleId/dev/stop").post("".toRequestBody(null)).build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
+    suspend fun getGitStatus(bubbleId: String): GitStatusResponse = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/bubbles/$bubbleId/git/status").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to get git status: ${response.code}")
+            val body = response.body?.string() ?: "{}"
+            json.decodeFromString(body)
+        }
+    }
+
+    // Calendar & Daily Notes
+    suspend fun getDayNote(date: String = ""): DayNote = withContext(Dispatchers.IO) {
+        val endpoint = if (date.isEmpty()) "/api/calendar/note" else "/api/calendar/note?date=${URLEncoder.encode(date, "UTF-8")}"
+        val request = newRequestBuilder(endpoint).get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to get day note: ${response.code}")
+            val body = response.body?.string() ?: "{}"
+            json.decodeFromString(body)
+        }
+    }
+
+    suspend fun saveDayNote(date: String, content: String): Boolean = withContext(Dispatchers.IO) {
+        val req = SaveNoteRequest(date = date, content = content)
+        val body = json.encodeToString(req).toRequestBody("application/json".toMediaType())
+        val request = newRequestBuilder("/api/calendar/note").put(body).build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
+    suspend fun addDailyTodo(text: String, date: String = "", checked: Boolean = false): DayNote = withContext(Dispatchers.IO) {
+        val req = AddTodoRequest(text = text, date = date, checked = checked)
+        val body = json.encodeToString(req).toRequestBody("application/json".toMediaType())
+        val request = newRequestBuilder("/api/calendar/todo").post(body).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to add todo: ${response.code}")
+            val resBody = response.body?.string() ?: "{}"
+            json.decodeFromString(resBody)
+        }
+    }
+
+    suspend fun appendDailyNote(text: String, date: String = ""): DayNote = withContext(Dispatchers.IO) {
+        val req = AppendNoteRequest(text = text, date = date)
+        val body = json.encodeToString(req).toRequestBody("application/json".toMediaType())
+        val request = newRequestBuilder("/api/calendar/note/append").post(body).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to append note: ${response.code}")
+            val resBody = response.body?.string() ?: "{}"
+            json.decodeFromString(resBody)
+        }
+    }
+
+    suspend fun getStandup(): StandupSummary = withContext(Dispatchers.IO) {
+        val request = newRequestBuilder("/api/calendar/standup").get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to get standup: ${response.code}")
+            val body = response.body?.string() ?: "{}"
+            json.decodeFromString(body)
+        }
+    }
+
+    // System Monitoring & Stats
+    suspend fun getSystemStats(withTop: Boolean = true): SystemStats = withContext(Dispatchers.IO) {
+        val endpoint = if (withTop) "/api/system/stats?top=true" else "/api/system/stats"
+        val request = newRequestBuilder(endpoint).get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("Failed to get system stats: ${response.code}")
+            val body = response.body?.string() ?: "{}"
+            json.decodeFromString(body)
+        }
+    }
+
+    suspend fun killProcess(pid: Long): Boolean = withContext(Dispatchers.IO) {
+        val bodyStr = """{"pid":$pid}"""
+        val body = bodyStr.toRequestBody("application/json".toMediaType())
+        val request = newRequestBuilder("/api/system/process/kill").post(body).build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
+    // File System Directory Browser
     suspend fun listDirectories(path: String = ""): DirectoryResponse = withContext(Dispatchers.IO) {
-        val endpoint = if (path.isEmpty()) "/api/fs/directories" else "/api/fs/directories?path=${java.net.URLEncoder.encode(path, "UTF-8")}"
+        val endpoint = if (path.isEmpty()) "/api/fs/directories" else "/api/fs/directories?path=${URLEncoder.encode(path, "UTF-8")}"
         val request = newRequestBuilder(endpoint).get().build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Failed to list dirs: ${response.code}")
@@ -85,6 +243,7 @@ class ApiClient(private val config: AppConfig) {
         }
     }
 
+    // VPN Controls
     suspend fun getVpnStatus(): VpnStatus = withContext(Dispatchers.IO) {
         val request = newRequestBuilder("/api/vpn/status").get().build()
         client.newCall(request).execute().use { response ->
@@ -105,7 +264,7 @@ class ApiClient(private val config: AppConfig) {
 
     suspend fun connectVpn(location: String = "", protocol: String = "", port: String = ""): VpnStatus = withContext(Dispatchers.IO) {
         val req = ConnectVpnRequest(location = location, protocol = protocol, port = port)
-        val bodyStr = json.encodeToString(ConnectVpnRequest.serializer(), req)
+        val bodyStr = json.encodeToString(req)
         val body = bodyStr.toRequestBody("application/json".toMediaType())
         val request = newRequestBuilder("/api/vpn/connect").post(body).build()
         client.newCall(request).execute().use { response ->

@@ -10,10 +10,13 @@ private val DarkColorScheme = darkColorScheme(
     tertiary = TerminalAmber,
     background = TerminalBackground,
     surface = TerminalSurface,
+    surfaceVariant = TerminalSurfaceVariant,
     onPrimary = TerminalBackground,
     onSecondary = TerminalBackground,
     onBackground = TerminalText,
     onSurface = TerminalText,
+    onSurfaceVariant = TerminalTextMuted,
+    outline = TerminalBorder
 )
 
 @Composable

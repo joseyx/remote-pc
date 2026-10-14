@@ -7,66 +7,37 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.ClearAll
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.remotepc.app.data.network.ApiClient
 import com.remotepc.app.data.network.AppConfig
 import com.remotepc.app.data.network.TerminalEvent
 import com.remotepc.app.data.network.TerminalWebSocket
 import com.remotepc.app.ui.components.ClaudeShortcutBar
-import com.remotepc.app.ui.theme.TerminalAccent
-import com.remotepc.app.ui.theme.TerminalGreen
-import com.remotepc.app.ui.theme.TerminalRed
-import com.remotepc.app.ui.theme.TerminalText
-import com.remotepc.app.ui.theme.TerminalTextMuted
+import com.remotepc.app.ui.theme.*
 import kotlinx.coroutines.launch
 
 class TerminalBridge(
@@ -100,6 +71,7 @@ fun TerminalScreen(
 ) {
     val context = LocalContext.current
     val config = remember { AppConfig(context) }
+    val apiClient = remember { ApiClient(config) }
     val scope = rememberCoroutineScope()
     val ws = remember { TerminalWebSocket(config, sessionId, scope) }
     val focusRequester = remember { FocusRequester() }
@@ -118,6 +90,19 @@ fun TerminalScreen(
         }
     }
 
+    // Preload history once HTML is ready
+    LaunchedEffect(sessionId, isHtmlReady) {
+        if (isHtmlReady) {
+            val history = apiClient.getSessionHistory(sessionId)
+            if (history.isNotEmpty()) {
+                val b64 = Base64.encodeToString(history.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                webViewRef?.post {
+                    webViewRef?.evaluateJavascript("writeRawBase64('$b64'); window.scrollToBottom();", null)
+                }
+            }
+        }
+    }
+
     LaunchedEffect(sessionId) {
         ws.events.collect { event ->
             when (event) {
@@ -125,10 +110,10 @@ fun TerminalScreen(
                     connectionStatus = "Connected"
                 }
                 is TerminalEvent.Disconnected -> {
-                    connectionStatus = "Disconnected (${event.reason})"
+                    connectionStatus = "Disconnected"
                 }
                 is TerminalEvent.Error -> {
-                    connectionStatus = "Error: ${event.throwable.localizedMessage}"
+                    connectionStatus = "Error"
                 }
                 is TerminalEvent.OutputBytes -> {
                     val base64 = Base64.encodeToString(event.bytes, Base64.NO_WRAP)
@@ -157,11 +142,21 @@ fun TerminalScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(
-                            text = sessionName.ifEmpty { "Terminal" },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TerminalText
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = sessionName.ifEmpty { "Terminal" },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TerminalText
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(if (connectionStatus == "Connected") TerminalGreen else TerminalRed)
+                            )
+                        }
                         Text(
                             text = connectionStatus,
                             fontSize = 11.sp,
@@ -186,7 +181,7 @@ fun TerminalScreen(
                     IconButton(onClick = {
                         webViewRef?.evaluateJavascript("window.scrollToBottom();", null)
                     }) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Scroll to Bottom", tint = TerminalAccent)
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Scroll Down", tint = TerminalAccent)
                     }
                     IconButton(onClick = {
                         webViewRef?.evaluateJavascript("clearTerminal();", null)
@@ -210,7 +205,7 @@ fun TerminalScreen(
                         Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", tint = TerminalTextMuted)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF161B22))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TerminalSurface)
             )
         },
         bottomBar = {
@@ -219,7 +214,7 @@ fun TerminalScreen(
                     .fillMaxWidth()
                     .imePadding()
             ) {
-                // Sleek Claude Shortcut toolbar
+                // Sleek Claude & Shell Shortcut Bar
                 ClaudeShortcutBar(
                     onSendKey = {
                         ws.sendInput(it)
@@ -239,8 +234,8 @@ fun TerminalScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF161B22))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .background(TerminalSurface)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -250,7 +245,7 @@ fun TerminalScreen(
                             .weight(1f)
                             .focusRequester(focusRequester),
                         placeholder = {
-                            Text("Type prompt or command...", fontSize = 12.sp, color = TerminalTextMuted)
+                            Text("Type prompt or command...", fontSize = 12.sp, color = TerminalTextDim)
                         },
                         trailingIcon = {
                             if (inputText.isNotEmpty()) {
@@ -270,10 +265,11 @@ fun TerminalScreen(
                             focusedTextColor = TerminalText,
                             unfocusedTextColor = TerminalText,
                             focusedBorderColor = TerminalAccent,
-                            unfocusedBorderColor = Color(0xFF30363D),
-                            focusedContainerColor = Color(0xFF0D1117),
-                            unfocusedContainerColor = Color(0xFF0D1117)
+                            unfocusedBorderColor = TerminalBorder,
+                            focusedContainerColor = TerminalBackground,
+                            unfocusedContainerColor = TerminalBackground
                         ),
+                        shape = RoundedCornerShape(10.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { submitInput(inputText) }),
@@ -286,24 +282,28 @@ fun TerminalScreen(
                     Spacer(modifier = Modifier.width(6.dp))
 
                     IconButton(
-                        onClick = { submitInput(inputText) }
+                        onClick = { submitInput(inputText) },
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (inputText.isNotBlank()) TerminalAccent else TerminalSurfaceElevated)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = if (inputText.isNotBlank()) "Send Command" else "Send Enter",
-                            tint = if (inputText.isNotBlank()) TerminalAccent else TerminalGreen
+                            contentDescription = if (inputText.isNotBlank()) "Send" else "Enter",
+                            tint = if (inputText.isNotBlank()) TerminalBackground else TerminalGreen
                         )
                     }
                 }
             }
         },
-        containerColor = Color(0xFF0D1117)
+        containerColor = TerminalBackground
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF0D1117))
+                .background(TerminalBackground)
         ) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -313,7 +313,7 @@ fun TerminalScreen(
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT
                         )
-                        setBackgroundColor(0xFF0D1117.toInt())
+                        setBackgroundColor(0xFF090D16.toInt())
                         setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                         overScrollMode = android.view.View.OVER_SCROLL_NEVER
                         isVerticalScrollBarEnabled = false
@@ -327,13 +327,6 @@ fun TerminalScreen(
                         settings.allowFileAccessFromFileURLs = true
                         settings.allowUniversalAccessFromFileURLs = true
                         settings.cacheMode = WebSettings.LOAD_NO_CACHE
-
-                        webChromeClient = object : android.webkit.WebChromeClient() {
-                            override fun onConsoleMessage(msg: android.webkit.ConsoleMessage?): Boolean {
-                                android.util.Log.e("TerminalWeb", "${msg?.message()} [line ${msg?.lineNumber()} of ${msg?.sourceId()}]")
-                                return true
-                            }
-                        }
 
                         val bridge = TerminalBridge(
                             onInputReceived = { data -> ws.sendInput(data) },
@@ -349,7 +342,6 @@ fun TerminalScreen(
 
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
-                                android.util.Log.d("TerminalWeb", "Page finished loading: $url")
                                 isHtmlReady = true
                             }
                         }

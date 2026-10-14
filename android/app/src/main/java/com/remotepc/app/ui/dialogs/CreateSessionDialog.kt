@@ -1,38 +1,14 @@
 package com.remotepc.app.ui.dialogs
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -41,26 +17,25 @@ import androidx.compose.ui.unit.sp
 import com.remotepc.app.data.model.CreateSessionRequest
 import com.remotepc.app.data.model.DirItem
 import com.remotepc.app.data.network.ApiClient
-import com.remotepc.app.ui.theme.TerminalAccent
-import com.remotepc.app.ui.theme.TerminalGreen
-import com.remotepc.app.ui.theme.TerminalSurface
-import com.remotepc.app.ui.theme.TerminalText
-import com.remotepc.app.ui.theme.TerminalTextMuted
+import com.remotepc.app.ui.theme.*
 import kotlinx.coroutines.launch
 
 @Composable
 fun CreateSessionDialog(
     apiClient: ApiClient,
+    initialCwd: String = "",
+    initialBubbleId: String = "",
     onDismiss: () -> Unit,
     onCreated: (CreateSessionRequest) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var cwd by remember { mutableStateOf("") }
-    var selectedCommand by remember { mutableStateOf("claude") }
+    var cwd by remember { mutableStateOf(initialCwd) }
+    var bubbleId by remember { mutableStateOf(initialBubbleId) }
+    var selectedPreset by remember { mutableStateOf("claude") }
     var customCommand by remember { mutableStateOf("") }
 
     var browsingDirs by remember { mutableStateOf(false) }
-    var currentDirPath by remember { mutableStateOf("") }
+    var currentDirPath by remember { mutableStateOf(initialCwd) }
     var parentDirPath by remember { mutableStateOf("") }
     var dirList by remember { mutableStateOf<List<DirItem>>(emptyList()) }
 
@@ -82,7 +57,7 @@ fun CreateSessionDialog(
 
     LaunchedEffect(browsingDirs) {
         if (browsingDirs && dirList.isEmpty()) {
-            loadDir("")
+            loadDir(currentDirPath)
         }
     }
 
@@ -115,7 +90,7 @@ fun CreateSessionDialog(
                         )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                    HorizontalDivider(color = TerminalBorder)
 
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         items(dirList) { dir ->
@@ -127,7 +102,7 @@ fun CreateSessionDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(Icons.Default.Folder, contentDescription = null, tint = TerminalAccent)
-                                Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = dir.name,
                                     color = TerminalText,
@@ -143,7 +118,7 @@ fun CreateSessionDialog(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen)
                     ) {
-                        Text("Use This Folder", color = TerminalSurface)
+                        Text("Use This Folder", color = TerminalBackground)
                     }
                 }
             } else {
@@ -151,8 +126,14 @@ fun CreateSessionDialog(
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Session Name (e.g. claude-api)") },
+                        label = { Text("Session Name (optional)") },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TerminalText,
+                            unfocusedTextColor = TerminalText,
+                            focusedBorderColor = TerminalAccent,
+                            unfocusedBorderColor = TerminalBorder
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -161,8 +142,14 @@ fun CreateSessionDialog(
                     OutlinedTextField(
                         value = cwd,
                         onValueChange = { cwd = it },
-                        label = { Text("Working Directory (PC path)") },
+                        label = { Text("Working Directory") },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TerminalText,
+                            unfocusedTextColor = TerminalText,
+                            focusedBorderColor = TerminalAccent,
+                            unfocusedBorderColor = TerminalBorder
+                        ),
                         modifier = Modifier.fillMaxWidth(),
                         trailingIcon = {
                             IconButton(onClick = { browsingDirs = true }) {
@@ -173,44 +160,59 @@ fun CreateSessionDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Text("Command:", style = MaterialTheme.typography.bodySmall, color = TerminalTextMuted)
+                    Text("Preset / Tool:", style = MaterialTheme.typography.bodySmall, color = TerminalTextMuted)
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilterChip(
-                            selected = selectedCommand == "claude",
-                            onClick = { selectedCommand = "claude" },
-                            label = { Text("claude") },
+                            selected = selectedPreset == "claude",
+                            onClick = { selectedPreset = "claude" },
+                            label = { Text("🤖 Claude") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TerminalAccent.copy(alpha = 0.3f),
+                                selectedContainerColor = TerminalPurple.copy(alpha = 0.25f),
+                                selectedLabelColor = TerminalPurpleBright
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedPreset == "server",
+                            onClick = { selectedPreset = "server" },
+                            label = { Text("⚙️ Backend") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = TerminalAmber.copy(alpha = 0.25f),
+                                selectedLabelColor = TerminalAmberBright
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedPreset == "shell",
+                            onClick = { selectedPreset = "shell" },
+                            label = { Text("🐚 Shell") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = TerminalAccent.copy(alpha = 0.25f),
                                 selectedLabelColor = TerminalAccent
                             )
                         )
                         FilterChip(
-                            selected = selectedCommand == "powershell.exe",
-                            onClick = { selectedCommand = "powershell.exe" },
-                            label = { Text("powershell") }
-                        )
-                        FilterChip(
-                            selected = selectedCommand == "cmd.exe",
-                            onClick = { selectedCommand = "cmd.exe" },
-                            label = { Text("cmd") }
-                        )
-                        FilterChip(
-                            selected = selectedCommand == "custom",
-                            onClick = { selectedCommand = "custom" },
-                            label = { Text("custom") }
+                            selected = selectedPreset == "custom",
+                            onClick = { selectedPreset = "custom" },
+                            label = { Text("Custom") }
                         )
                     }
 
-                    if (selectedCommand == "custom") {
+                    if (selectedPreset == "custom") {
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
                             value = customCommand,
                             onValueChange = { customCommand = it },
-                            label = { Text("Custom Command Line") },
+                            label = { Text("Command Line (e.g. bash ./scripts/...)") },
                             singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TerminalText,
+                                unfocusedTextColor = TerminalText,
+                                focusedBorderColor = TerminalAccent,
+                                unfocusedBorderColor = TerminalBorder
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -221,15 +223,24 @@ fun CreateSessionDialog(
             if (!browsingDirs) {
                 Button(
                     onClick = {
-                        val finalCmd = if (selectedCommand == "custom") customCommand else selectedCommand
-                        val sessionTitle = name.ifBlank {
-                            if (finalCmd.contains("claude")) "claude" else "Terminal"
+                        val (cmd, role, defaultTitle) = when (selectedPreset) {
+                            "claude" -> Triple("claude", "claude", "Claude Code")
+                            "server" -> Triple(
+                                "powershell.exe -NoExit -Command \"bash ./scripts/start-backend.sh\"",
+                                "server",
+                                "⚙️ Project Server"
+                            )
+                            "shell" -> Triple("powershell.exe", "shell", "PowerShell")
+                            else -> Triple(customCommand.ifBlank { "powershell.exe" }, "shell", "Terminal")
                         }
+                        val finalTitle = name.ifBlank { defaultTitle }
                         onCreated(
                             CreateSessionRequest(
-                                name = sessionTitle,
+                                name = finalTitle,
                                 cwd = cwd,
-                                command = finalCmd,
+                                command = cmd,
+                                bubbleId = bubbleId.ifBlank { null },
+                                role = role,
                                 cols = 100,
                                 rows = 30
                             )
@@ -237,13 +248,13 @@ fun CreateSessionDialog(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TerminalAccent)
                 ) {
-                    Text("Start Session", color = TerminalSurface)
+                    Text("Start Session", color = TerminalBackground)
                 }
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Cancel")
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = TerminalTextMuted)
             }
         }
     )

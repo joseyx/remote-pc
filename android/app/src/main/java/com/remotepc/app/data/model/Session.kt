@@ -11,7 +11,9 @@ data class Session(
     val pid: Int,
     val isRunning: Boolean,
     val exitCode: Int = 0,
-    val createdAt: String = ""
+    val createdAt: String = "",
+    val bubbleId: String = "",
+    val role: String = "shell" // "claude", "server", "agy", "shell"
 )
 
 @Serializable
@@ -19,6 +21,8 @@ data class CreateSessionRequest(
     val name: String,
     val cwd: String,
     val command: String,
+    val bubbleId: String? = null,
+    val role: String? = null,
     val cols: Int = 100,
     val rows: Int = 30
 )
@@ -82,4 +86,3 @@ data class VpnOptionsResponse(
     val locations: List<VpnLocation> = emptyList(),
     val protocols: List<VpnProtocol> = emptyList()
 )
-
