@@ -703,10 +703,16 @@
                             </label>
                         </div>
                         <div id="aditum-existing-branch-container" style="display: none; margin-bottom: 8px;">
-                            <select id="aditum-existing-branch-select" class="form-control" onchange="onSelectExistingBranch('aditum')">
-                                <option value="">-- Seleccionar rama existente --</option>
-                            </select>
-                            <span class="form-hint">Ramas remotas (origin/*) y locales detectadas en el repositorio.</span>
+                            <div style="position: relative;">
+                                <input type="text" id="aditum-branch-search" class="form-control" placeholder="🔍 Buscar entre las ramas (ej. TAR-1098, develop)..." oninput="filterBranches('aditum')" onfocus="showBranchDropdown('aditum')" autocomplete="off">
+                                <input type="hidden" id="aditum-existing-branch-select" value="">
+                                <div id="aditum-branch-dropdown" class="branch-autocomplete-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); z-index: 1050; box-shadow: 0 10px 25px rgba(0,0,0,0.5);"></div>
+                            </div>
+                            <div id="aditum-branch-selected-badge" style="display: none; margin-top: 6px; font-size: 11px; align-items: center; justify-content: space-between; background: rgba(0,255,150,0.08); border: 1px solid var(--accent); border-radius: 4px; padding: 5px 8px;">
+                                <span>Rama elegida: <code id="aditum-branch-selected-name" style="color: var(--accent); font-weight: 700;"></code></span>
+                                <button type="button" class="btn btn-xs btn-ghost" onclick="clearSelectedBranch('aditum')" style="padding: 0 4px; font-size: 11px;" title="Limpiar selección">✕</button>
+                            </div>
+                            <span class="form-hint">Escribe parte del nombre o número de TAR para filtrar instantáneamente.</span>
                         </div>
                     </div>
 
@@ -788,9 +794,15 @@
                             </label>
                         </div>
                         <div id="brif-existing-branch-container" style="display: none; margin-bottom: 8px;">
-                            <select id="brif-existing-branch-select" class="form-control" onchange="onSelectExistingBranch('brif')">
-                                <option value="">-- Seleccionar rama existente --</option>
-                            </select>
+                            <div style="position: relative;">
+                                <input type="text" id="brif-branch-search" class="form-control" placeholder="🔍 Buscar rama en Brif (ej. develop, feat/)..." oninput="filterBranches('brif')" onfocus="showBranchDropdown('brif')" autocomplete="off">
+                                <input type="hidden" id="brif-existing-branch-select" value="">
+                                <div id="brif-branch-dropdown" class="branch-autocomplete-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); z-index: 1050; box-shadow: 0 10px 25px rgba(0,0,0,0.5);"></div>
+                            </div>
+                            <div id="brif-branch-selected-badge" style="display: none; margin-top: 6px; font-size: 11px; align-items: center; justify-content: space-between; background: rgba(0,255,150,0.08); border: 1px solid var(--accent); border-radius: 4px; padding: 5px 8px;">
+                                <span>Rama elegida: <code id="brif-branch-selected-name" style="color: var(--accent); font-weight: 700;"></code></span>
+                                <button type="button" class="btn btn-xs btn-ghost" onclick="clearSelectedBranch('brif')" style="padding: 0 4px; font-size: 11px;" title="Limpiar selección">✕</button>
+                            </div>
                         </div>
                     </div>
 
@@ -833,9 +845,15 @@
                             </label>
                         </div>
                         <div id="generic-existing-branch-container" style="display: none; margin-bottom: 8px;">
-                            <select id="generic-existing-branch-select" class="form-control" onchange="onSelectExistingBranch('generic')">
-                                <option value="">-- Seleccionar rama existente --</option>
-                            </select>
+                            <div style="position: relative;">
+                                <input type="text" id="generic-branch-search" class="form-control" placeholder="🔍 Buscar rama..." oninput="filterBranches('generic')" onfocus="showBranchDropdown('generic')" autocomplete="off">
+                                <input type="hidden" id="generic-existing-branch-select" value="">
+                                <div id="generic-branch-dropdown" class="branch-autocomplete-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); z-index: 1050; box-shadow: 0 10px 25px rgba(0,0,0,0.5);"></div>
+                            </div>
+                            <div id="generic-branch-selected-badge" style="display: none; margin-top: 6px; font-size: 11px; align-items: center; justify-content: space-between; background: rgba(0,255,150,0.08); border: 1px solid var(--accent); border-radius: 4px; padding: 5px 8px;">
+                                <span>Rama elegida: <code id="generic-branch-selected-name" style="color: var(--accent); font-weight: 700;"></code></span>
+                                <button type="button" class="btn btn-xs btn-ghost" onclick="clearSelectedBranch('generic')" style="padding: 0 4px; font-size: 11px;" title="Limpiar selección">✕</button>
+                            </div>
                         </div>
                     </div>
 

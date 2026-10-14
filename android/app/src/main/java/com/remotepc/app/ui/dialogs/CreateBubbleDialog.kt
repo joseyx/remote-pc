@@ -1,5 +1,6 @@
 package com.remotepc.app.ui.dialogs
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -7,11 +8,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.remotepc.app.data.model.*
@@ -33,6 +37,7 @@ fun CreateBubbleDialog(
     var name by remember { mutableStateOf("") }
     var baseBranch by remember { mutableStateOf("development") }
     var selectedBranch by remember { mutableStateOf("") }
+    var branchSearchQuery by remember { mutableStateOf("") }
 
     // Seed mode for Aditum: "slim", "full", "dump"
     var seedMode by remember { mutableStateOf("slim") }
@@ -165,8 +170,16 @@ fun CreateBubbleDialog(
                 }
 
                 if (branchMode == "clone") {
-                    // Existing Branch dropdown
-                    Column {
+                    val filteredBranches = remember(branches, branchSearchQuery) {
+                        if (branchSearchQuery.isBlank()) {
+                            branches.take(80)
+                        } else {
+                            branches.filter { it.name.contains(branchSearchQuery, ignoreCase = true) }.take(80)
+                        }
+                    }
+
+                    // Existing Branch dropdown with real-time search
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -178,32 +191,57 @@ fun CreateBubbleDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             if (branchesLoading) {
-                                Text("Cargando...", color = TerminalAccent, fontSize = 10.sp)
+                                Text("Cargando ramas...", color = TerminalAccent, fontSize = 10.sp)
                             } else {
-                                IconButton(
-                                    onClick = { loadBranches(workspace) },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = "Recargar ramas",
-                                        tint = TerminalAccent,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("${branches.size} ramas", color = TerminalTextDim, fontSize = 10.sp)
+                                    Spacer(Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = { loadBranches(workspace) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = "Recargar ramas",
+                                            tint = TerminalAccent,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
 
                         ExposedDropdownMenuBox(
                             expanded = branchMenuExpanded,
-                            onExpandedChange = { branchMenuExpanded = !branchMenuExpanded }
+                            onExpandedChange = { branchMenuExpanded = it }
                         ) {
                             OutlinedTextField(
-                                value = selectedBranch.ifEmpty { "Tocar para elegir rama (${branches.size})" },
-                                onValueChange = {},
-                                readOnly = true,
+                                value = branchSearchQuery,
+                                onValueChange = {
+                                    branchSearchQuery = it
+                                    branchMenuExpanded = true
+                                },
+                                placeholder = {
+                                    Text(
+                                        if (selectedBranch.isNotEmpty()) selectedBranch else "🔍 Buscar rama (ej. TAR-1098)...",
+                                        color = if (selectedBranch.isNotEmpty()) TerminalAccent else TerminalTextDim,
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                singleLine = true,
                                 trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = branchMenuExpanded)
+                                    if (branchSearchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { branchSearchQuery = "" }) {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Limpiar búsqueda",
+                                                tint = TerminalTextDim,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    } else {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = branchMenuExpanded)
+                                    }
                                 },
                                 modifier = Modifier
                                     .menuAnchor()
@@ -219,30 +257,95 @@ fun CreateBubbleDialog(
                                 expanded = branchMenuExpanded,
                                 onDismissRequest = { branchMenuExpanded = false }
                             ) {
-                                if (branches.isEmpty()) {
+                                if (branchesLoading) {
                                     DropdownMenuItem(
-                                        text = { Text("No se encontraron ramas") },
+                                        text = { Text("Cargando ramas...", color = TerminalTextDim, fontSize = 12.sp) },
+                                        onClick = {}
+                                    )
+                                } else if (branches.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("No se encontraron ramas en el repositorio", color = TerminalTextDim, fontSize = 12.sp) },
                                         onClick = { branchMenuExpanded = false }
                                     )
+                                } else if (filteredBranches.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("Sin coincidencias para \"$branchSearchQuery\"", color = TerminalTextDim, fontSize = 12.sp) },
+                                        onClick = {}
+                                    )
                                 } else {
-                                    branches.take(50).forEach { branch ->
+                                    filteredBranches.forEach { branch ->
                                         DropdownMenuItem(
                                             text = {
-                                                Column {
-                                                    Text(branch.name, color = TerminalText, fontSize = 13.sp)
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
                                                     Text(
-                                                        if (branch.isRemote) "remota (origin)" else "local",
-                                                        color = TerminalTextDim,
-                                                        fontSize = 10.sp
+                                                        branch.name,
+                                                        color = if (branch.name == selectedBranch) TerminalAccent else TerminalText,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = if (branch.name == selectedBranch) FontWeight.Bold else FontWeight.Normal,
+                                                        modifier = Modifier.weight(1f, fill = false)
                                                     )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = if (branch.isRemote) TerminalAccent.copy(alpha = 0.15f) else TerminalGreen.copy(alpha = 0.15f)
+                                                    ) {
+                                                        Text(
+                                                            if (branch.isRemote) "origin" else "local",
+                                                            color = if (branch.isRemote) TerminalAccent else TerminalGreen,
+                                                            fontSize = 10.sp,
+                                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                        )
+                                                    }
                                                 }
                                             },
                                             onClick = {
                                                 selectedBranch = branch.name
+                                                branchSearchQuery = branch.name
                                                 taskId = branch.name
                                                 if (name.isEmpty()) name = branch.name
                                                 branchMenuExpanded = false
                                             }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (selectedBranch.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = TerminalAccent.copy(alpha = 0.1f),
+                                border = BorderStroke(1.dp, TerminalAccent.copy(alpha = 0.35f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Rama elegida: ", color = TerminalTextDim, fontSize = 11.sp)
+                                        Text(selectedBranch, color = TerminalAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            selectedBranch = ""
+                                            branchSearchQuery = ""
+                                        },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Quitar selección",
+                                            tint = TerminalAccent,
+                                            modifier = Modifier.size(14.dp)
                                         )
                                     }
                                 }

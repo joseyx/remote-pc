@@ -610,16 +610,21 @@ let workspaceBranchesCache = {};
 let discoveredSqlDumps = [];
 
 async function loadWorkspaceBranches(wsId) {
-    const loadingEl = document.getElementById(`${wsId}-branch-loading`);
+    const targetWs = (wsId === 'generic') ? wizardWs : wsId;
+    if (!targetWs) return;
+    const loadingEl = document.getElementById(`${wsId}-branch-loading`) || document.getElementById(`${targetWs}-branch-loading`);
     if (loadingEl) loadingEl.style.display = 'inline';
     try {
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        const res = await fetch(`/api/workspaces/${encodeURIComponent(wsId)}/branches`, { headers });
+        const res = await fetch(`/api/workspaces/${encodeURIComponent(targetWs)}/branches`, { headers });
         if (!res.ok) return;
         const branches = await res.json();
-        workspaceBranchesCache[wsId] = branches || [];
-        populateBranchSelect(wsId);
+        workspaceBranchesCache[targetWs] = branches || [];
+        if (wsId === 'generic') {
+            workspaceBranchesCache['generic'] = branches || [];
+        }
+        filterBranches(wsId);
     } catch (e) {
         console.error("Error al cargar ramas:", e);
     } finally {
@@ -627,16 +632,110 @@ async function loadWorkspaceBranches(wsId) {
     }
 }
 
-function populateBranchSelect(wsId) {
-    const select = document.getElementById(`${wsId}-existing-branch-select`);
-    if (!select) return;
-    const branches = workspaceBranchesCache[wsId] || [];
-    let html = `<option value="">-- Seleccionar rama existente (${branches.length}) --</option>`;
-    branches.forEach(b => {
-        const tag = b.isRemote ? 'origin' : 'local';
-        html += `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)} [${tag}]</option>`;
-    });
-    select.innerHTML = html;
+function filterBranches(wsId) {
+    const input = document.getElementById(`${wsId}-branch-search`);
+    const dropdown = document.getElementById(`${wsId}-branch-dropdown`);
+    if (!dropdown) return;
+
+    const targetWs = (wsId === 'generic') ? wizardWs : wsId;
+    const branches = workspaceBranchesCache[targetWs] || workspaceBranchesCache[wsId];
+
+    if (!branches) {
+        dropdown.innerHTML = `<div style="padding: 10px; color: var(--text-dim); font-size: 12px; text-align: center;"><span class="orbit-spinner" style="display:inline-block; margin-right: 6px;">⏳</span> Cargando ramas del repositorio...</div>`;
+        dropdown.style.display = 'block';
+        loadWorkspaceBranches(wsId);
+        return;
+    }
+
+    const query = (input?.value || '').trim().toLowerCase();
+    const filtered = query ? branches.filter(b => (b.name || '').toLowerCase().includes(query)) : branches;
+
+    if (filtered.length === 0) {
+        dropdown.innerHTML = `
+            <div style="padding: 12px; text-align: center; color: var(--text-dim); font-size: 12px;">
+                No se encontraron ramas coincidentes con "<strong>${escapeHtml(query)}</strong>"
+            </div>
+        `;
+        dropdown.style.display = 'block';
+        return;
+    }
+
+    const slice = filtered.slice(0, 100);
+    let html = slice.map(b => {
+        const isRemote = !!b.isRemote;
+        const tagText = isRemote ? 'origin' : 'local';
+        const tagBg = isRemote ? 'rgba(74, 158, 255, 0.15)' : 'rgba(0, 255, 150, 0.15)';
+        const tagColor = isRemote ? '#4a9eff' : 'var(--accent)';
+        const safeBranch = b.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `
+            <div class="branch-item" onclick="chooseBranch('${wsId}', '${safeBranch}')">
+                <span style="font-family: var(--font-mono); font-weight: 500; color: var(--text-main); word-break: break-all;">${escapeHtml(b.name)}</span>
+                <span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600; background: ${tagBg}; color: ${tagColor};">${tagText}</span>
+            </div>
+        `;
+    }).join('');
+
+    if (filtered.length > 100) {
+        html += `
+            <div style="padding: 8px 12px; text-align: center; font-size: 11px; color: var(--text-dim); background: var(--bg-hover);">
+                Mostrando primeros 100 de ${filtered.length} resultados. Escribe más para afinar.
+            </div>
+        `;
+    }
+
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+}
+
+function showBranchDropdown(wsId) {
+    filterBranches(wsId);
+}
+
+function chooseBranch(wsId, branchName) {
+    const hiddenInput = document.getElementById(`${wsId}-existing-branch-select`);
+    if (hiddenInput) hiddenInput.value = branchName;
+
+    const searchInput = document.getElementById(`${wsId}-branch-search`);
+    if (searchInput) searchInput.value = branchName;
+
+    const badge = document.getElementById(`${wsId}-branch-selected-badge`);
+    const nameEl = document.getElementById(`${wsId}-branch-selected-name`);
+    if (badge && nameEl) {
+        nameEl.textContent = branchName;
+        badge.style.display = 'flex';
+    }
+
+    const dropdown = document.getElementById(`${wsId}-branch-dropdown`);
+    if (dropdown) dropdown.style.display = 'none';
+
+    // Auto-fill Task ID if empty or updating
+    if (wsId === 'aditum') {
+        const taskIdInput = document.getElementById('aditum-task-id');
+        if (taskIdInput) {
+            taskIdInput.value = branchName;
+            updateAditumPortPreview();
+        }
+    } else if (wsId === 'brif') {
+        const taskIdInput = document.getElementById('brif-task-id');
+        if (taskIdInput) taskIdInput.value = branchName;
+    } else {
+        const taskIdInput = document.getElementById('generic-task-id');
+        if (taskIdInput) taskIdInput.value = branchName;
+    }
+}
+
+function clearSelectedBranch(wsId) {
+    const hiddenInput = document.getElementById(`${wsId}-existing-branch-select`);
+    if (hiddenInput) hiddenInput.value = '';
+
+    const searchInput = document.getElementById(`${wsId}-branch-search`);
+    if (searchInput) searchInput.value = '';
+
+    const badge = document.getElementById(`${wsId}-branch-selected-badge`);
+    if (badge) badge.style.display = 'none';
+
+    const dropdown = document.getElementById(`${wsId}-branch-dropdown`);
+    if (dropdown) dropdown.style.display = 'none';
 }
 
 function toggleBranchSource(wsId) {
@@ -646,30 +745,26 @@ function toggleBranchSource(wsId) {
     if (existingContainer) existingContainer.style.display = isExisting ? 'block' : 'none';
     if (newContainer) newContainer.style.display = isExisting ? 'none' : 'block';
 
-    if (isExisting && (!workspaceBranchesCache[wsId] || workspaceBranchesCache[wsId].length === 0)) {
-        loadWorkspaceBranches(wsId);
-    }
-}
-
-function onSelectExistingBranch(wsId) {
-    const select = document.getElementById(`${wsId}-existing-branch-select`);
-    const branch = select?.value;
-    if (!branch) return;
-
-    if (wsId === 'aditum') {
-        const taskIdInput = document.getElementById('aditum-task-id');
-        if (taskIdInput) {
-            taskIdInput.value = branch;
-            updateAditumPortPreview();
+    if (isExisting) {
+        const targetWs = (wsId === 'generic') ? wizardWs : wsId;
+        if (!workspaceBranchesCache[targetWs] || workspaceBranchesCache[targetWs].length === 0) {
+            loadWorkspaceBranches(wsId);
+        } else {
+            showBranchDropdown(wsId);
         }
-    } else if (wsId === 'brif') {
-        const taskIdInput = document.getElementById('brif-task-id');
-        if (taskIdInput) taskIdInput.value = branch;
-    } else {
-        const taskIdInput = document.getElementById('generic-task-id');
-        if (taskIdInput) taskIdInput.value = branch;
     }
 }
+
+// Global click-outside listener to dismiss branch dropdowns
+document.addEventListener('click', (e) => {
+    ['aditum', 'brif', 'generic'].forEach(wsId => {
+        const container = document.getElementById(`${wsId}-existing-branch-container`);
+        const dropdown = document.getElementById(`${wsId}-branch-dropdown`);
+        if (dropdown && dropdown.style.display !== 'none' && container && !container.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+});
 
 async function loadSqlDumps() {
     try {
@@ -741,8 +836,9 @@ function openNewBubbleModal(prefWs = null) {
     setWizardWorkspace(wizardWs);
     suggestNextAditumIndex();
 
-    // Reset radio buttons and loads
+    // Reset radio buttons, branch selections and dropdowns
     ['aditum', 'brif', 'generic'].forEach(id => {
+        clearSelectedBranch(id);
         const radioNew = document.querySelector(`input[name="${id}-branch-type"][value="new"]`);
         if (radioNew) radioNew.checked = true;
         toggleBranchSource(id);
