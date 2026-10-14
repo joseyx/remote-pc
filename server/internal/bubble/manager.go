@@ -983,3 +983,13 @@ func (m *Manager) StopDevServer(id string) error {
 	delete(m.devCmds, id)
 	return nil
 }
+
+func (m *Manager) SetDevRunning(id string, running bool, pid int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if b, ok := m.bubbles[id]; ok && b != nil {
+		b.DevRunning = running
+		b.DevPid = pid
+	}
+}
+

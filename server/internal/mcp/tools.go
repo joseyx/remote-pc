@@ -256,6 +256,77 @@ var Tools = []Tool{
 			"required": []string{"workspace", "task_id"},
 		},
 	},
+	{
+		Name: "start_project_server",
+		Description: "Inicia el servidor de desarrollo del proyecto (ej: Aditum Spring Boot backend, Brif Django dev server, etc.) en segundo plano dentro de Orbit / Remote PC. " +
+			"Crea una sesión de terminal activa con rol 'server' que se visualiza en tiempo real en el Web Cockpit y en la app móvil Orbit. " +
+			"Por defecto inicia el backend de 'aditum' o auto-detecta el proyecto y worktree según el directorio actual. " +
+			"Si el servidor ya está corriendo, informa su estado o permite reiniciarlo con 'restart: true'.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Espacio de trabajo o proyecto a correr ('aditum', 'brif', etc. Opcional; por defecto 'aditum' o auto-detectado).",
+				},
+				"bubble_id": map[string]interface{}{
+					"type":        "string",
+					"description": "ID de la tarea o worktree específico (opcional; ej: 'TAR-1125', 'aditum-hotfix-tar-1125').",
+				},
+				"command": map[string]interface{}{
+					"type":        "string",
+					"description": "Comando personalizado para iniciar el servidor (opcional; si se omite usa el comando/script configurado del proyecto).",
+				},
+				"restart": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Si es true y el servidor ya está corriendo, lo detiene y lo reinicia limpiamente (por defecto false).",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Nombre legible para la sesión (opcional; ej: 'Aditum Backend').",
+				},
+			},
+		},
+	},
+	{
+		Name: "get_project_server_status",
+		Description: "Consulta si el servidor de desarrollo del proyecto (Aditum, Brif, etc.) está corriendo actualmente en Orbit / Remote PC, " +
+			"junto con su ID de sesión, estado, puerto y logs recientes de arranque.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Espacio de trabajo a consultar ('aditum', 'brif', etc. Opcional; por defecto 'aditum').",
+				},
+				"bubble_id": map[string]interface{}{
+					"type":        "string",
+					"description": "ID de la tarea o worktree específico (opcional).",
+				},
+			},
+		},
+	},
+	{
+		Name: "stop_project_server",
+		Description: "Detiene el servidor de desarrollo en ejecución del proyecto especificado (ej: Aditum Spring Boot o Brif) en Orbit / Remote PC.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Espacio de trabajo del servidor a detener ('aditum', 'brif', etc. Opcional; por defecto 'aditum').",
+				},
+				"bubble_id": map[string]interface{}{
+					"type":        "string",
+					"description": "ID de la tarea o worktree (opcional).",
+				},
+				"session_id": map[string]interface{}{
+					"type":        "string",
+					"description": "ID específico de la sesión a terminar si se conoce (opcional).",
+				},
+			},
+		},
+	},
 }
 
 // Config representation for connecting to Remote PC daemon
@@ -445,6 +516,12 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 		return handleGetBubbleContext(args)
 	case "create_workspace_bubble":
 		return handleCreateWorkspaceBubble(args)
+	case "start_project_server":
+		return handleStartProjectServer(args)
+	case "get_project_server_status":
+		return handleGetProjectServerStatus(args)
+	case "stop_project_server":
+		return handleStopProjectServer(args)
 	default:
 		return "", fmt.Errorf("herramienta desconocida: %s", name)
 	}
@@ -993,4 +1070,465 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 	}
 
 	return strings.Join(lines, "\n"), nil
+}
+
+func handleStartProjectServer(args map[string]interface{}) (string, error) {
+	workspace, _ := args["workspace"].(string)
+	workspace = strings.TrimSpace(strings.ToLower(workspace))
+
+	bubbleID, _ := args["bubble_id"].(string)
+	bubbleID = strings.TrimSpace(bubbleID)
+
+	customCmd, _ := args["command"].(string)
+	customCmd = strings.TrimSpace(customCmd)
+
+	restart, _ := args["restart"].(bool)
+	nameArg, _ := args["name"].(string)
+	nameArg = strings.TrimSpace(nameArg)
+
+	// 1. Fetch bubbles to match bubble and workspace
+	var bubbles []map[string]interface{}
+	_ = apiRequest("/api/bubbles?scan=true", "GET", nil, &bubbles, false)
+
+	var matchedBubble map[string]interface{}
+	cwd, _ := os.Getwd()
+	cwdNorm := strings.ToLower(filepath.Clean(cwd))
+
+	if bubbleID != "" {
+		for _, b := range bubbles {
+			id, _ := b["id"].(string)
+			name, _ := b["name"].(string)
+			if id == bubbleID || strings.EqualFold(id, bubbleID) || strings.EqualFold(name, bubbleID) ||
+				strings.Contains(strings.ToLower(id), strings.ToLower(bubbleID)) ||
+				strings.Contains(strings.ToLower(name), strings.ToLower(bubbleID)) {
+				matchedBubble = b
+				break
+			}
+		}
+	} else {
+		// Try matching by cwd
+		for _, b := range bubbles {
+			bPath, _ := b["path"].(string)
+			if bPath != "" {
+				bNorm := strings.ToLower(filepath.Clean(bPath))
+				if cwdNorm == bNorm || strings.HasPrefix(cwdNorm, bNorm) {
+					matchedBubble = b
+					break
+				}
+			}
+		}
+	}
+
+	// If no matchedBubble yet, and workspace is empty, default to "aditum"
+	if matchedBubble == nil && workspace == "" {
+		workspace = "aditum"
+	}
+
+	targetWs := workspace
+	targetCwd := ""
+	targetBubbleID := ""
+	targetBubbleName := ""
+	targetPort := 0
+
+	if matchedBubble != nil {
+		targetBubbleID, _ = matchedBubble["id"].(string)
+		targetBubbleName, _ = matchedBubble["name"].(string)
+		targetCwd, _ = matchedBubble["path"].(string)
+		if ws, ok := matchedBubble["workspace"].(string); ok && ws != "" {
+			targetWs = strings.ToLower(ws)
+		}
+		if p, ok := matchedBubble["port"].(float64); ok && p > 0 {
+			targetPort = int(p)
+		}
+	} else {
+		// Look for any bubble of that workspace
+		for _, b := range bubbles {
+			ws, _ := b["workspace"].(string)
+			if strings.EqualFold(ws, targetWs) {
+				// prefer root or main bubble if present
+				isWt, _ := b["isWorktree"].(bool)
+				if !isWt || matchedBubble == nil {
+					matchedBubble = b
+					if !isWt {
+						break
+					}
+				}
+			}
+		}
+
+		if matchedBubble != nil {
+			targetBubbleID, _ = matchedBubble["id"].(string)
+			targetBubbleName, _ = matchedBubble["name"].(string)
+			targetCwd, _ = matchedBubble["path"].(string)
+			if p, ok := matchedBubble["port"].(float64); ok && p > 0 {
+				targetPort = int(p)
+			}
+		}
+	}
+
+	// If still no path, fallback to workspace definitions
+	if targetCwd == "" {
+		var workspaces []map[string]interface{}
+		_ = apiRequest("/api/workspaces", "GET", nil, &workspaces, false)
+		for _, ws := range workspaces {
+			id, _ := ws["id"].(string)
+			wsType, _ := ws["type"].(string)
+			if strings.EqualFold(id, targetWs) || strings.EqualFold(wsType, targetWs) {
+				if bp, ok := ws["basePath"].(string); ok && bp != "" {
+					targetCwd = bp
+					break
+				}
+			}
+		}
+	}
+
+	// Absolute fallbacks for Jose's environment if nothing found
+	if targetCwd == "" {
+		if targetWs == "aditum" {
+			targetCwd = `C:\Users\Jose\Documents\Work\Aditum`
+		} else if targetWs == "brif" {
+			targetCwd = `C:\Users\Jose\Documents\Work\brif`
+		}
+	}
+
+	if targetCwd != "" {
+		targetCwd = filepath.Clean(targetCwd)
+	}
+
+	if targetCwd == "" {
+		return "", fmt.Errorf("no se pudo determinar el directorio de trabajo para el proyecto '%s'", targetWs)
+	}
+
+	if _, err := os.Stat(targetCwd); err != nil {
+		return "", fmt.Errorf("el directorio '%s' no existe en el sistema de archivos", targetCwd)
+	}
+
+	// 2. Check existing sessions
+	var sessions []map[string]interface{}
+	_ = apiRequest("/api/sessions", "GET", nil, &sessions, false)
+
+	var existingServerSession map[string]interface{}
+	targetCwdLower := strings.ToLower(targetCwd)
+	for _, s := range sessions {
+		role, _ := s["role"].(string)
+		isRunning, _ := s["isRunning"].(bool)
+		bID, _ := s["bubbleId"].(string)
+		sCwd, _ := s["cwd"].(string)
+		sCwdLower := strings.ToLower(filepath.Clean(sCwd))
+
+		if role == "server" && isRunning {
+			if (targetBubbleID != "" && bID == targetBubbleID) || (sCwdLower == targetCwdLower) {
+				existingServerSession = s
+				break
+			}
+		}
+	}
+
+	if existingServerSession != nil {
+		sessID, _ := existingServerSession["id"].(string)
+		if !restart {
+			var hist struct {
+				Snippet string `json:"snippet"`
+				Length  int    `json:"length"`
+			}
+			if sessID != "" {
+				_ = apiRequest(fmt.Sprintf("/api/sessions/%s/history", sessID), "GET", nil, &hist, false)
+			}
+
+			lines := []string{
+				"🟢 **El servidor de desarrollo ya está en ejecución en Orbit / Remote PC**",
+				fmt.Sprintf("- **Sesión:** `%v` (`%s`)", existingServerSession["name"], sessID),
+				fmt.Sprintf("- **Directorio:** `%v`", existingServerSession["cwd"]),
+				fmt.Sprintf("- **PID:** `%v`", existingServerSession["pid"]),
+			}
+			if targetBubbleName != "" {
+				lines = append(lines, fmt.Sprintf("- **Tarea / Bubble:** `%s` (`%s`)", targetBubbleName, targetBubbleID))
+			}
+			if targetPort > 0 {
+				lines = append(lines, fmt.Sprintf("- **Puerto:** `%d`", targetPort))
+			}
+			lines = append(lines, "\n📱 **Visualización:** Visible en tiempo real en Web Cockpit y Orbit Mobile.")
+			if strings.TrimSpace(hist.Snippet) != "" {
+				tail := hist.Snippet
+				if len(tail) > 1000 {
+					tail = tail[len(tail)-1000:]
+				}
+				lines = append(lines, fmt.Sprintf("\n**Últimos logs emitidos:**\n```\n%s\n```", tail))
+			}
+			lines = append(lines, "\n*(Nota: Si deseas reiniciarlo limpiamente, pasa `restart: true` o pide 'reinicia el servidor'.)*")
+			return strings.Join(lines, "\n"), nil
+		}
+
+		// If restart is true, terminate existing session
+		_ = apiRequest(fmt.Sprintf("/api/sessions/%s", sessID), "DELETE", nil, nil, false)
+		time.Sleep(800 * time.Millisecond)
+	}
+
+	// 3. Determine start command
+	startCmd := customCmd
+	if startCmd == "" {
+		switch targetWs {
+		case "aditum":
+			startBackendScript := filepath.Join(targetCwd, "scripts", "start-backend.sh")
+			if _, err := os.Stat(startBackendScript); err == nil {
+				startCmd = `powershell.exe -NoExit -Command "bash ./scripts/start-backend.sh"`
+			} else if _, err := os.Stat(filepath.Join(targetCwd, "mvnw.cmd")); err == nil {
+				startCmd = `powershell.exe -NoExit -Command ".\mvnw.cmd spring-boot:run -Dmaven.test.skip=true"`
+			} else {
+				startCmd = `powershell.exe -NoExit -Command "mvn spring-boot:run -Dmaven.test.skip=true"`
+			}
+		case "brif":
+			managePath := filepath.Join(targetCwd, "brif-scrapper", "manage.py")
+			if _, err := os.Stat(managePath); err == nil {
+				startCmd = `powershell.exe -NoExit -Command "cd brif-scrapper; python manage.py runserver 0.0.0.0:8000"`
+			} else {
+				startCmd = `powershell.exe -NoExit -Command "python manage.py runserver 0.0.0.0:8000"`
+			}
+		default:
+			startCmd = `powershell.exe -NoExit`
+		}
+	}
+
+	// 4. Session Name
+	sessionName := nameArg
+	if sessionName == "" {
+		if targetWs == "aditum" {
+			if targetBubbleName != "" && targetBubbleName != "aditum" {
+				sessionName = fmt.Sprintf("⚙️ Aditum Backend (%s)", targetBubbleName)
+			} else {
+				sessionName = "⚙️ Aditum Backend"
+			}
+		} else if targetWs == "brif" {
+			sessionName = "⚙️ Brif Server"
+		} else {
+			if targetBubbleName != "" {
+				sessionName = fmt.Sprintf("⚙️ %s Server", targetBubbleName)
+			} else {
+				sessionName = "⚙️ Dev Server"
+			}
+		}
+	}
+
+	// 5. Create Session in Orbit API
+	createPayload := map[string]interface{}{
+		"name":     sessionName,
+		"cwd":      targetCwd,
+		"command":  startCmd,
+		"bubbleId": targetBubbleID,
+		"role":     "server",
+		"cols":     120,
+		"rows":     30,
+	}
+
+	var newSess map[string]interface{}
+	if err := apiRequest("/api/sessions", "POST", createPayload, &newSess, false); err != nil {
+		return "", fmt.Errorf("error al iniciar servidor en Orbit: %w", err)
+	}
+
+	sessID, _ := newSess["id"].(string)
+
+	// Wait briefly so initial stdout/stderr starts filling the PTY ring buffer
+	time.Sleep(1200 * time.Millisecond)
+
+	var hist struct {
+		Snippet string `json:"snippet"`
+		Length  int    `json:"length"`
+	}
+	if sessID != "" {
+		_ = apiRequest(fmt.Sprintf("/api/sessions/%s/history", sessID), "GET", nil, &hist, false)
+	}
+
+	lines := []string{
+		"🚀 **Servidor de desarrollo iniciado exitosamente en Orbit**",
+		fmt.Sprintf("- **Sesión:** `%s` (`%v`)", sessionName, sessID),
+		"- **Rol:** `server` (destacado con ⚙️ en Web Cockpit y Orbit Mobile)",
+		fmt.Sprintf("- **Directorio:** `%s`", targetCwd),
+		fmt.Sprintf("- **Comando:** `%s`", startCmd),
+		fmt.Sprintf("- **PID:** `%v`", newSess["pid"]),
+	}
+	if targetBubbleName != "" {
+		lines = append(lines, fmt.Sprintf("- **Tarea / Bubble:** `%s` (`%s`)", targetBubbleName, targetBubbleID))
+	}
+	if targetPort > 0 {
+		lines = append(lines, fmt.Sprintf("- **Puerto:** `%d`", targetPort))
+	}
+
+	lines = append(lines, "\n📱 **Visualización en tiempo real:**\nEl proceso está activo y emitiendo logs. Puedes abrir la app Orbit Mobile o el Web Cockpit para ver el streaming de la terminal.")
+
+	if strings.TrimSpace(hist.Snippet) != "" {
+		tail := hist.Snippet
+		if len(tail) > 1000 {
+			tail = tail[len(tail)-1000:]
+		}
+		lines = append(lines, fmt.Sprintf("\n**Salida inicial de la terminal:**\n```\n%s\n```", tail))
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
+func handleGetProjectServerStatus(args map[string]interface{}) (string, error) {
+	workspace, _ := args["workspace"].(string)
+	workspace = strings.TrimSpace(strings.ToLower(workspace))
+
+	bubbleID, _ := args["bubble_id"].(string)
+	bubbleID = strings.TrimSpace(bubbleID)
+
+	var sessions []map[string]interface{}
+	if err := apiRequest("/api/sessions", "GET", nil, &sessions, false); err != nil {
+		return "", fmt.Errorf("error al consultar sesiones: %w", err)
+	}
+
+	var matchedServers []map[string]interface{}
+	for _, s := range sessions {
+		role, _ := s["role"].(string)
+		if role != "server" {
+			continue
+		}
+		bID, _ := s["bubbleId"].(string)
+		sName, _ := s["name"].(string)
+		sCwd, _ := s["cwd"].(string)
+
+		if bubbleID != "" {
+			if bID == bubbleID || strings.EqualFold(bID, bubbleID) || strings.Contains(strings.ToLower(sName), strings.ToLower(bubbleID)) {
+				matchedServers = append(matchedServers, s)
+				continue
+			}
+		}
+
+		if workspace != "" && workspace != "all" {
+			if strings.Contains(strings.ToLower(sName), workspace) || strings.Contains(strings.ToLower(sCwd), workspace) || strings.Contains(strings.ToLower(bID), workspace) {
+				matchedServers = append(matchedServers, s)
+				continue
+			}
+		}
+
+		if bubbleID == "" && (workspace == "" || workspace == "all") {
+			matchedServers = append(matchedServers, s)
+		}
+	}
+
+	if len(matchedServers) == 0 {
+		msg := "⚪ **No hay servidores de desarrollo corriendo actualmente** en Orbit"
+		if bubbleID != "" {
+			msg += fmt.Sprintf(" para la tarea/bubble `%s`", bubbleID)
+		} else if workspace != "" {
+			msg += fmt.Sprintf(" para el workspace `%s`", workspace)
+		}
+		msg += ".\n\nPuedes iniciar uno solicitando: *'inicia el servidor del proyecto'* o llamando a `start_project_server`."
+		return msg, nil
+	}
+
+	lines := []string{fmt.Sprintf("🟢 **Servidores de desarrollo encontrados en Orbit (%d):**", len(matchedServers))}
+
+	for _, s := range matchedServers {
+		id, _ := s["id"].(string)
+		name, _ := s["name"].(string)
+		cwd, _ := s["cwd"].(string)
+		cmd, _ := s["command"].(string)
+		pid := s["pid"]
+		isRunning, _ := s["isRunning"].(bool)
+		bID, _ := s["bubbleId"].(string)
+
+		statusIcon := "🟢"
+		statusText := "Corriendo"
+		if !isRunning {
+			statusIcon = "⚪"
+			statusText = "Detenido"
+		}
+
+		lines = append(lines, fmt.Sprintf("\n%s **%s** (`%s`)", statusIcon, name, id))
+		lines = append(lines, fmt.Sprintf("  - **Estado:** %s | **PID:** `%v`", statusText, pid))
+		lines = append(lines, fmt.Sprintf("  - **Directorio:** `%s`", cwd))
+		lines = append(lines, fmt.Sprintf("  - **Comando:** `%s`", cmd))
+		if bID != "" {
+			lines = append(lines, fmt.Sprintf("  - **Bubble ID:** `%s`", bID))
+		}
+
+		var hist struct {
+			Snippet string `json:"snippet"`
+			Length  int    `json:"length"`
+		}
+		if id != "" {
+			_ = apiRequest(fmt.Sprintf("/api/sessions/%s/history", id), "GET", nil, &hist, false)
+		}
+
+		if strings.TrimSpace(hist.Snippet) != "" {
+			tail := hist.Snippet
+			if len(tail) > 800 {
+				tail = tail[len(tail)-800:]
+			}
+			lines = append(lines, fmt.Sprintf("  - **Logs recientes:**\n```\n%s\n```", tail))
+		}
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
+func handleStopProjectServer(args map[string]interface{}) (string, error) {
+	sessionID, _ := args["session_id"].(string)
+	sessionID = strings.TrimSpace(sessionID)
+
+	workspace, _ := args["workspace"].(string)
+	workspace = strings.TrimSpace(strings.ToLower(workspace))
+
+	bubbleID, _ := args["bubble_id"].(string)
+	bubbleID = strings.TrimSpace(bubbleID)
+
+	var sessions []map[string]interface{}
+	if err := apiRequest("/api/sessions", "GET", nil, &sessions, false); err != nil {
+		return "", fmt.Errorf("error al consultar sesiones: %w", err)
+	}
+
+	var toStop []map[string]interface{}
+	for _, s := range sessions {
+		id, _ := s["id"].(string)
+		role, _ := s["role"].(string)
+		if role != "server" && sessionID == "" {
+			continue
+		}
+
+		if sessionID != "" {
+			if id == sessionID {
+				toStop = append(toStop, s)
+				break
+			}
+			continue
+		}
+
+		bID, _ := s["bubbleId"].(string)
+		sName, _ := s["name"].(string)
+		sCwd, _ := s["cwd"].(string)
+
+		if bubbleID != "" {
+			if bID == bubbleID || strings.EqualFold(bID, bubbleID) || strings.Contains(strings.ToLower(sName), strings.ToLower(bubbleID)) {
+				toStop = append(toStop, s)
+				continue
+			}
+		}
+
+		if workspace != "" && workspace != "all" {
+			if strings.Contains(strings.ToLower(sName), workspace) || strings.Contains(strings.ToLower(sCwd), workspace) || strings.Contains(strings.ToLower(bID), workspace) {
+				toStop = append(toStop, s)
+				continue
+			}
+		}
+
+		if bubbleID == "" && (workspace == "" || workspace == "all") {
+			toStop = append(toStop, s)
+		}
+	}
+
+	if len(toStop) == 0 {
+		return "No se encontró ningún servidor de desarrollo activo que coincida con los criterios para detener.", nil
+	}
+
+	stopped := []string{}
+	for _, s := range toStop {
+		id, _ := s["id"].(string)
+		name, _ := s["name"].(string)
+		_ = apiRequest(fmt.Sprintf("/api/sessions/%s", id), "DELETE", nil, nil, false)
+		stopped = append(stopped, fmt.Sprintf("- `%s` (%s)", name, id))
+	}
+
+	return fmt.Sprintf("🛑 **Servidor(es) de desarrollo detenido(s) exitosamente:**\n%s\n\nEl proceso y la terminal fueron cerrados en Orbit.", strings.Join(stopped, "\n")), nil
 }

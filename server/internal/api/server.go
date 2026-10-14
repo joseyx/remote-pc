@@ -91,6 +91,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/fs/directories", s.withAuth(s.handleListDirectories))
 	mux.HandleFunc("GET /api/sessions", s.withAuth(s.handleListSessions))
 	mux.HandleFunc("POST /api/sessions", s.withAuth(s.handleCreateSession))
+	mux.HandleFunc("GET /api/sessions/{id}/history", s.withAuth(s.handleGetSessionHistory))
 	mux.HandleFunc("PATCH /api/sessions/{id}", s.withAuth(s.handleRenameSession))
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.withAuth(s.handleDeleteSession))
 	mux.HandleFunc("/ws/session/{id}", s.handleWebSocket)
@@ -768,6 +769,10 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Role == "server" && req.BubbleID != "" {
+		s.bubbleMgr.SetDevRunning(req.BubbleID, true, sess.PID)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(sess.ToInfo())
@@ -775,11 +780,36 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if sess, ok := s.manager.GetSession(id); ok && sess != nil {
+		if sess.Role == "server" && sess.BubbleID != "" {
+			s.bubbleMgr.SetDevRunning(sess.BubbleID, false, 0)
+		}
+	}
 	if err := s.manager.DeleteSession(id); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleGetSessionHistory(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sess, ok := s.manager.GetSession(id)
+	if !ok || sess == nil {
+		http.Error(w, `{"error": "session not found"}`, http.StatusNotFound)
+		return
+	}
+	hist := sess.GetHistory()
+	tailLen := 4000
+	if len(hist) < tailLen {
+		tailLen = len(hist)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"id":      id,
+		"snippet": string(hist[len(hist)-tailLen:]),
+		"length":  len(hist),
+	})
 }
 
 type RenameSessionRequest struct {
