@@ -297,3 +297,47 @@
     border-bottom: none;
 }
 
+/* Branch Source Segmented Buttons */
+.branch-source-toggle-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 6px 0 10px 0;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+}
+
+.branch-toggle-btn {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+    user-select: none;
+}
+
+.branch-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+
+.branch-toggle-btn.active {
+    background: var(--bg-surface-elevated);
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 255, 150, 0.15);
+}
+

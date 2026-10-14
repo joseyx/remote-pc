@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="css/terminal.css">
     <link rel="stylesheet" href="css/views.css">
     <link rel="stylesheet" href="css/calendar.css">
-    <link rel="stylesheet" href="css/modals.css">
+    <link rel="stylesheet" href="css/modals.css?v=2.2.1">
     <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
@@ -692,19 +692,20 @@
                             <span>Origen de la Rama</span>
                             <span id="aditum-branch-loading" style="font-size: 11px; color: var(--accent); display: none;">Cargando ramas...</span>
                         </label>
-                        <div style="display: flex; gap: 12px; margin-bottom: 6px;">
-                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                                <input type="radio" name="aditum-branch-type" value="new" checked onchange="toggleBranchSource('aditum')">
-                                Nueva rama desde base
+                        <div class="branch-source-toggle-group">
+                            <label id="aditum-branch-type-label-existing" class="branch-toggle-btn active">
+                                <input type="radio" name="aditum-branch-type" value="existing" checked onchange="toggleBranchSource('aditum')" style="display: none;">
+                                <span>🌿 Clonar Rama Existente</span>
                             </label>
-                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                                <input type="radio" name="aditum-branch-type" value="existing" onchange="toggleBranchSource('aditum')">
-                                Clonar rama existente
+                            <label id="aditum-branch-type-label-new" class="branch-toggle-btn">
+                                <input type="radio" name="aditum-branch-type" value="new" onchange="toggleBranchSource('aditum')" style="display: none;">
+                                <span>🌱 Nueva Rama desde Base</span>
                             </label>
                         </div>
-                        <div id="aditum-existing-branch-container" style="display: none; margin-bottom: 8px;">
+                        <div id="aditum-existing-branch-container" style="display: block; margin-bottom: 8px;">
+                            <label class="form-label" style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">🔍 Buscar y Seleccionar Rama del Repositorio (1,271 disp.):</label>
                             <div style="position: relative;">
-                                <input type="text" id="aditum-branch-search" class="form-control" placeholder="🔍 Buscar entre las ramas (ej. TAR-1098, develop)..." oninput="filterBranches('aditum')" onfocus="showBranchDropdown('aditum')" autocomplete="off">
+                                <input type="text" id="aditum-branch-search" class="form-control" placeholder="🔍 Escribe para buscar entre las ramas (ej. TAR-1098, develop)..." oninput="filterBranches('aditum')" onfocus="showBranchDropdown('aditum')" autocomplete="off">
                                 <input type="hidden" id="aditum-existing-branch-select" value="">
                                 <div id="aditum-branch-dropdown" class="branch-autocomplete-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 220px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); z-index: 1050; box-shadow: 0 10px 25px rgba(0,0,0,0.5);"></div>
                             </div>
@@ -716,7 +717,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group" id="aditum-new-branch-container">
+                    <div class="form-group" id="aditum-new-branch-container" style="display: none;">
                         <label class="form-label">ID de Tarea (Jira / Linear) o Nombre de Rama</label>
                         <input type="text" id="aditum-task-id" class="form-control" placeholder="Ej. TAR-1130" oninput="updateAditumPortPreview()">
                         <span class="form-hint">Se creará la rama <code>feature/&lt;TAR-ID&gt;</code> y su worktree aislado.</span>
@@ -783,17 +784,18 @@
                             <span>Origen de la Rama</span>
                             <span id="brif-branch-loading" style="font-size: 11px; color: var(--accent); display: none;">Cargando ramas...</span>
                         </label>
-                        <div style="display: flex; gap: 12px; margin-bottom: 6px;">
-                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                                <input type="radio" name="brif-branch-type" value="new" checked onchange="toggleBranchSource('brif')">
-                                Nueva rama desde base
+                        <div class="branch-source-toggle-group">
+                            <label id="brif-branch-type-label-existing" class="branch-toggle-btn active">
+                                <input type="radio" name="brif-branch-type" value="existing" checked onchange="toggleBranchSource('brif')" style="display: none;">
+                                <span>🌿 Clonar Rama Existente</span>
                             </label>
-                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                                <input type="radio" name="brif-branch-type" value="existing" onchange="toggleBranchSource('brif')">
-                                Clonar rama existente
+                            <label id="brif-branch-type-label-new" class="branch-toggle-btn">
+                                <input type="radio" name="brif-branch-type" value="new" onchange="toggleBranchSource('brif')" style="display: none;">
+                                <span>🌱 Nueva Rama desde Base</span>
                             </label>
                         </div>
-                        <div id="brif-existing-branch-container" style="display: none; margin-bottom: 8px;">
+                        <div id="brif-existing-branch-container" style="display: block; margin-bottom: 8px;">
+                            <label class="form-label" style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">🔍 Buscar Rama del Repositorio Brif:</label>
                             <div style="position: relative;">
                                 <input type="text" id="brif-branch-search" class="form-control" placeholder="🔍 Buscar rama en Brif (ej. develop, feat/)..." oninput="filterBranches('brif')" onfocus="showBranchDropdown('brif')" autocomplete="off">
                                 <input type="hidden" id="brif-existing-branch-select" value="">
@@ -806,7 +808,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group" style="margin-top: 6px;" id="brif-new-branch-container">
+                    <div class="form-group" style="margin-top: 6px; display: none;" id="brif-new-branch-container">
                         <label class="form-label">Nombre de Tarea o Slug de Spider</label>
                         <input type="text" id="brif-task-id" class="form-control" placeholder="Ej. dialogos-mx, fix/entelequia-duplicada">
                         <span class="form-hint">Prefijos automáticos: <code>feat/</code> o <code>fix/</code> si no los incluyes.</span>
@@ -834,17 +836,18 @@
                             <span>Origen de la Rama</span>
                             <span id="generic-branch-loading" style="font-size: 11px; color: var(--accent); display: none;">Cargando ramas...</span>
                         </label>
-                        <div style="display: flex; gap: 12px; margin-bottom: 6px;">
-                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                                <input type="radio" name="generic-branch-type" value="new" checked onchange="toggleBranchSource('generic')">
-                                Nueva rama desde base
+                        <div class="branch-source-toggle-group">
+                            <label id="generic-branch-type-label-existing" class="branch-toggle-btn active">
+                                <input type="radio" name="generic-branch-type" value="existing" checked onchange="toggleBranchSource('generic')" style="display: none;">
+                                <span>🌿 Clonar Rama Existente</span>
                             </label>
-                            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                                <input type="radio" name="generic-branch-type" value="existing" onchange="toggleBranchSource('generic')">
-                                Clonar rama existente
+                            <label id="generic-branch-type-label-new" class="branch-toggle-btn">
+                                <input type="radio" name="generic-branch-type" value="new" onchange="toggleBranchSource('generic')" style="display: none;">
+                                <span>🌱 Nueva Rama desde Base</span>
                             </label>
                         </div>
-                        <div id="generic-existing-branch-container" style="display: none; margin-bottom: 8px;">
+                        <div id="generic-existing-branch-container" style="display: block; margin-bottom: 8px;">
+                            <label class="form-label" style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">🔍 Buscar Rama del Repositorio:</label>
                             <div style="position: relative;">
                                 <input type="text" id="generic-branch-search" class="form-control" placeholder="🔍 Buscar rama..." oninput="filterBranches('generic')" onfocus="showBranchDropdown('generic')" autocomplete="off">
                                 <input type="hidden" id="generic-existing-branch-select" value="">
@@ -857,7 +860,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group" style="margin-top: 6px;" id="generic-new-branch-container">
+                    <div class="form-group" style="margin-top: 6px; display: none;" id="generic-new-branch-container">
                         <label class="form-label">ID de Tarea o Rama Git</label>
                         <input type="text" id="generic-task-id" class="form-control" placeholder="Ej. feat-login, fix-auth, issue-102">
                         <span class="form-hint">Identificador para la rama y la carpeta aislada.</span>
@@ -1875,7 +1878,7 @@
     <!-- Application Modular Scripts -->
     <script src="js/state.js"></script>
     <script src="js/terminal.js"></script>
-    <script src="js/workspaces.js"></script>
+    <script src="js/workspaces.js?v=2.2.1"></script>
     <script src="js/actions.js"></script>
     <script src="js/views.js"></script>
     <script src="js/calendar.js"></script>

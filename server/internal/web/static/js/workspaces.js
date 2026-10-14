@@ -745,6 +745,11 @@ function toggleBranchSource(wsId) {
     if (existingContainer) existingContainer.style.display = isExisting ? 'block' : 'none';
     if (newContainer) newContainer.style.display = isExisting ? 'none' : 'block';
 
+    const labelExisting = document.getElementById(`${wsId}-branch-type-label-existing`);
+    const labelNew = document.getElementById(`${wsId}-branch-type-label-new`);
+    if (labelExisting) labelExisting.classList.toggle('active', !!isExisting);
+    if (labelNew) labelNew.classList.toggle('active', !isExisting);
+
     if (isExisting) {
         const targetWs = (wsId === 'generic') ? wizardWs : wsId;
         if (!workspaceBranchesCache[targetWs] || workspaceBranchesCache[targetWs].length === 0) {
@@ -836,11 +841,11 @@ function openNewBubbleModal(prefWs = null) {
     setWizardWorkspace(wizardWs);
     suggestNextAditumIndex();
 
-    // Reset radio buttons, branch selections and dropdowns
+    // Reset radio buttons, branch selections and dropdowns (default to existing branch search)
     ['aditum', 'brif', 'generic'].forEach(id => {
         clearSelectedBranch(id);
-        const radioNew = document.querySelector(`input[name="${id}-branch-type"][value="new"]`);
-        if (radioNew) radioNew.checked = true;
+        const radioExisting = document.querySelector(`input[name="${id}-branch-type"][value="existing"]`);
+        if (radioExisting) radioExisting.checked = true;
         toggleBranchSource(id);
     });
 
