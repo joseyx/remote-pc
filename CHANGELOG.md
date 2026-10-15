@@ -3,6 +3,16 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.3.1] - 2026-10-15
+
+### 🐛 Corregido (Fixed)
+- **Renderizado de Notas de la Versión (Patch Notes)**:
+  - Integración completa con el parser `marked.js` en el modal de actualización del Web Cockpit (`#modal-update`), renderizando el Markdown de GitHub Releases en HTML estructurado.
+  - Nueva clase tipográfica `.update-changelog-body` en `modals.css` con diseño dedicado para títulos, listas con viñetas legibles, badges de código (`<code>`) en cian y contenedor responsivo ampliado con scroll suave.
+  - Corrección de secuencias de escape y comillas invertidas en las notas publicadas en GitHub Releases.
+
+---
+
 ## [1.3.0] - 2026-10-15
 
 ### 🚀 Añadido (Added)
