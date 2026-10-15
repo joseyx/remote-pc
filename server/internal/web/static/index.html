@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="css/terminal.css">
     <link rel="stylesheet" href="css/views.css">
     <link rel="stylesheet" href="css/calendar.css">
-    <link rel="stylesheet" href="css/modals.css?v=2.2.2">
+    <link rel="stylesheet" href="css/modals.css?v=2.2.3">
     <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
@@ -1481,7 +1481,7 @@
 
     <!-- MODAL: ACTUALIZACIÓN DE ORBIT -->
     <div id="modal-update" class="modal-overlay">
-        <div class="modal-box" style="max-width: 580px;">
+        <div class="modal-box" style="max-width: 600px;">
             <div class="modal-header">
                 <h3>✨ Actualización de Orbit</h3>
                 <button class="btn btn-sm" onclick="closeUpdateModal()">✕</button>
@@ -1501,7 +1501,7 @@
 
                 <div>
                     <div style="font-size: 12px; font-weight: 600; color: var(--text-main); margin-bottom: 6px;">Notas de la Versión:</div>
-                    <div id="update-changelog" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px; font-size: 12px; line-height: 1.5; max-height: 200px; overflow-y: auto; white-space: pre-wrap; font-family: var(--font-mono, monospace); color: var(--text-muted);">Cargando notas de la versión...</div>
+                    <div id="update-changelog" class="update-changelog-body">Cargando notas de la versión...</div>
                 </div>
 
                 <!-- Status / Progress indicator -->
@@ -1883,7 +1883,7 @@
     <script src="js/views.js"></script>
     <script src="js/calendar.js"></script>
     <script src="js/palette.js"></script>
-    <script src="js/system.js"></script>
+    <script src="js/system.js?v=2.2.3"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

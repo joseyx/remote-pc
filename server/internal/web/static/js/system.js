@@ -857,7 +857,19 @@ function openUpdateModal() {
 
     if (curVerEl) curVerEl.textContent = 'v' + (latestUpdateInfo.currentVersion || '1.0.0');
     if (newVerEl) newVerEl.textContent = 'v' + (latestUpdateInfo.latestVersion || '1.0.0');
-    if (changelogEl) changelogEl.textContent = latestUpdateInfo.changelog || 'Sin notas de versión disponibles.';
+    if (changelogEl) {
+        const rawNotes = (latestUpdateInfo.changelog || 'Sin notas de versión disponibles.').trim();
+        if (typeof marked !== 'undefined') {
+            try {
+                changelogEl.innerHTML = marked.parse(rawNotes);
+            } catch (err) {
+                console.warn('Failed to parse changelog with marked:', err);
+                changelogEl.textContent = rawNotes;
+            }
+        } else {
+            changelogEl.textContent = rawNotes;
+        }
+    }
 
     const instBtn = document.getElementById('update-download-installer-btn');
     if (instBtn) {
