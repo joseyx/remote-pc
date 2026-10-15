@@ -101,6 +101,9 @@
     align-items: center;
     gap: 3px;
     box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+    white-space: nowrap !important;
+    flex-shrink: 0;
+    line-height: 1.2;
 }
 
 /* Task Sort Bar */
@@ -168,6 +171,9 @@
     cursor: pointer;
     transition: all 0.15s ease;
     user-select: none;
+    white-space: nowrap !important;
+    flex-shrink: 0;
+    line-height: 1.2;
 }
 
 .badge-priority:hover {
@@ -362,6 +368,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
+    min-height: 22px;
 }
 
 .bubble-card-title {
@@ -371,9 +379,24 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+}
+
+.bubble-card-title .bubble-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+}
+
+.bubble-card-status-group {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    flex-shrink: 0;
 }
 
 .badge-ws {
@@ -385,6 +408,8 @@
     background-color: rgba(148, 163, 184, 0.15);
     color: #cbd5e1;
     border: 1px solid rgba(148, 163, 184, 0.3);
+    white-space: nowrap !important;
+    flex-shrink: 0;
 }
 
 .badge-ws.aditum {
@@ -403,15 +428,37 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
     font-size: 11px;
     color: var(--text-dim);
     font-family: monospace;
+    min-height: 18px;
 }
 
 .bubble-card-badges {
     display: flex;
     align-items: center;
     gap: 5px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.bubble-card-meta-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.bubble-card-branch {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 135px;
+    font-size: 11px;
+    color: var(--text-dim);
 }
 
 .badge-port {
@@ -420,16 +467,21 @@
     padding: 1px 5px;
     border-radius: 3px;
     font-size: 10px;
+    white-space: nowrap !important;
+    flex-shrink: 0;
 }
 
 .badge-dev {
     font-size: 9px;
-    padding: 1px 5px;
+    padding: 2px 6px;
     border-radius: 3px;
     display: inline-flex;
     align-items: center;
     gap: 4px;
     font-weight: 600;
+    white-space: nowrap !important;
+    flex-shrink: 0;
+    line-height: 1.2;
 }
 
 .badge-dev.running {

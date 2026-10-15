@@ -202,17 +202,12 @@ function renderBubblesList() {
                     <div class="bubble-card-title">
                         ${isCustom ? `<span class="card-drag-handle" title="Arrastrar para ordenar">⠿</span>` : ''}
                         <span class="badge-ws ${b.workspace}">${b.workspace}</span>
-                        <span title="${escapeHtml(b.name)}">${escapeHtml(b.name)}</span>
+                        <span class="bubble-name" title="${escapeHtml(b.name)}">${escapeHtml(b.name)}</span>
                     </div>
-                    <div style="display: flex; gap: 4px; align-items: center;">
+                    <div class="bubble-card-status-group">
                         <span class="badge-priority ${pInfo.class}" onclick="openPriorityPicker(event, '${b.id}')" title="Prioridad Notion: ${pInfo.label} (Clic para cambiar)">
                             ${pInfo.icon} ${b.priority || 'P-'}
                         </span>
-                        ${hasTerms ? `
-                            <span class="badge-term-active" title="${bSessions.length} terminal(es) abierta(s)">
-                                💻 ${bSessions.length}${claudeCount > 0 ? ` 🤖${claudeCount}` : ''}
-                            </span>
-                        ` : ''}
                         <span class="badge-dev ${devRunning ? 'running' : 'stopped'}">
                             ${devRunning ? '● DEV' : '○ OFF'}
                         </span>
@@ -223,7 +218,14 @@ function renderBubblesList() {
                         <span class="badge-port">:${b.port || (b.workspace === 'aditum' ? '8080' : '8000')}</span>
                         <span style="color: ${isWorktree ? 'var(--accent)' : 'var(--purple)'};">${isWorktree ? 'worktree' : 'linear'}</span>
                     </span>
-                    <span style="overflow: hidden; text-overflow: ellipsis; max-width: 130px;" title="${escapeHtml(b.branch)}">${escapeHtml(b.branch)}</span>
+                    <div class="bubble-card-meta-right">
+                        ${hasTerms ? `
+                            <span class="badge-term-active" title="${bSessions.length} terminal(es) abierta(s)">
+                                💻 ${bSessions.length}${claudeCount > 0 ? ` 🤖${claudeCount}` : ''}
+                            </span>
+                        ` : ''}
+                        <span class="bubble-card-branch" title="${escapeHtml(b.branch)}">${escapeHtml(b.branch)}</span>
+                    </div>
                 </div>
             </div>
         `;
