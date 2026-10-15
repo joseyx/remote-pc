@@ -3,6 +3,37 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.3.0] - 2026-10-15
+
+### 🚀 Añadido (Added)
+- **Herramientas MCP para Servidores de Desarrollo (`orbit mcp`)**:
+  - Nuevas herramientas nativas para Claude Code y asistentes de IA:
+    - `start_project_server`: Inicia el servidor de desarrollo del workspace vinculándolo a una sesión PTY interactiva (`devserver-<id>`).
+    - `get_project_server_status`: Inspección en tiempo real de estado, PID, puerto y últimas líneas de salida.
+    - `stop_project_server`: Detención ordenada del servidor y liberación del puerto.
+  - Sincronización transparente: los logs de arranque y compilación se visualizan en vivo tanto en el Web Cockpit como en la App Móvil.
+- **Rediseño Integral de Orbit Mobile (4 Pestañas)**:
+  - Nueva interfaz moderna con Jetpack Compose y navegación por pestañas:
+    - 🪐 **Cockpit**: Gestión de workspaces, burbujas/tareas activas y diálogo de creación rápida.
+    - ⚡ **Servers**: Switch on/off para servidores de desarrollo, visualización de puertos y logs.
+    - 📋 **Daily Standup**: Generación automática de resumen de tareas y avance diario.
+    - 📊 **Monitor**: Telemetría del host (CPU, memoria, disco, IP de red/Tailscale y versión de Orbit).
+- **Integración Avanzada de Repositorios Git y Workspaces**:
+  - Detección y vinculación de repositorios Git en workspaces.
+  - Creación de tareas clonando ramas existentes con buscador predictivo en tiempo real (probado sobre más de 1,200 ramas).
+  - Selector segmentado interactivo (Nueva Rama / Rama Existente) con caché inteligente y botón de refresco forzado.
+  - Soporte para inicialización de bases de datos mediante dumps SQL personalizados (`.sql`/`.dump`).
+
+### 🐛 Corregido (Fixed)
+- **Compatibilidad con Ramas Jerárquicas (`feature/TAR-xxx`)**:
+  - Soporte completo para ramas con barras en el nombre durante la creación de worktrees.
+  - Emparejamiento resiliente de bubbles en el backend incluso si el directorio o schema ya existían localmente.
+- **Ajuste Visual y Anti-Wrap en Tarjetas de Tareas**:
+  - Rediseño en 2 filas del encabezado de las tarjetas en la barra lateral del Web Cockpit.
+  - Prevención de desbordamiento y saltos de línea en badges de estado (`nowrap`), eliminando estiramientos verticales.
+
+---
+
 ## [1.2.1] - 2026-10-13
 
 ### 🐛 Corregido (Fixed)
