@@ -922,12 +922,78 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 
 		// Find created bubble matching target
 		var created *Bubble
+		targetClean := strings.TrimPrefix(target, "origin/")
+		targetSafe := strings.ReplaceAll(targetClean, "/", "-")
+		taskIDClean := strings.TrimPrefix(req.TaskID, "origin/")
+		taskIDSafe := strings.ReplaceAll(taskIDClean, "/", "-")
+		taskSlug := strings.TrimPrefix(targetClean, "feature/")
+		taskSlug = strings.TrimPrefix(taskSlug, "hotfix/")
+
 		for _, b := range m.bubbles {
-			if strings.Contains(strings.ToLower(b.Path), strings.ToLower(target)) || (req.TaskID != "" && strings.Contains(strings.ToLower(b.Path), strings.ToLower(req.TaskID))) {
+			if b.Workspace != WorkspaceAditum {
+				continue
+			}
+			pathLower := strings.ToLower(b.Path)
+			branchLower := strings.ToLower(b.Branch)
+			idLower := strings.ToLower(b.ID)
+
+			match := false
+			// 1. Direct branch match
+			if targetClean != "" && (branchLower == strings.ToLower(targetClean) || branchLower == strings.ToLower("feature/"+targetClean) || branchLower == strings.ToLower("hotfix/"+targetClean)) {
+				match = true
+			} else if taskIDClean != "" && (branchLower == strings.ToLower(taskIDClean) || branchLower == strings.ToLower("feature/"+taskIDClean) || branchLower == strings.ToLower("hotfix/"+taskIDClean)) {
+				match = true
+			}
+			// 2. Safe path match (replacing / with -)
+			if !match && targetSafe != "" && strings.Contains(pathLower, strings.ToLower(targetSafe)) {
+				match = true
+			}
+			if !match && taskIDSafe != "" && strings.Contains(pathLower, strings.ToLower(taskIDSafe)) {
+				match = true
+			}
+			// 3. Raw contains
+			if !match && targetClean != "" && strings.Contains(pathLower, strings.ToLower(targetClean)) {
+				match = true
+			}
+			if !match && taskIDClean != "" && strings.Contains(pathLower, strings.ToLower(taskIDClean)) {
+				match = true
+			}
+			// 4. Slug match (e.g. TAR-368)
+			if !match && taskSlug != "" && strings.Contains(pathLower, strings.ToLower(taskSlug)) {
+				match = true
+			}
+			// 5. ID match
+			if !match && targetSafe != "" && strings.Contains(idLower, strings.ToLower(targetSafe)) {
+				match = true
+			}
+			if !match && taskIDSafe != "" && strings.Contains(idLower, strings.ToLower(taskIDSafe)) {
+				match = true
+			}
+
+			if match {
 				created = b
 				break
 			}
 		}
+
+		if created == nil {
+			// Fallback: search directory from start-worktree.sh output (e.g. "Aditum-feature-TAR-368")
+			for _, line := range strings.Split(string(out), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.Contains(line, "Aditum-") {
+					for _, b := range m.bubbles {
+						if b.Workspace == WorkspaceAditum && strings.Contains(line, filepath.Base(b.Path)) {
+							created = b
+							break
+						}
+					}
+					if created != nil {
+						break
+					}
+				}
+			}
+		}
+
 		if created != nil {
 			if req.Name != "" {
 				created.Name = req.Name
@@ -974,7 +1040,7 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 
 			m.scanGitWorktrees(WorkspaceBrif, scrapperPath)
 			for _, b := range m.bubbles {
-				if filepath.Clean(b.Path) == filepath.Clean(targetDir) {
+				if strings.EqualFold(filepath.Clean(b.Path), filepath.Clean(targetDir)) || (b.Workspace == WorkspaceBrif && strings.EqualFold(b.Branch, branchName)) {
 					if req.Name != "" {
 						b.Name = req.Name
 					}
@@ -1074,7 +1140,7 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 
 			// Look up created bubble
 			for _, b := range m.bubbles {
-				if filepath.Clean(b.Path) == filepath.Clean(targetDir) {
+				if strings.EqualFold(filepath.Clean(b.Path), filepath.Clean(targetDir)) || (b.Workspace == req.Workspace && strings.EqualFold(b.Branch, branchName)) {
 					if req.Name != "" {
 						b.Name = req.Name
 					}
