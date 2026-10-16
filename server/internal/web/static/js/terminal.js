@@ -400,7 +400,8 @@ function connectToSession(sessionId) {
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
         fontSize: currentTermFontSize,
         cursorBlink: true,
-        convertEol: false
+        convertEol: false,
+        windowsMode: true
     });
 
     if (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) {
@@ -413,8 +414,12 @@ function connectToSession(sessionId) {
     }
 
     termObj.open(container);
+    if (fitAddon) {
+        try { fitAddon.fit(); } catch (e) {}
+    }
     setupTerminalKeyHandlers(termObj, () => termWs);
     requestAnimationFrame(() => {
+        fitActiveTerminal();
         setTimeout(fitActiveTerminal, 60);
         setTimeout(fitActiveTerminal, 250);
     });
@@ -468,10 +473,16 @@ function fitActiveTerminal() {
     if (!container || container.offsetWidth <= 0 || container.offsetHeight <= 0) {
         return;
     }
-    if (fitAddon && termObj && termWs && termWs.readyState === WebSocket.OPEN) {
+    container.scrollLeft = 0;
+    if (termObj && termObj.element) {
+        termObj.element.scrollLeft = 0;
+        const vp = termObj.element.querySelector('.xterm-viewport');
+        if (vp) vp.scrollLeft = 0;
+    }
+    if (fitAddon && termObj) {
         try {
             fitAddon.fit();
-            if (termObj.cols > 0 && termObj.rows > 0) {
+            if (termObj.cols > 0 && termObj.rows > 0 && termWs && termWs.readyState === WebSocket.OPEN) {
                 if (termObj.cols !== lastSentCols || termObj.rows !== lastSentRows) {
                     lastSentCols = termObj.cols;
                     lastSentRows = termObj.rows;
@@ -749,7 +760,8 @@ function connectToSplitSession(sessionId) {
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
         fontSize: currentTermFontSize,
         cursorBlink: true,
-        convertEol: false
+        convertEol: false,
+        windowsMode: true
     });
 
     if (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) {
@@ -762,8 +774,12 @@ function connectToSplitSession(sessionId) {
     }
 
     termObj2.open(container);
+    if (fitAddon2) {
+        try { fitAddon2.fit(); } catch (e) {}
+    }
     setupTerminalKeyHandlers(termObj2, () => termWs2);
     requestAnimationFrame(() => {
+        fitSplitTerminal();
         setTimeout(fitSplitTerminal, 60);
         setTimeout(fitSplitTerminal, 250);
     });
@@ -814,10 +830,16 @@ function fitSplitTerminal() {
     if (!container || container.offsetWidth <= 0 || container.offsetHeight <= 0) {
         return;
     }
-    if (fitAddon2 && termObj2 && termWs2 && termWs2.readyState === WebSocket.OPEN) {
+    container.scrollLeft = 0;
+    if (termObj2 && termObj2.element) {
+        termObj2.element.scrollLeft = 0;
+        const vp = termObj2.element.querySelector('.xterm-viewport');
+        if (vp) vp.scrollLeft = 0;
+    }
+    if (fitAddon2 && termObj2) {
         try {
             fitAddon2.fit();
-            if (termObj2.cols > 0 && termObj2.rows > 0) {
+            if (termObj2.cols > 0 && termObj2.rows > 0 && termWs2 && termWs2.readyState === WebSocket.OPEN) {
                 if (termObj2.cols !== lastSentCols2 || termObj2.rows !== lastSentRows2) {
                     lastSentCols2 = termObj2.cols;
                     lastSentRows2 = termObj2.rows;
@@ -921,7 +943,21 @@ async function triggerKillFromCtx() {
 
 
 function clearActiveTerminal() {
-    if (termObj) termObj.clear();
+    const container = document.getElementById('terminal-embed');
+    if (container) container.scrollLeft = 0;
+    if (termObj && termObj.element) {
+        termObj.element.scrollLeft = 0;
+        const vp = termObj.element.querySelector('.xterm-viewport');
+        if (vp) vp.scrollLeft = 0;
+    }
+    fitActiveTerminal();
+    if (termObj && termWs && termWs.readyState === WebSocket.OPEN) {
+        termWs.send(JSON.stringify({ type: "resize", cols: termObj.cols, rows: termObj.rows }));
+    }
+    if (termObj) {
+        termObj.clear();
+        termObj.scrollToBottom();
+    }
     sendTerminalKey('\x0c');
 }
 
@@ -1022,17 +1058,26 @@ let quakeTermWs = null;
 let isQuakeOpen = false;
 
 function fitQuakeTerminal() {
-    if (!quakeFitAddon || !quakeTermObj) return;
-    try {
-        quakeFitAddon.fit();
-        if (quakeTermWs && quakeTermWs.readyState === WebSocket.OPEN) {
-            quakeTermWs.send(JSON.stringify({
-                type: 'resize',
-                cols: quakeTermObj.cols,
-                rows: quakeTermObj.rows
-            }));
-        }
-    } catch (e) {}
+    const embed = document.getElementById('quake-terminal-embed');
+    if (!embed || embed.offsetWidth <= 0 || embed.offsetHeight <= 0) return;
+    embed.scrollLeft = 0;
+    if (quakeTermObj && quakeTermObj.element) {
+        quakeTermObj.element.scrollLeft = 0;
+        const vp = quakeTermObj.element.querySelector('.xterm-viewport');
+        if (vp) vp.scrollLeft = 0;
+    }
+    if (quakeFitAddon && quakeTermObj) {
+        try {
+            quakeFitAddon.fit();
+            if (quakeTermWs && quakeTermWs.readyState === WebSocket.OPEN) {
+                quakeTermWs.send(JSON.stringify({
+                    type: 'resize',
+                    cols: quakeTermObj.cols,
+                    rows: quakeTermObj.rows
+                }));
+            }
+        } catch (e) {}
+    }
 }
 
 async function toggleQuakeTerminal() {
@@ -1116,7 +1161,8 @@ async function initQuakeTerminal() {
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
             fontSize: currentTermFontSize,
             cursorBlink: true,
-            convertEol: false
+            convertEol: false,
+            windowsMode: true
         });
 
         if (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) {
@@ -1125,6 +1171,9 @@ async function initQuakeTerminal() {
         }
 
         quakeTermObj.open(embed);
+        if (quakeFitAddon) {
+            try { quakeFitAddon.fit(); } catch (e) {}
+        }
         setupTerminalKeyHandlers(quakeTermObj, () => quakeTermWs);
 
         quakeTermObj.onData(data => {
@@ -1177,4 +1226,30 @@ async function initQuakeTerminal() {
 
 function clearQuakeTerminal() {
     if (quakeTermObj) quakeTermObj.clear();
+}
+
+// ==========================================
+// Terminal Container ResizeObserver
+// ==========================================
+let termResizeObserver = null;
+function initTerminalResizeObserver() {
+    if (typeof ResizeObserver === 'undefined') return;
+    if (termResizeObserver) {
+        try { termResizeObserver.disconnect(); } catch (e) {}
+    }
+    let resizeTimer = null;
+    termResizeObserver = new ResizeObserver(() => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            if (activeTab === 'terminal') {
+                fitActiveTerminal();
+                if (isSplitActive) fitSplitTerminal();
+            }
+        }, 50);
+    });
+
+    const wrapper = document.getElementById('terminal-embed-wrapper');
+    if (wrapper) {
+        termResizeObserver.observe(wrapper);
+    }
 }

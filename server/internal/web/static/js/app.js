@@ -84,6 +84,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     applyTerminalFontSize();
     updateSortBarUI();
     initSplitResizer();
+    initTerminalResizeObserver();
     initSysStatsDrag();
     await refreshAll();
     checkForUpdates(true);
