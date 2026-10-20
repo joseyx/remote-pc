@@ -1,7 +1,8 @@
 ## 📝 Descripción del Cambio
 Describe de forma clara y concisa los cambios introducidos en este Pull Request y su motivación.
 
-Closes # (issue vinculado si existe)
+<!-- ⚠️ OBLIGATORIO: Vincula el Issue documentado correspondiente (ej. Closes #12 o Refs #12) -->
+Closes # 
 
 ---
 
