@@ -15,19 +15,20 @@ body:
       placeholder: "Actualmente cuando el usuario intenta... la aplicación carece de... lo que dificulta..."
     validations:
       required: true
-  - type: checkboxes
+  - type: dropdown
     id: components
     attributes:
       label: 2. Componentes Afectados
       description: Selecciona los módulos del sistema involucrados en esta feature.
+      multiple: true
       options:
-        - label: "Backend Go / API REST / WebSockets (`server/`)"
-        - label: "Manejo de Terminales y ConPTY Windows (`server/internal/pty`)"
-        - label: "Servidor MCP y Herramientas IA (`server/internal/mcp`)"
-        - label: "Sistema de Plugins y Extensiones (`server/internal/plugin`)"
-        - label: "Dashboard Web Cockpit (`server/internal/web`)"
-        - label: "App Móvil Android (`android/`)"
-        - label: "Scripts de Instalación y Automatización (`installer/`, `scripts/`)"
+        - "Backend Go / API REST / WebSockets (`server/`)"
+        - "Manejo de Terminales y ConPTY Windows (`server/internal/pty`)"
+        - "Servidor MCP y Herramientas IA (`server/internal/mcp`)"
+        - "Sistema de Plugins y Extensiones (`server/internal/plugin`)"
+        - "Dashboard Web Cockpit (`server/internal/web`)"
+        - "App Móvil Android (`android/`)"
+        - "Scripts de Instalación y Automatización (`installer/`, `scripts/`)"
     validations:
       required: true
   - type: textarea

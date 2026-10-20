@@ -15,17 +15,18 @@ body:
       placeholder: "Refactorizar el módulo de gestión de sesiones para desacoplar el protocolo ConPTY de la capa WebSocket..."
     validations:
       required: true
-  - type: checkboxes
+  - type: dropdown
     id: scope_type
     attributes:
       label: 2. Tipo de Tarea
       description: Selecciona las categorías que apliquen a este trabajo.
+      multiple: true
       options:
-        - label: "Refactorización arquitectónica de código (`refactor`)"
-        - label: "Optimización de rendimiento o concurrencia (`perf`)"
-        - label: "Actualización de dependencias o infraestructura de build (`chore`)"
-        - label: "Ampliación o robustecimiento de pruebas unitarias (`test`)"
-        - label: "Mejora de CI/CD, linters o documentación (`ci`, `docs`)"
+        - "Refactorización arquitectónica de código (`refactor`)"
+        - "Optimización de rendimiento o concurrencia (`perf`)"
+        - "Actualización de dependencias o infraestructura de build (`chore`)"
+        - "Ampliación o robustecimiento de pruebas unitarias (`test`)"
+        - "Mejora de CI/CD, linters o documentación (`ci`, `docs`)"
     validations:
       required: true
   - type: textarea

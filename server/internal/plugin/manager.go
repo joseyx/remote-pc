@@ -111,8 +111,11 @@ func (m *Manager) load() {
 
 	data, err := os.ReadFile(m.filePath)
 	if err == nil {
-		if err := json.Unmarshal(data, &m.states); err != nil {
+		fresh := make(map[string]storedPluginState)
+		if err := json.Unmarshal(data, &fresh); err != nil {
 			log.Printf("[plugins] advertencia: error al parsear %s: %v", m.filePath, err)
+		} else {
+			m.states = fresh
 		}
 	}
 

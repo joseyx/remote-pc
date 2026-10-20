@@ -1672,12 +1672,21 @@ func handleExtractAudio(args map[string]interface{}) (string, error) {
 		return "", fmt.Errorf("el parámetro 'video_path' es inválido o no puede comenzar con '-'")
 	}
 
+	fi, err := os.Stat(videoPath)
+	if err != nil || fi.IsDir() {
+		return "", fmt.Errorf("archivo de video no encontrado o no es un archivo válido: %s", videoPath)
+	}
+
 	outputPath, _ := args["output_path"].(string)
 	outputPath = strings.TrimSpace(outputPath)
 	if outputPath != "" && strings.HasPrefix(outputPath, "-") {
 		return "", fmt.Errorf("el parámetro 'output_path' no puede comenzar con '-'")
 	}
-	if outputPath == "" {
+	if outputPath != "" {
+		if _, err := os.Stat(outputPath); err == nil {
+			return "", fmt.Errorf("el archivo de destino '%s' ya existe. Especifica otro nombre para no sobrescribir", outputPath)
+		}
+	} else {
 		ext := filepath.Ext(videoPath)
 		baseOut := strings.TrimSuffix(videoPath, ext) + ".mp3"
 		outputPath = baseOut
@@ -1698,10 +1707,10 @@ func handleExtractAudio(args map[string]interface{}) (string, error) {
 		return "", fmt.Errorf("error extrayendo audio con ffmpeg: %w", err)
 	}
 
-	fi, _ := os.Stat(outputPath)
+	outFi, _ := os.Stat(outputPath)
 	sizeMB := float64(0)
-	if fi != nil {
-		sizeMB = float64(fi.Size()) / (1024 * 1024)
+	if outFi != nil {
+		sizeMB = float64(outFi.Size()) / (1024 * 1024)
 	}
 
 	return fmt.Sprintf("🎵 **Audio extraído exitosamente con FFmpeg:**\n\n"+

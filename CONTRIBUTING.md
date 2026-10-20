@@ -35,7 +35,7 @@ go test ./...              # Ejecutar tests
 go run cmd/server/main.go  # Iniciar servidor en modo desarrollo
 ```
 
-### 3. Cliente Android
+### 4. Cliente Android
 Abre la carpeta `android/` en **Android Studio (Ladybug o superior)**:
 - Requiere JDK 17 y Android SDK 34+.
 - Compila con:
@@ -44,7 +44,7 @@ Abre la carpeta `android/` en **Android Studio (Ladybug o superior)**:
   ./gradlew assembleDebug
   ```
 
-### 4. Compilación del Instalador
+### 5. Compilación del Instalador
 Para empaquetar el instalador para usuarios finales:
 ```powershell
 .\scripts\build-installer.ps1
