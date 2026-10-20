@@ -1,0 +1,59 @@
+name: 🛠️ Tarea Técnica o Refactorización (Chore / Refactor)
+description: Documenta tareas de mantenimiento interno, refactorización, optimización de rendimiento o deuda técnica.
+title: "[CHORE]: "
+labels: ["maintenance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Usa esta plantilla para documentar tareas de mantenimiento arquitectónico, refactorizaciones internas, optimizaciones de memoria/CPU o actualización de dependencias.
+  - type: textarea
+    id: task_goal
+    attributes:
+      label: 1. Objetivo Técnico y Motivación
+      description: ¿Qué se va a refactorizar o mantener y cuál es el beneficio técnico obtenido?
+      placeholder: "Refactorizar el módulo de gestión de sesiones para desacoplar el protocolo ConPTY de la capa WebSocket..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope_type
+    attributes:
+      label: 2. Tipo de Tarea
+      description: Selecciona las categorías que apliquen a este trabajo.
+      options:
+        - label: "Refactorización arquitectónica de código (`refactor`)"
+        - label: "Optimización de rendimiento o concurrencia (`perf`)"
+        - label: "Actualización de dependencias o infraestructura de build (`chore`)"
+        - label: "Ampliación o robustecimiento de pruebas unitarias (`test`)"
+        - label: "Mejora de CI/CD, linters o documentación (`ci`, `docs`)"
+    validations:
+      required: true
+  - type: textarea
+    id: technical_plan
+    attributes:
+      label: 3. Plan de Implementación y Archivos Afectados
+      description: Enumera los paquetes, interfaces o archivos principales que serán modificados.
+      placeholder: |
+        - Modificar `server/internal/session/...`
+        - Migrar llamadas en `server/internal/api/...` para usar la nueva interfaz
+        - Actualizar pruebas unitarias en `server/internal/...`
+    validations:
+      required: true
+  - type: textarea
+    id: testing_strategy
+    attributes:
+      label: 4. Estrategia de Verificación y Pruebas
+      description: ¿Cómo se garantizará que este cambio no introduce regresiones funcionales ni afecta terminales en producción?
+      placeholder: "Ejecución de `go test -v ./...`, pruebas de carga de WebSockets, smoke tests en Windows..."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: 5. Criterios de Aceptación
+      value: |
+        - [ ] La refactorización no altera la funcionalidad pública existente ni introduce incompatibilidades.
+        - [ ] Todas las pruebas unitarias pasan exitosamente (`go test ./...`).
+        - [ ] La compilación en matrices multiplataforma (Windows, Linux, macOS) finaliza sin errores.
+    validations:
+      required: true

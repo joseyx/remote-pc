@@ -1,0 +1,83 @@
+name: 🚀 Propuesta de Funcionalidad (Feature Request)
+description: Propón una nueva funcionalidad o mejora técnica extensa para Orbit / Remote PC.
+title: "[FEAT]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por proponer una mejora para Orbit. Por favor, documenta detalladamente la propuesta para que pueda ser evaluada, desarrollada y testeada con claridad.
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: 1. Motivación y Problema a Resolver
+      description: Explica con claridad qué limitación, fricción o necesidad actual busca resolver esta funcionalidad.
+      placeholder: "Actualmente cuando el usuario intenta... la aplicación carece de... lo que dificulta..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: components
+    attributes:
+      label: 2. Componentes Afectados
+      description: Selecciona los módulos del sistema involucrados en esta feature.
+      options:
+        - label: "Backend Go / API REST / WebSockets (`server/`)"
+        - label: "Manejo de Terminales y ConPTY Windows (`server/internal/pty`)"
+        - label: "Servidor MCP y Herramientas IA (`server/internal/mcp`)"
+        - label: "Sistema de Plugins y Extensiones (`server/internal/plugin`)"
+        - label: "Dashboard Web Cockpit (`server/internal/web`)"
+        - label: "App Móvil Android (`android/`)"
+        - label: "Scripts de Instalación y Automatización (`installer/`, `scripts/`)"
+    validations:
+      required: true
+  - type: textarea
+    id: technical_specification
+    attributes:
+      label: 3. Especificación Técnica y Arquitectura Propuesta
+      description: Describe cómo se implementará a nivel de código o arquitectura (nuevos structs en Go, endpoints HTTP, eventos WebSocket, herramientas MCP o interfaces de usuario).
+      placeholder: |
+        - Nuevos endpoints o herramientas MCP:
+          - POST /api/... o tool `nombre_herramienta`
+        - Estructura de datos:
+          type MiStruct struct { ... }
+        - Flujo de interacción:
+          1. El cliente envía...
+          2. El servidor procesa...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: 4. Criterios de Aceptación (Definition of Done)
+      description: Lista de verificación obligatoria de requisitos mínimos que deben cumplirse para dar la feature por finalizada.
+      value: |
+        - [ ] Funcionalidad principal implementada y operativa de extremo a extremo.
+        - [ ] Pruebas unitarias correspondientes añadidas y pasando en verde (`go test ./...`).
+        - [ ] No se producen fugas de goroutines ni de handles de ConPTY en Windows.
+        - [ ] Documentación técnica y comentarios en código actualizados.
+        - [ ] Probado en entorno local sin afectar procesos existentes de Orbit.
+    validations:
+      required: true
+  - type: textarea
+    id: edge_cases_and_security
+    attributes:
+      label: 5. Casos de Borde, Concurrencia y Seguridad
+      description: Detalla posibles fallos o casos límite (desconexión intempestiva de sockets, concurrencia de goroutines con sync.Mutex, timeouts con context.Context, sanitización de entradas).
+      placeholder: "¿Qué ocurre si la conexión se interrumpe a mitad del proceso? ¿Cómo se manejan los timeouts y la cancelación de contextos?"
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives_considered
+    attributes:
+      label: 6. Alternativas Consideradas
+      description: ¿Evaluaste otros enfoques, librerías o diseños alternativos? ¿Por qué se eligió este?
+      placeholder: "Se evaluó usar el enfoque X, pero se descartó debido a..."
+    validations:
+      required: false
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 7. Contexto Adicional, Mockups o Referencias
+      description: Añade capturas de pantalla, diagramas de arquitectura, enlaces a documentación o cualquier información complementaria.
+    validations:
+      required: false
