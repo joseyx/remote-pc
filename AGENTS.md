@@ -36,15 +36,15 @@ Si es estrictamente necesario levantar el servidor compilado para probar un camb
 2. **Usar SIEMPRE un puerto secundario (distinto de 8080) y un directorio de datos aislado:**
    ```powershell
    $env:ORBIT_DATA_DIR = "$env:TEMP\orbit-dev-data"
-   .\server\orbit-dev.exe -port 8089 -no-open
+   $devProcess = Start-Process .\orbit-dev.exe -ArgumentList "-port 8089 -no-open" -PassThru
    ```
 3. **Probar contra dicho puerto:**
    ```powershell
    curl.exe -s http://localhost:8089/api/health
    ```
-4. **Finalizar únicamente el proceso de prueba específico creado (`orbit-dev.exe` en el puerto 8089), sin tocar el proceso principal:**
+4. **Finalizar únicamente el proceso de prueba específico creado mediante su PID, sin tocar el proceso principal:**
    ```powershell
-   Stop-Process -Name "orbit-dev" -Force
+   Stop-Process -Id $devProcess.Id -Force
    ```
 
 ---

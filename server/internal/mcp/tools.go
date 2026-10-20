@@ -1594,9 +1594,12 @@ var GroqWhisperTools = []Tool{
 
 // GetTools returns default MCP tools plus tools from any enabled plugins
 func GetTools() []Tool {
+	mgr := plugin.GetGlobalManager()
+	if mgr != nil {
+		mgr.Reload()
+	}
 	base := make([]Tool, len(Tools))
 	copy(base, Tools)
-	mgr := plugin.GetGlobalManager()
 	if mgr != nil && mgr.IsEnabled("groq_whisper") {
 		base = append(base, GroqWhisperTools...)
 	}
@@ -1664,14 +1667,23 @@ func handleExtractAudio(args map[string]interface{}) (string, error) {
 	}
 
 	videoPath, _ := args["video_path"].(string)
-	if strings.TrimSpace(videoPath) == "" {
-		return "", fmt.Errorf("el parámetro 'video_path' es obligatorio")
+	videoPath = strings.TrimSpace(videoPath)
+	if videoPath == "" || strings.HasPrefix(videoPath, "-") {
+		return "", fmt.Errorf("el parámetro 'video_path' es inválido o no puede comenzar con '-'")
 	}
 
 	outputPath, _ := args["output_path"].(string)
-	if strings.TrimSpace(outputPath) == "" {
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath != "" && strings.HasPrefix(outputPath, "-") {
+		return "", fmt.Errorf("el parámetro 'output_path' no puede comenzar con '-'")
+	}
+	if outputPath == "" {
 		ext := filepath.Ext(videoPath)
-		outputPath = strings.TrimSuffix(videoPath, ext) + ".mp3"
+		baseOut := strings.TrimSuffix(videoPath, ext) + ".mp3"
+		outputPath = baseOut
+		if _, err := os.Stat(outputPath); err == nil {
+			outputPath = fmt.Sprintf("%s_extracted_%d.mp3", strings.TrimSuffix(videoPath, ext), time.Now().Unix())
+		}
 	}
 
 	bitrate, _ := args["bitrate"].(string)

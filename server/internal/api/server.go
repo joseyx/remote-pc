@@ -1807,8 +1807,9 @@ func (s *Server) handleGroqWhisperTranscribe(w http.ResponseWriter, r *http.Requ
 
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		if err := r.ParseMultipartForm(150 << 20); err != nil { // 150 MB max
-			http.Error(w, "Error al procesar archivo cargado: "+err.Error(), http.StatusBadRequest)
+		r.Body = http.MaxBytesReader(w, r.Body, 150<<20)
+		if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MB en RAM, 150 MB límite total
+			http.Error(w, "Error al procesar archivo cargado (máximo 150 MB): "+err.Error(), http.StatusBadRequest)
 			return
 		}
 

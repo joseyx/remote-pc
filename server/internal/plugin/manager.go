@@ -3,6 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,37 +111,37 @@ func (m *Manager) load() {
 
 	data, err := os.ReadFile(m.filePath)
 	if err == nil {
-		_ = json.Unmarshal(data, &m.states)
+		if err := json.Unmarshal(data, &m.states); err != nil {
+			log.Printf("[plugins] advertencia: error al parsear %s: %v", m.filePath, err)
+		}
 	}
 
-	// Auto-populate env fallbacks if present
-	if state, ok := m.states["groq_whisper"]; ok {
-		if apiKey, _ := state.Config["api_key"].(string); strings.TrimSpace(apiKey) == "" {
-			if envKey := os.Getenv("GROQ_API_KEY"); envKey != "" {
-				state.Config["api_key"] = envKey
-				m.states["groq_whisper"] = state
-			}
-		}
-	} else if envKey := os.Getenv("GROQ_API_KEY"); envKey != "" {
-		m.states["groq_whisper"] = storedPluginState{
-			Enabled: true,
-			Config: map[string]any{
-				"api_key":         envKey,
-				"model":           "whisper-large-v3-turbo",
-				"language":        "auto",
-				"with_timestamps": true,
-			},
+	if m.states == nil {
+		m.states = make(map[string]storedPluginState)
+	}
+
+	for id, st := range m.states {
+		if st.Config == nil {
+			st.Config = make(map[string]any)
+			m.states[id] = st
 		}
 	}
 }
 
+// Reload re-reads stored plugin states from disk
+func (m *Manager) Reload() {
+	m.load()
+}
+
 func (m *Manager) saveLocked() error {
-	_ = os.MkdirAll(m.dataDir, 0755)
+	if err := os.MkdirAll(m.dataDir, 0700); err != nil {
+		return fmt.Errorf("error al crear directorio de datos de plugins: %w", err)
+	}
 	data, err := json.MarshalIndent(m.states, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(m.filePath, data, 0644)
+	return os.WriteFile(m.filePath, data, 0600)
 }
 
 // ListPlugins returns all plugins, optionally masking sensitive fields like api_key
@@ -161,6 +162,14 @@ func (m *Manager) ListPlugins(maskSecrets bool) []PluginInfo {
 			p.Enabled = st.Enabled
 			for k, v := range st.Config {
 				p.Config[k] = v
+			}
+		}
+
+		if p.ID == "groq_whisper" {
+			if apiKey, _ := p.Config["api_key"].(string); strings.TrimSpace(apiKey) == "" {
+				if envKey := os.Getenv("GROQ_API_KEY"); envKey != "" {
+					p.Config["api_key"] = envKey
+				}
 			}
 		}
 

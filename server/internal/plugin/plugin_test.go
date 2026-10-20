@@ -7,11 +7,8 @@ import (
 )
 
 func TestPluginManager(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "orbit_plugin_test_*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	t.Setenv("GROQ_API_KEY", "")
+	tempDir := t.TempDir()
 
 	mgr := NewManager(tempDir)
 

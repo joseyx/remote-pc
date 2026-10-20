@@ -50,6 +50,9 @@ func CheckFFmpeg() error {
 
 // ExtractAudio converts video/audio to a lightweight mono MP3 optimized for Whisper
 func ExtractAudio(ctx context.Context, mediaPath, outputPath, bitrate string) error {
+	if strings.HasPrefix(strings.TrimSpace(mediaPath), "-") || strings.HasPrefix(strings.TrimSpace(outputPath), "-") {
+		return fmt.Errorf("ruta de archivo inválida: no puede comenzar con '-'")
+	}
 	if err := CheckFFmpeg(); err != nil {
 		return err
 	}
@@ -270,9 +273,10 @@ func TranscribeMedia(ctx context.Context, mediaPath string, withTimestamps bool,
 
 			// Cut segment with ffmpeg
 			cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-ss", fmt.Sprintf("%.2f", startSec), "-t", fmt.Sprintf("%d", ChunkDurationSeconds), "-i", tempAudioPath, "-acodec", "copy", chunkAudioPath)
-			if cutErr := cmd.Run(); cutErr != nil {
+			out, cutErr := cmd.CombinedOutput()
+			if cutErr != nil {
 				os.Remove(chunkAudioPath)
-				continue
+				return nil, fmt.Errorf("error al cortar segmento %d con ffmpeg: %w (salida: %s)", i+1, cutErr, strings.TrimSpace(string(out)))
 			}
 
 			chunkRes, chunkErr := sendGroqWhisperRequest(ctx, apiKey, model, language, customPrompt, chunkAudioPath)

@@ -2,6 +2,16 @@
 // Orbit Plugins & Extensions Engine (pear-desktop style)
 // ==========================================
 
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 let allPlugins = [];
 let pendingPluginsRestart = false;
 let currentTranscribeFile = null;
@@ -37,7 +47,7 @@ async function loadPlugins() {
         console.error("Failed to load plugins:", err);
         const container = document.getElementById('plugins-list-container');
         if (container) {
-            container.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 20px;">Error al cargar plugins: ${err.message}</div>`;
+            container.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 20px;">Error al cargar plugins: ${escapeHtml(err.message)}</div>`;
         }
     }
 }
@@ -121,31 +131,34 @@ function renderPluginsList() {
 // Render dynamic configuration fields
 function renderConfigField(pluginId, field, currentValue) {
     const fieldId = `cfg-${pluginId}-${field.key}`;
-    const val = currentValue !== undefined ? currentValue : (field.default || '');
+    const rawVal = currentValue !== undefined ? currentValue : (field.default || '');
+    const val = escapeHtml(rawVal);
+    const placeholder = escapeHtml(field.placeholder || '');
 
     let inputHtml = '';
     if (field.type === 'select') {
         const options = (field.options || []).map(opt => {
-            const selected = opt === val ? 'selected' : '';
-            return `<option value="${opt}" ${selected}>${opt}</option>`;
+            const optEsc = escapeHtml(opt);
+            const selected = opt === rawVal ? 'selected' : '';
+            return `<option value="${optEsc}" ${selected}>${optEsc}</option>`;
         }).join('');
         inputHtml = `<select id="${fieldId}" class="form-control" style="font-size: 12px; height: 30px; background: var(--bg-surface);">${options}</select>`;
     } else if (field.type === 'checkbox') {
-        const checked = val ? 'checked' : '';
+        const checked = rawVal ? 'checked' : '';
         inputHtml = `
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--text-main);">
-                <input type="checkbox" id="${fieldId}" ${checked}> ${field.label}
+                <input type="checkbox" id="${fieldId}" ${checked}> ${escapeHtml(field.label)}
             </label>
         `;
     } else if (field.type === 'password') {
         inputHtml = `
             <div style="position: relative; display: flex; align-items: center;">
-                <input type="password" id="${fieldId}" value="${val}" placeholder="${field.placeholder || ''}" class="form-control" style="font-size: 12px; padding-right: 32px; font-family: monospace;">
+                <input type="password" id="${fieldId}" value="${val}" placeholder="${placeholder}" class="form-control" style="font-size: 12px; padding-right: 32px; font-family: monospace;">
                 <button type="button" class="btn btn-sm btn-ghost" onclick="togglePasswordVisibility('${fieldId}')" style="position: absolute; right: 2px; padding: 2px 6px; font-size: 12px;" title="Mostrar / Ocultar">👁️</button>
             </div>
         `;
     } else {
-        inputHtml = `<input type="${field.type || 'text'}" id="${fieldId}" value="${val}" placeholder="${field.placeholder || ''}" class="form-control" style="font-size: 12px;">`;
+        inputHtml = `<input type="${field.type || 'text'}" id="${fieldId}" value="${val}" placeholder="${placeholder}" class="form-control" style="font-size: 12px;">`;
     }
 
     if (field.type === 'checkbox') {
@@ -383,7 +396,7 @@ function handleTranscribeFileSelect(files) {
         const sizeMB = (currentTranscribeFile.size / (1024 * 1024)).toFixed(1);
         dropzone.innerHTML = `
             <div style="font-size: 28px; margin-bottom: 6px;">✅</div>
-            <strong style="color: var(--accent); font-size: 13px;">${currentTranscribeFile.name}</strong>
+            <strong style="color: var(--accent); font-size: 13px;">${escapeHtml(currentTranscribeFile.name)}</strong>
             <span style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">Tamaño: ${sizeMB} MB · Listo para procesar</span>
         `;
     }
@@ -512,7 +525,7 @@ function renderTranscriptionResult(data) {
 
     if (metaEl) {
         metaEl.innerHTML = `
-            <span>🌐 Idioma: <strong>${data.language || 'Detectado'}</strong></span> · 
+            <span>🌐 Idioma: <strong>${escapeHtml(data.language || 'Detectado')}</strong></span> · 
             <span>⏱️ Duración: <strong>${data.duration ? data.duration.toFixed(1) + 's (~' + durMin + ' min)' : 'N/A'}</strong></span> · 
             <span>📝 Palabras: <strong>${words}</strong></span>
         `;
@@ -569,7 +582,7 @@ async function saveTranscribeToTodayNote() {
         const res = await fetch('/api/calendar/note/append', {
             method: 'POST',
             headers,
-            body: JSON.stringify({ content: noteText })
+            body: JSON.stringify({ text: noteText })
         });
 
         if (!res.ok) throw new Error("Error HTTP " + res.status);

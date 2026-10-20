@@ -22,7 +22,13 @@ git clone https://github.com/joseyx/remote-pc.git
 cd remote-pc
 ```
 
-### 2. Backend Go
+### 2. Configurar Git Hooks (Obligatorio)
+Para activar la protección local que previene commits directos en ramas protegidas (`main` y `develop`):
+```bash
+git config core.hooksPath .githooks
+```
+
+### 3. Backend Go
 ```powershell
 cd server
 go test ./...              # Ejecutar tests
