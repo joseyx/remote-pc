@@ -1392,6 +1392,17 @@ function updateQuickActionsUI() {
             </button>
         `;
     }
+
+    // Add Transcribe action if groq_whisper plugin is enabled
+    const groqPlugin = (typeof allPlugins !== 'undefined') && allPlugins.find(p => p.id === 'groq_whisper' && p.enabled);
+    if (groqPlugin) {
+        popup.innerHTML += `
+            <div style="border-top: 1px solid var(--border-subtle); margin: 4px 0;"></div>
+            <button class="btn btn-sm" style="text-align: left; justify-content: flex-start; background: transparent; border: none; width: 100%; color: var(--accent);" onclick="toggleQuickActionsMenu(); openTranscribeModal();">
+                🎙️ Transcribir Video / Audio (Whisper)
+            </button>
+        `;
+    }
 }
 
 function toggleQuickActionsMenu() {

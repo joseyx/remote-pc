@@ -95,3 +95,11 @@ func TestServerToolsValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestPluginDynamicTools(t *testing.T) {
+	// Without plugin enabled, GetTools() returns base Tools
+	tools := GetTools()
+	if len(tools) != 13 {
+		t.Fatalf("expected 13 default tools without plugin, got %d", len(tools))
+	}
+}
