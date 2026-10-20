@@ -22,14 +22,20 @@ git clone https://github.com/joseyx/remote-pc.git
 cd remote-pc
 ```
 
-### 2. Backend Go
+### 2. Configurar Git Hooks (Obligatorio)
+Para activar la protección local que previene commits directos en ramas protegidas (`main` y `develop`):
+```bash
+git config core.hooksPath .githooks
+```
+
+### 3. Backend Go
 ```powershell
 cd server
 go test ./...              # Ejecutar tests
 go run cmd/server/main.go  # Iniciar servidor en modo desarrollo
 ```
 
-### 3. Cliente Android
+### 4. Cliente Android
 Abre la carpeta `android/` en **Android Studio (Ladybug o superior)**:
 - Requiere JDK 17 y Android SDK 34+.
 - Compila con:
@@ -38,7 +44,7 @@ Abre la carpeta `android/` en **Android Studio (Ladybug o superior)**:
   ./gradlew assembleDebug
   ```
 
-### 4. Compilación del Instalador
+### 5. Compilación del Instalador
 Para empaquetar el instalador para usuarios finales:
 ```powershell
 .\scripts\build-installer.ps1

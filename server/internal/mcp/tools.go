@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"orbit/internal/plugin"
 )
 
 // Tool represents an MCP Tool definition
@@ -522,6 +525,10 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 		return handleGetProjectServerStatus(args)
 	case "stop_project_server":
 		return handleStopProjectServer(args)
+	case "transcribe_video":
+		return handleTranscribeVideo(args)
+	case "extract_audio":
+		return handleExtractAudio(args)
 	default:
 		return "", fmt.Errorf("herramienta desconocida: %s", name)
 	}
@@ -1531,4 +1538,184 @@ func handleStopProjectServer(args map[string]interface{}) (string, error) {
 	}
 
 	return fmt.Sprintf("🛑 **Servidor(es) de desarrollo detenido(s) exitosamente:**\n%s\n\nEl proceso y la terminal fueron cerrados en Orbit.", strings.Join(stopped, "\n")), nil
+}
+
+// GroqWhisperTools defines MCP tools exposed when the Groq Whisper plugin is active
+var GroqWhisperTools = []Tool{
+	{
+		Name: "transcribe_video",
+		Description: "Extrae el audio de un archivo de video o audio local (.mp4, .mkv, .mov, .webm, .mp3, .wav, etc.) con FFmpeg y lo transcribe a texto a velocidad ultra-rápida (LPU) usando la API de Groq Whisper. Ideal para procesar reuniones, grabaciones, demos, tutoriales y notas de voz.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"file_path": map[string]interface{}{
+					"type":        "string",
+					"description": "Ruta absoluta al archivo de video o audio en el disco local (ej. C:/Users/.../video.mp4).",
+				},
+				"with_timestamps": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Opcional. Si es true, devuelve la transcripción formateada con marcas de tiempo [MM:SS - MM:SS] por segmento.",
+				},
+				"language": map[string]interface{}{
+					"type":        "string",
+					"description": "Opcional. Código de idioma ISO (ej. 'es', 'en', 'fr') o 'auto' para autodetección.",
+				},
+				"prompt": map[string]interface{}{
+					"type":        "string",
+					"description": "Opcional. Contexto previo, vocabulario técnico o nombres propios para mejorar la precisión del modelo.",
+				},
+			},
+			"required": []string{"file_path"},
+		},
+	},
+	{
+		Name: "extract_audio",
+		Description: "Extrae únicamente la pista de audio de un archivo de video local a formato MP3 optimizado y ligero usando FFmpeg, sin transcribirlo.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"video_path": map[string]interface{}{
+					"type":        "string",
+					"description": "Ruta absoluta al archivo de video local.",
+				},
+				"output_path": map[string]interface{}{
+					"type":        "string",
+					"description": "Opcional. Ruta destino para guardar el archivo .mp3. Si se omite, se guarda junto al archivo de video.",
+				},
+				"bitrate": map[string]interface{}{
+					"type":        "string",
+					"description": "Opcional. Bitrate del MP3 (por defecto '48k' mono a 16kHz).",
+				},
+			},
+			"required": []string{"video_path"},
+		},
+	},
+}
+
+// GetTools returns default MCP tools plus tools from any enabled plugins
+func GetTools() []Tool {
+	mgr := plugin.GetGlobalManager()
+	if mgr != nil {
+		mgr.Reload()
+	}
+	base := make([]Tool, len(Tools))
+	copy(base, Tools)
+	if mgr != nil && mgr.IsEnabled("groq_whisper") {
+		base = append(base, GroqWhisperTools...)
+	}
+	return base
+}
+
+func handleTranscribeVideo(args map[string]interface{}) (string, error) {
+	mgr := plugin.GetGlobalManager()
+	if mgr == nil || !mgr.IsEnabled("groq_whisper") {
+		return "", fmt.Errorf("el plugin 'Groq Whisper Video Transcriber' no está habilitado en Orbit. Actívalo en Orbit > Plugins")
+	}
+
+	filePath, _ := args["file_path"].(string)
+	if strings.TrimSpace(filePath) == "" {
+		return "", fmt.Errorf("el parámetro 'file_path' es obligatorio")
+	}
+
+	cfg := mgr.GetConfig("groq_whisper")
+	apiKey, _ := cfg["api_key"].(string)
+	if strings.TrimSpace(apiKey) == "" {
+		return "", fmt.Errorf("el plugin Groq Whisper está activado pero falta configurar la API Key. Configúrala en Orbit > Plugins")
+	}
+
+	model, _ := cfg["model"].(string)
+	if model == "" {
+		model = "whisper-large-v3-turbo"
+	}
+
+	lang, _ := args["language"].(string)
+	if lang == "" {
+		lang, _ = cfg["language"].(string)
+	}
+
+	withTimestamps := false
+	if wt, ok := args["with_timestamps"].(bool); ok {
+		withTimestamps = wt
+	} else if defWt, ok := cfg["with_timestamps"].(bool); ok {
+		withTimestamps = defWt
+	}
+
+	prompt, _ := args["prompt"].(string)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	res, err := plugin.TranscribeMedia(ctx, filePath, withTimestamps, prompt, apiKey, model, lang)
+	if err != nil {
+		return "", fmt.Errorf("error al transcribir archivo multimedia: %w", err)
+	}
+
+	summary := fmt.Sprintf("🎙️ **Transcripción completada con Groq Whisper (%s):**\n\n"+
+		"- **Archivo:** `%s`\n"+
+		"- **Idioma detectado:** `%s`\n"+
+		"- **Duración:** `%.1fs` (~%.1f min)\n\n"+
+		"### Transcripción:\n\n%s",
+		model, filepath.Base(filePath), res.Language, res.Duration, res.Duration/60.0, res.FormattedText)
+
+	return summary, nil
+}
+
+func handleExtractAudio(args map[string]interface{}) (string, error) {
+	mgr := plugin.GetGlobalManager()
+	if mgr == nil || !mgr.IsEnabled("groq_whisper") {
+		return "", fmt.Errorf("el plugin 'Groq Whisper Video Transcriber' no está habilitado en Orbit. Actívalo en Orbit > Plugins")
+	}
+
+	videoPath, _ := args["video_path"].(string)
+	videoPath = strings.TrimSpace(videoPath)
+	if videoPath == "" || strings.HasPrefix(videoPath, "-") {
+		return "", fmt.Errorf("el parámetro 'video_path' es inválido o no puede comenzar con '-'")
+	}
+
+	fi, err := os.Stat(videoPath)
+	if err != nil || fi.IsDir() {
+		return "", fmt.Errorf("archivo de video no encontrado o no es un archivo válido: %s", videoPath)
+	}
+
+	outputPath, _ := args["output_path"].(string)
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath != "" && strings.HasPrefix(outputPath, "-") {
+		return "", fmt.Errorf("el parámetro 'output_path' no puede comenzar con '-'")
+	}
+	if outputPath != "" {
+		if _, err := os.Stat(outputPath); err == nil {
+			return "", fmt.Errorf("el archivo de destino '%s' ya existe. Especifica otro nombre para no sobrescribir", outputPath)
+		}
+	} else {
+		ext := filepath.Ext(videoPath)
+		baseOut := strings.TrimSuffix(videoPath, ext) + ".mp3"
+		outputPath = baseOut
+		if _, err := os.Stat(outputPath); err == nil {
+			outputPath = fmt.Sprintf("%s_extracted_%d.mp3", strings.TrimSuffix(videoPath, ext), time.Now().Unix())
+		}
+	}
+
+	bitrate, _ := args["bitrate"].(string)
+	if bitrate == "" {
+		bitrate = "48k"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	if err := plugin.ExtractAudio(ctx, videoPath, outputPath, bitrate); err != nil {
+		return "", fmt.Errorf("error extrayendo audio con ffmpeg: %w", err)
+	}
+
+	outFi, _ := os.Stat(outputPath)
+	sizeMB := float64(0)
+	if outFi != nil {
+		sizeMB = float64(outFi.Size()) / (1024 * 1024)
+	}
+
+	return fmt.Sprintf("🎵 **Audio extraído exitosamente con FFmpeg:**\n\n"+
+		"- **Video original:** `%s`\n"+
+		"- **Audio generado:** `%s` (%.2f MB)\n"+
+		"- **Bitrate:** `%s` (mono 16kHz optimizado para Whisper)",
+		filepath.Base(videoPath), outputPath, sizeMB, bitrate), nil
 }

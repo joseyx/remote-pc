@@ -8,6 +8,9 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"orbit/internal/config"
+	"orbit/internal/plugin"
 )
 
 type JSONRPCRequest struct {
@@ -56,6 +59,11 @@ func sendResponse(resp JSONRPCResponse) {
 
 // RunServer runs the stdio MCP JSON-RPC 2.0 loop
 func RunServer() error {
+	// Initialize plugin manager for dynamic MCP tools
+	dataDir := config.GetDataDir()
+	pluginMgr := plugin.NewManager(dataDir)
+	plugin.SetGlobalManager(pluginMgr)
+
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -91,8 +99,8 @@ func RunServer() error {
 						"tools": map[string]interface{}{},
 					},
 					"serverInfo": map[string]interface{}{
-						"name":    "remote-pc",
-						"version": "1.0.0",
+						"name":    "orbit",
+						"version": "1.3.1",
 					},
 				},
 			})
@@ -112,7 +120,7 @@ func RunServer() error {
 				JSONRPC: "2.0",
 				ID:      req.ID,
 				Result: map[string]interface{}{
-					"tools": Tools,
+					"tools": GetTools(),
 				},
 			})
 
