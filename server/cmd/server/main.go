@@ -26,7 +26,7 @@ import (
 	"orbit/internal/updater"
 )
 
-var Version = "1.3.1"
+var Version = "1.4.0"
 
 func main() {
 	exePath, err := os.Executable()
