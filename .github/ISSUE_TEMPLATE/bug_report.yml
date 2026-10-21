@@ -1,0 +1,97 @@
+name: 🐛 Reporte de Error (Bug Report)
+description: Notifica un comportamiento anómalo, fallo o regresión en Orbit / Remote PC.
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Por favor, completa este reporte detallado para que el error pueda ser reproducido y solucionado de manera eficiente.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 1. Nivel de Severidad
+      description: ¿Qué tan crítico es el impacto de este bug en el funcionamiento de Orbit?
+      options:
+        - "🔴 Crítico / Bloqueante (Caída del servidor, bloqueo de ConPTY, pérdida de sesiones activas)"
+        - "🟠 Mayor (Funcionalidad principal rota o inoperable sin alternativa evidente)"
+        - "🟡 Menor / Moderado (Fallo parcial, existe alternativa temporal)"
+        - "🔵 Cosmético / Leve (Detalle visual, typo en log o UI sin impacto funcional)"
+    validations:
+      required: true
+  - type: dropdown
+    id: affected_component
+    attributes:
+      label: 2. Componente Afectado
+      description: Selecciona el módulo principal donde se manifiesta el problema.
+      options:
+        - "Servidor Go / API REST / Daemon de segundo plano"
+        - "Windows ConPTY / Terminales y Pseudoconsola"
+        - "Servidor MCP (`remotepc-server mcp`)"
+        - "Sistema de Plugins / Transcriptor Groq Whisper"
+        - "Dashboard Web Cockpit (Frontend / UI / WebSockets)"
+        - "Cliente Móvil Android (Compose)"
+        - "Instalador Windows / Scripts de Servicio"
+    validations:
+      required: true
+  - type: textarea
+    id: bug_description
+    attributes:
+      label: 3. Descripción Detallada del Error
+      description: Explica claramente qué ocurre de forma anómala y en qué circunstancias.
+      placeholder: "Al ejecutar el comando X mientras hay una sesión ConPTY abierta, el servidor responde con..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: 4. Pasos Exactos para Reproducir
+      description: Proporciona la secuencia exacta de pasos para reproducir el fallo.
+      value: |
+        1. Iniciar el servidor con: `...`
+        2. Navegar a / Ejecutar: `...`
+        3. Realizar la acción: `...`
+        4. Observar el comportamiento anómalo: `...`
+    validations:
+      required: true
+  - type: textarea
+    id: expected_vs_actual
+    attributes:
+      label: 5. Comportamiento Esperado vs. Comportamiento Actual
+      description: ¿Qué debería haber ocurrido y qué ocurrió en su lugar?
+      placeholder: |
+        - Comportamiento Esperado: El proceso hijo debería finalizar limpiamente liberando el pseudoterminal.
+        - Comportamiento Actual: El proceso queda colgado y el handle de ConPTY no se libera.
+    validations:
+      required: true
+  - type: textarea
+    id: logs_and_trace
+    attributes:
+      label: 6. Trazas de Error, Salida de Terminal o Logs
+      description: Pega aquí los logs relevantes del servidor Go (`orbit.exe`), salida de terminal ConPTY o logcat de Android.
+      render: shell
+      placeholder: "Pega aquí los logs de consola o trazas de error..."
+    validations:
+      required: true
+  - type: textarea
+    id: environment_info
+    attributes:
+      label: 7. Entorno del Sistema
+      description: Proporciona las versiones exactas del software y sistema operativo.
+      value: |
+        - **Sistema Operativo**: Windows 11 / 10 (versión y build exacta)
+        - **Versión de Go**: `go version`
+        - **Versión de Orbit**: `orbit version`
+        - **Navegador Web (si aplica)**: Chrome / Edge / Firefox (versión)
+        - **Cliente AI (si aplica)**: Claude Code / Antigravity / Claude Desktop
+    validations:
+      required: true
+  - type: checkboxes
+    id: sanity_checks
+    attributes:
+      label: 8. Verificaciones Previas
+      options:
+        - label: "He verificado que el puerto configurado no esté en conflicto con otro servicio ajeno."
+          required: true
+        - label: "He comprobado los logs del servicio y no se trata de una falta de permisos de administrador o credenciales incorrectas."
+          required: true

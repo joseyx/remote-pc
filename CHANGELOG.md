@@ -3,6 +3,36 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.4.0] - 2026-10-21
+
+### 🚀 Añadido (Added)
+- **Arquitectura de Plugins y Extensiones (Estilo Pear Desktop)**:
+  - Sistema modular y dinámico de plugins gestionado desde el Web Cockpit y persistido en `data/plugins.json`.
+  - Panel visual de plugins con interruptores ON/OFF inmediatos, tarjetas de información, metadatos y formulario de configuración expandible con soporte para credenciales enmascaradas.
+  - Notificación de reinicio con un solo clic (`Restart Required`) que reinicia el demonio Orbit restaurando de forma transparente todas las terminales y pseudoterminales PTY activas.
+- **Plugin de Transcripción Groq Whisper LPU (`groq_whisper`)**:
+  - Extracción y compresión de audio mediante FFmpeg a formato MP3 mono de 16 kHz (48 kbps) optimizado para speech-to-text.
+  - Integración nativa con la API de Groq Whisper (`whisper-large-v3-turbo` y `whisper-large-v3`) con velocidad de inferencia ultra-rápida.
+  - Soporte inteligente para archivos de audio de gran tamaño (> 24 MB) mediante segmentación automática en fragmentos temporales y ensamblado secuencial con marcas de tiempo relativas.
+  - Herramientas MCP dinámicas (`transcribe_video` y `extract_audio`) expuestas automáticamente a Claude Code, Antigravity y asistentes compatibles solo cuando el plugin está habilitado.
+- **Transcriptor Web Interactivo (Web Cockpit)**:
+  - Modal accesible desde la cabecera, la paleta de comandos (`Ctrl+K`) y el menú de acciones contextuales.
+  - Soporte para arrastrar y soltar (Drag & Drop) archivos multimedia (`.mp4`, `.mkv`, `.mov`, `.webm`, `.mp3`, `.wav`) o especificar rutas locales absolutas en Windows.
+  - Selector de idioma, marcas de tiempo opcionales `[MM:SS]`, copia al portapapeles, descarga en `.txt` y anexo directo a las Notas Diarias de Hoy en el calendario.
+- **Flujo de Trabajo CI y Plantillas de GitHub**:
+  - Nuevo workflow de validación automática de Pull Requests (`validate-pr.yml`).
+  - Plantillas interactivas en formato YAML para reporte de bugs, solicitudes de características y tareas de refactorización.
+  - Reglas y directrices de seguridad para agentes de IA (`AGENTS.md`).
+
+### 🐛 Corregido (Fixed)
+- **Desplazamiento Horizontal y Desbordamiento en Terminal ConPTY**:
+  - Activación de `windowsMode: true` en todas las instancias de xterm.js (`termObj`, `termObj2`, `quakeTermObj`) para delegar el control de salto y buffer al ConPTY nativo de Windows, eliminando el desplazamiento cíclico de texto hacia la izquierda.
+  - Reubicación de márgenes/paddings a contenedores envolventes (`.term-pane`), garantizando que `FitAddon` mida con precisión matemática de píxel las columnas reales del pseudoterminal.
+  - Bloqueo estricto de desplazamiento horizontal con `overflow-x: hidden !important` y reseteo forzado de `scrollLeft = 0` en eventos de redimensionamiento y limpieza (`Ctrl+L`).
+  - Sincronización automática de dimensiones PTY mediante `ResizeObserver` reactivo al colapsar/expandir la barra lateral o redimensionar paneles divididos.
+
+---
+
 ## [1.3.1] - 2026-10-15
 
 ### 🐛 Corregido (Fixed)

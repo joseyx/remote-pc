@@ -13,10 +13,10 @@
     <link rel="stylesheet" href="css/base.css?v=2.2.2">
     <link rel="stylesheet" href="css/layout.css?v=2.2.2">
     <link rel="stylesheet" href="css/bubbles.css?v=2.2.2">
-    <link rel="stylesheet" href="css/terminal.css">
+    <link rel="stylesheet" href="css/terminal.css?v=2.2.4">
     <link rel="stylesheet" href="css/views.css">
     <link rel="stylesheet" href="css/calendar.css">
-    <link rel="stylesheet" href="css/modals.css?v=2.2.3">
+    <link rel="stylesheet" href="css/modals.css?v=2.3.0">
     <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
@@ -67,6 +67,11 @@
                 <!-- Quake Dropdown Terminal Shortcut (F12) -->
                 <button class="btn btn-sm" onclick="toggleQuakeTerminal()" title="Terminal rápida desplegable (F12 o Ctrl+\`)">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> Quake
+                </button>
+
+                <!-- Plugins & Extensions -->
+                <button class="btn btn-sm" onclick="openPluginsModal()" title="Plugins y Extensiones de Orbit (Groq Whisper, etc.)">
+                    🧩 Plugins
                 </button>
 
                 <!-- End of Day / Handoff Quick Button -->
@@ -149,6 +154,15 @@
                             <div class="item-content">
                                 <span class="item-label">Diagnóstico (Doctor)</span>
                                 <span class="item-sub">Verificar salud del sistema</span>
+                            </div>
+                        </div>
+
+                        <!-- Plugins & Extensions -->
+                        <div class="dropdown-item" onclick="openPluginsModal(); closeSystemMenu();" title="Gestionar Plugins y Extensiones (Groq Whisper, etc.)">
+                            <div class="item-icon">🧩</div>
+                            <div class="item-content">
+                                <span class="item-label">Plugins &amp; Extensiones</span>
+                                <span class="item-sub">Whisper Transcriber, etc.</span>
                             </div>
                         </div>
 
@@ -415,7 +429,7 @@
                                     <span id="term-pane-primary-title" style="color: var(--accent); font-weight: 600;">Terminal 1</span>
                                     <span style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">Panel Principal</span>
                                 </div>
-                                <div id="terminal-embed" style="flex: 1; width: 100%; height: 100%; overflow: hidden; padding: 6px 10px;"></div>
+                                <div id="terminal-embed" style="flex: 1; width: 100%; height: 100%; overflow: hidden; padding: 0;"></div>
                             </div>
 
                             <!-- Resizer Drag Bar -->
@@ -431,7 +445,7 @@
                                     </div>
                                     <button class="btn btn-sm btn-danger" onclick="closeSplit()" style="padding: 1px 6px; font-size: 10px;" title="Cerrar panel dividido">✕</button>
                                 </div>
-                                <div id="terminal-embed-2" style="flex: 1; width: 100%; height: 100%; overflow: hidden; padding: 6px 10px;"></div>
+                                <div id="terminal-embed-2" style="flex: 1; width: 100%; height: 100%; overflow: hidden; padding: 0;"></div>
                             </div>
                         </div>
 
@@ -1548,6 +1562,137 @@
         </div>
     </div>
 
+    <!-- MODAL: PLUGINS & EXTENSIONS (PEAR-DESKTOP STYLE) -->
+    <div id="modal-plugins" class="modal-overlay" onclick="if(event.target === this) closePluginsModal()">
+        <div class="modal-box" style="max-width: 660px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🧩</span>
+                    <h3 style="margin: 0;">Plugins y Extensiones</h3>
+                    <span class="badge-ws" style="font-size: 10px;">Modular System</span>
+                </div>
+                <button class="btn btn-sm" onclick="closePluginsModal()">✕</button>
+            </div>
+            
+            <div class="modal-body" style="overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px;">
+                <!-- Pending Restart Banner -->
+                <div id="plugins-restart-banner" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: var(--radius-sm); padding: 10px 14px; align-items: center; justify-content: space-between; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 16px;">⚠️</span>
+                        <div style="font-size: 12px; color: #fbbf24;">
+                            <strong>Reinicio requerido:</strong> Hay cambios en plugins MCP. Reinicia el demonio para aplicar en Claude Desktop y terminales.
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" id="btn-restart-from-plugins" onclick="restartOrbitServiceFromPlugins()" style="white-space: nowrap;">
+                        🔄 Reiniciar Orbit ahora
+                    </button>
+                </div>
+
+                <!-- Info description -->
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+                    Activa módulos y servidores MCP opcionales con un simple toggle. Las herramientas habilitadas se exponen automáticamente a tus agentes IA (Claude Code, Antigravity) sin configuración extra.
+                </p>
+
+                <!-- Dynamic Plugins Cards List -->
+                <div id="plugins-list-container" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;">Cargando plugins...</div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 11px; color: var(--text-dim);">Orbit Plugin Architecture v1.0</span>
+                <button class="btn" onclick="closePluginsModal()">Listo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: WEB VIDEO / AUDIO TRANSCRIBER (GROQ WHISPER) -->
+    <div id="modal-transcribe" class="modal-overlay" onclick="if(event.target === this) closeTranscribeModal()">
+        <div class="modal-box" style="max-width: 680px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 18px;">🎙️</span>
+                    <h3 style="margin: 0;">Transcriptor de Video &amp; Audio</h3>
+                    <span class="badge-ws" style="font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399;">Groq Whisper LPU</span>
+                </div>
+                <button class="btn btn-sm" onclick="closeTranscribeModal()">✕</button>
+            </div>
+
+            <div class="modal-body" style="overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 16px;">
+                <!-- Drag and drop zone -->
+                <div class="transcribe-dropzone" id="transcribe-dropzone"
+                     onclick="document.getElementById('transcribe-file-input').click()"
+                     ondragover="handleTranscribeDragOver(event)"
+                     ondragleave="handleTranscribeDragLeave(event)"
+                     ondrop="handleTranscribeDrop(event)">
+                    <div style="font-size: 28px; margin-bottom: 6px;">🎬</div>
+                    <strong style="color: var(--text-main); font-size: 13px;">Arrastra un video o audio aquí</strong>
+                    <span style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">Soporta .mp4, .mkv, .mov, .webm, .mp3, .wav, .m4a o haz clic para explorar</span>
+                </div>
+                <input type="file" id="transcribe-file-input" style="display: none;" accept="video/*,audio/*,.mkv,.mp4,.mov,.webm,.mp3,.wav,.m4a" onchange="handleTranscribeFileSelect(this.files)">
+
+                <!-- Local Path Input -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <label style="font-size: 11px; font-weight: 600; color: var(--text-muted);">O ingresa una ruta local del archivo en Windows:</label>
+                    <input type="text" id="transcribe-path-input" placeholder="C:\Users\Jose\Videos\reunion_trabajo.mp4" class="form-control" style="font-size: 12px; font-family: monospace;">
+                </div>
+
+                <!-- Options Row -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: var(--bg-surface); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                    <div>
+                        <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Idioma del audio:</label>
+                        <select id="transcribe-lang-select" class="form-control" style="font-size: 12px; height: 30px;">
+                            <option value="auto">Detección automática</option>
+                            <option value="es" selected>Español</option>
+                            <option value="en">Inglés</option>
+                            <option value="pt">Portugués</option>
+                            <option value="fr">Francés</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Formato de salida:</label>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 6px; cursor: pointer; color: var(--text-main);">
+                            <input type="checkbox" id="transcribe-timestamps-toggle" checked>
+                            Incluir marcas de tiempo [MM:SS]
+                        </label>
+                    </div>
+                    <div style="grid-column: 1 / -1;">
+                        <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Contexto o palabras clave previas (opcional):</label>
+                        <input type="text" id="transcribe-prompt-input" placeholder="Ej: Aditum, Celery, React, PostgreSQL..." class="form-control" style="font-size: 12px;">
+                    </div>
+                </div>
+
+                <!-- Action Button -->
+                <button class="btn btn-primary" id="btn-start-transcribe" onclick="startTranscribe()" style="padding: 10px; font-weight: 600; font-size: 13px;">
+                    ⚡ Iniciar Transcripción con Groq Whisper
+                </button>
+
+                <!-- Processing spinner box -->
+                <div id="transcribe-status-box" style="display: none; padding: 14px; background: rgba(56, 189, 248, 0.08); border-radius: var(--radius-sm); border: 1px solid rgba(56, 189, 248, 0.25); text-align: center;">
+                    <div style="font-size: 20px; animation: spin 1.2s linear infinite; display: inline-block; margin-bottom: 6px;">⚙️</div>
+                    <div id="transcribe-status-msg" style="font-size: 12px; color: var(--accent); font-weight: 500;">Procesando video...</div>
+                </div>
+
+                <!-- Transcription Result Section -->
+                <div id="transcribe-result-box" style="display: none; flex-direction: column; gap: 10px; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                        <div id="transcribe-result-meta" style="font-size: 11px; color: var(--text-dim);"></div>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn btn-sm" onclick="copyTranscribeResult()" title="Copiar al portapapeles">📋 Copiar</button>
+                            <button class="btn btn-sm btn-ghost" onclick="saveTranscribeToTodayNote()" title="Añadir a la nota del diario de hoy">📓 Guardar en Hoy</button>
+                            <button class="btn btn-sm btn-ghost" onclick="downloadTranscribeResult()" title="Descargar archivo .txt">💾 Descargar</button>
+                        </div>
+                    </div>
+                    <textarea id="transcribe-result-text" class="form-control" style="width: 100%; min-height: 220px; max-height: 380px; font-size: 12px; font-family: var(--font-mono, monospace); line-height: 1.5; padding: 10px; background: var(--bg-surface); resize: vertical;" readonly></textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+                <button class="btn" onclick="closeTranscribeModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: BACKGROUND SERVICE DAEMON -->
     <div id="modal-service" class="modal-overlay" onclick="if(event.target === this) closeServiceModal()">
         <div class="modal-box" style="max-width: 520px;">
@@ -1800,7 +1945,7 @@
                     Host en línea
                 </span>
                 <span style="color: var(--border-subtle); font-size: 10px;">·</span>
-                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;" id="modal-orbit-version">Orbit v1.3.1</span>
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;" id="modal-orbit-version">Orbit v1.4.0</span>
                 <button class="btn btn-sm" id="btn-check-update-stats" onclick="checkForUpdates(false)" style="padding: 1px 7px; font-size: 10px; border-color: rgba(59, 130, 246, 0.3); color: #93c5fd;" title="Buscar actualizaciones de Orbit">🔍 Buscar actualización</button>
                 <button class="btn btn-sm" id="btn-open-doctor" onclick="openDoctorModal()" style="padding: 1px 7px; font-size: 10px; border-color: rgba(52, 211, 153, 0.3); color: #34d399;" title="Diagnóstico de entorno y herramientas (Orbit Doctor)">🩺 Doctor</button>
             </div>
@@ -1827,7 +1972,9 @@
                 <button class="btn btn-sm btn-danger" onclick="toggleQuakeTerminal()" title="Cerrar Quick Terminal (Esc / F12)">✕</button>
             </div>
         </div>
-        <div id="quake-terminal-embed" style="flex: 1; width: 100%; height: 100%; overflow: hidden; padding: 6px 12px; background: #0a0e17;"></div>
+        <div style="flex: 1; width: 100%; min-height: 0; padding: 4px 6px; box-sizing: border-box; overflow: hidden; display: flex;">
+            <div id="quake-terminal-embed" style="flex: 1; width: 100%; height: 100%; overflow: hidden; padding: 0; background: #0a0e17;"></div>
+        </div>
     </div>
 
     <!-- Command Palette Modal (Ctrl+K) -->
@@ -1877,13 +2024,14 @@
 
     <!-- Application Modular Scripts -->
     <script src="js/state.js"></script>
-    <script src="js/terminal.js"></script>
-    <script src="js/workspaces.js?v=2.2.2"></script>
+    <script src="js/terminal.js?v=2.2.4"></script>
+    <script src="js/workspaces.js?v=2.3.0"></script>
     <script src="js/actions.js"></script>
     <script src="js/views.js"></script>
     <script src="js/calendar.js"></script>
     <script src="js/palette.js"></script>
     <script src="js/system.js?v=2.2.3"></script>
-    <script src="js/app.js"></script>
+    <script src="js/plugins.js?v=2.3.0"></script>
+    <script src="js/app.js?v=2.3.0"></script>
 </body>
 </html>

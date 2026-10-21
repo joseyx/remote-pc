@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# Hook para evitar commits directos en ramas protegidas
+branch="$(git symbolic-ref --short HEAD 2>/dev/null)"
+
+# Si estamos en estado de "detached HEAD", omitir verificación
+if [ -z "$branch" ]; then
+    exit 0
+fi
+
+case "$branch" in
+    main|master|dev|develop)
+        echo ""
+        echo "=================================================================="
+        echo "❌ ERROR: No se permite hacer commits directamente en '$branch'."
+        echo "=================================================================="
+        echo "Para subir cambios a esta rama:"
+        echo "  1. Crea una nueva rama para tus cambios:"
+        echo "     git checkout -b feature/nombre-de-tu-rama"
+        echo "  2. Haz commit y súbela:"
+        echo "     git push -u origin feature/nombre-de-tu-rama"
+        echo "  3. Abre un Pull Request / Merge Request en GitHub hacia '$branch'."
+        echo ""
+        echo "(Si necesitas omitir esta validación localmente, usa: git commit --no-verify)"
+        echo "=================================================================="
+        echo ""
+        exit 1
+        ;;
+    *)
+        exit 0
+        ;;
+esac

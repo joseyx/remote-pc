@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentación Técnica de Orbit
+    url: https://github.com/joseyx/remote-pc#readme
+    about: Revisa la documentación de arquitectura y endpoints antes de abrir un nuevo issue.
+  - name: Directrices de Seguridad para Agentes IA
+    url: https://github.com/joseyx/remote-pc/blob/develop/AGENTS.md
+    about: Consulta las reglas obligatorias sobre protección de terminales e instancias de producción.

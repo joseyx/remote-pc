@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -24,6 +25,7 @@ import (
 	"orbit/internal/doctor"
 	"orbit/internal/git"
 	"orbit/internal/obsidian"
+	"orbit/internal/plugin"
 	"orbit/internal/services"
 	"orbit/internal/session"
 	"orbit/internal/system"
@@ -46,6 +48,7 @@ type Server struct {
 	bubbleMgr   *bubble.Manager
 	obsidianMgr *obsidian.Manager
 	calendarMgr *calendar.Manager
+	pluginMgr   *plugin.Manager
 	startedAt   time.Time
 	version     string
 }
@@ -55,6 +58,9 @@ func NewServer(cfg *config.Config, manager *session.Manager, version string) *Se
 	if dataDir == "" {
 		dataDir = config.GetDataDir()
 	}
+	pluginMgr := plugin.NewManager(dataDir)
+	plugin.SetGlobalManager(pluginMgr)
+
 	return &Server{
 		cfg:         cfg,
 		manager:     manager,
@@ -62,6 +68,7 @@ func NewServer(cfg *config.Config, manager *session.Manager, version string) *Se
 		bubbleMgr:   bubble.NewManager(dataDir),
 		obsidianMgr: obsidian.NewManager(),
 		calendarMgr: calendar.NewManager(filepath.Join(dataDir, "calendar_notes")),
+		pluginMgr:   pluginMgr,
 		startedAt:   time.Now(),
 		version:     version,
 	}
@@ -142,6 +149,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/calendar/handoff/auto", s.withAuth(s.handleCalendarHandoffAuto))
 	mux.HandleFunc("POST /api/calendar/handoff/prompt-agent", s.withAuth(s.handleCalendarHandoffPromptAgent))
 	mux.HandleFunc("GET /api/calendar/standup", s.withAuth(s.handleCalendarStandup))
+
+	// Plugin Routes
+	mux.HandleFunc("GET /api/plugins", s.withAuth(s.handleListPlugins))
+	mux.HandleFunc("POST /api/plugins/{id}/toggle", s.withAuth(s.handleTogglePlugin))
+	mux.HandleFunc("POST /api/plugins/{id}/config", s.withAuth(s.handleUpdatePluginConfig))
+	mux.HandleFunc("POST /api/plugins/groq-whisper/transcribe", s.withAuth(s.handleGroqWhisperTranscribe))
 
 	// Embedded Desktop Web Dashboard
 	mux.Handle("/", web.Handler())
@@ -1690,4 +1703,197 @@ func (s *Server) handleCalendarHandoffPromptAgent(w http.ResponseWriter, r *http
 
 // Helpers
 var _ = fs.ErrNotExist
+
+// ============================================================================
+// Plugins & Extensions Handlers
+// ============================================================================
+
+func (s *Server) handleListPlugins(w http.ResponseWriter, r *http.Request) {
+	plugins := s.pluginMgr.ListPlugins(true)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(plugins)
+}
+
+func (s *Server) handleTogglePlugin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "ID de plugin requerido", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Payload JSON inválido", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.pluginMgr.Toggle(id, req.Enabled); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	p, _ := s.pluginMgr.GetPlugin(id, true)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success":         true,
+		"plugin":          p,
+		"requiresRestart": p != nil && p.RequiresRestart,
+	})
+}
+
+func (s *Server) handleUpdatePluginConfig(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "ID de plugin requerido", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Config map[string]any `json:"config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Payload JSON inválido", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.pluginMgr.UpdateConfig(id, req.Config); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	p, _ := s.pluginMgr.GetPlugin(id, true)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success":         true,
+		"plugin":          p,
+		"message":         "Configuración actualizada correctamente",
+		"requiresRestart": p != nil && p.RequiresRestart,
+	})
+}
+
+func (s *Server) handleGroqWhisperTranscribe(w http.ResponseWriter, r *http.Request) {
+	if !s.pluginMgr.IsEnabled("groq_whisper") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": "El plugin Groq Whisper Transcriber no está habilitado. Actívalo en Orbit > Plugins.",
+		})
+		return
+	}
+
+	cfg := s.pluginMgr.GetConfig("groq_whisper")
+	apiKey, _ := cfg["api_key"].(string)
+	if strings.TrimSpace(apiKey) == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": "Falta configurar la Groq API Key en la configuración del plugin.",
+		})
+		return
+	}
+
+	model, _ := cfg["model"].(string)
+	if model == "" {
+		model = "whisper-large-v3-turbo"
+	}
+
+	var targetPath string
+	var withTimestamps bool
+	var language string
+	var prompt string
+	var isTempFile bool
+
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		r.Body = http.MaxBytesReader(w, r.Body, 150<<20)
+		if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MB en RAM, 150 MB límite total
+			http.Error(w, "Error al procesar archivo cargado (máximo 150 MB): "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "No se encontró el archivo 'file' en el formulario", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		tempUploadPath := filepath.Join(os.TempDir(), fmt.Sprintf("orbit_web_upload_%d_%s", time.Now().UnixNano(), header.Filename))
+		outFile, err := os.Create(tempUploadPath)
+		if err != nil {
+			http.Error(w, "Error al crear archivo temporal: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, err = io.Copy(outFile, file)
+		_ = outFile.Close()
+		if err != nil {
+			_ = os.Remove(tempUploadPath)
+			http.Error(w, "Error al guardar archivo temporal: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		targetPath = tempUploadPath
+		isTempFile = true
+		withTimestamps = r.FormValue("withTimestamps") == "true"
+		language = r.FormValue("language")
+		prompt = r.FormValue("prompt")
+	} else {
+		var req struct {
+			FilePath       string `json:"filePath"`
+			WithTimestamps *bool  `json:"withTimestamps"`
+			Language       string `json:"language"`
+			Prompt         string `json:"prompt"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Payload JSON inválido", http.StatusBadRequest)
+			return
+		}
+
+		if strings.TrimSpace(req.FilePath) == "" {
+			http.Error(w, "El campo 'filePath' es requerido", http.StatusBadRequest)
+			return
+		}
+		targetPath = req.FilePath
+		if req.WithTimestamps != nil {
+			withTimestamps = *req.WithTimestamps
+		} else if defWt, ok := cfg["with_timestamps"].(bool); ok {
+			withTimestamps = defWt
+		}
+		language = req.Language
+		prompt = req.Prompt
+	}
+
+	if isTempFile {
+		defer os.Remove(targetPath)
+	}
+
+	if language == "" {
+		if defLang, ok := cfg["language"].(string); ok {
+			language = defLang
+		}
+	}
+
+	res, err := plugin.TranscribeMedia(r.Context(), targetPath, withTimestamps, prompt, apiKey, model, language)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success":       true,
+		"text":          res.Text,
+		"formattedText": res.FormattedText,
+		"language":      res.Language,
+		"duration":      res.Duration,
+		"segments":      res.Segments,
+	})
+}
+
 

@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "es-ES"
+tone_instructions: "Sé técnico, conciso y constructivo. Enfócate en la robustez, seguridad y buenas prácticas de Go y sistemas Windows. Responde siempre en español."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    ignore_title_keywords:
+      - "WIP"
+      - "Draft"
+    drafts: false
+    base_branches:
+      - "main"
+      - "develop"
+
+  path_filters:
+    - "!**/*.exe"
+    - "!**/*.dll"
+    - "!**/*.so"
+    - "!**/*.dylib"
+    - "!**/*.min.js"
+    - "!data/**"
+    - "!dist/**"
+    - "!android/app/build/**"
+    - "!android/.gradle/**"
+
+  path_instructions:
+    - path: "server/**/*.go"
+      instructions: |
+        - Verifica patrones idiomáticos de Go: manejo riguroso de errores (evitar descartar `_ = err`).
+        - Revisa la gestión de concurrencia: asegurar que no haya fugas de goroutines (goroutine leaks), uso correcto de `context.Context` y protección adecuada con `sync.Mutex` o `sync.RWMutex`.
+        - Verifica que los recursos de red (WebSockets, conexiones HTTP) y descriptores de archivo se cierren limpiamente (`defer conn.Close()`).
+
+    - path: "server/internal/pty/**"
+      instructions: |
+        - Atención crítica a Windows ConPTY: verificar liberación adecuada de handles del sistema operativo (`ClosePseudoConsole`, handles de procesos e hilos).
+        - Asegurar que la finalización de un proceso hijo no cuelgue lecturas o escrituras bloqueantes.
+
+    - path: "server/internal/mcp/**"
+      instructions: |
+        - Comprobar que las herramientas MCP validen y saniticen rigurosamente sus argumentos de entrada antes de ejecutarlos.
+        - Asegurar cumplimiento con las especificaciones del Model Context Protocol (MCP) y manejo de errores amigable para modelos de lenguaje.
+
+    - path: "server/internal/web/**"
+      instructions: |
+        - Validar la reconexión resiliente en WebSockets y la sincronización de estado de las sesiones activas de terminal.
+        - Evitar vulnerabilidades de inyección en la UI o manipulación directa insegura del DOM.
+
+    - path: "android/**"
+      instructions: |
+        - Validar buenas prácticas de Jetpack Compose: evitar recomposiciones innecesarias y manejar estados reactivos limpios.
+        - Asegurar manejo seguro de corrutinas (`viewModelScope`) y ciclo de vida de la aplicación.
+
+chat:
+  auto_reply: true

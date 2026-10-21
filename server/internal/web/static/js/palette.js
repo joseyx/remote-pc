@@ -106,6 +106,8 @@ function buildCmdPaletteItems() {
         { cat: 'Sistema', title: 'Copiar Token de Acceso', desc: 'Copiar token de autorización', icon: '📋', shortcut: '', action: () => { closeCommandPalette(); copyToken(); } },
         { cat: 'Sistema', title: 'Copiar URL LAN', desc: 'Copiar dirección http://<ip>:<puerto> para acceso local', icon: '🌐', shortcut: '', action: () => { closeCommandPalette(); copyLanUrl(); } },
         { cat: 'Sistema', title: 'Servicio en Segundo Plano (Orbit Daemon)', desc: 'Configurar autoarranque silencioso con el sistema operativo', icon: '⚙️', shortcut: '', action: () => { closeCommandPalette(); openServiceModal(); } },
+        { cat: 'Plugins', title: 'Gestionar Plugins y Extensiones', desc: 'Activar o configurar Whisper Transcriber, etc.', icon: '🧩', shortcut: '', action: () => { closeCommandPalette(); openPluginsModal(); } },
+        { cat: 'Plugins', title: 'Transcribir Video o Audio (Groq Whisper)', desc: 'Extraer audio de videos y transcribir con Groq LPU', icon: '🎙️', shortcut: '', action: () => { closeCommandPalette(); openTranscribeModal(); } },
         { cat: 'Seguridad', title: 'Seguridad, Token & PIN', desc: 'Gestionar token de acceso y PIN de confirmación', icon: '🔐', shortcut: '', action: () => { closeCommandPalette(); openSecurityModal(); } },
         { cat: 'Seguridad', title: 'Bloquear Pantalla del Cockpit', desc: 'Proteger pantalla activa hasta ingresar el PIN', icon: '🔒', shortcut: 'Alt+L', action: () => { closeCommandPalette(); lockCockpit(); } },
         { cat: 'Sistema', title: 'Alternar Alertas Sonoras', desc: 'Activar o desactivar sonido de terminal', icon: '🔔', shortcut: '', action: () => { closeCommandPalette(); toggleNotifications(); } }

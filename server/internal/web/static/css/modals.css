@@ -424,4 +424,188 @@
     text-decoration: underline;
 }
 
+/* ==========================================
+   Orbit Plugins & Extensions UI (pear-desktop style)
+   ========================================== */
+
+.plugin-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: all 0.2s ease;
+}
+
+.plugin-card:hover {
+    border-color: var(--border-muted);
+}
+
+.plugin-card.enabled {
+    border-color: rgba(56, 189, 248, 0.4);
+    background: linear-gradient(180deg, rgba(56, 189, 248, 0.04) 0%, var(--bg-card) 100%);
+}
+
+.plugin-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.plugin-meta {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex: 1;
+}
+
+.plugin-icon {
+    font-size: 26px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+.plugin-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.plugin-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.plugin-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.plugin-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.45;
+}
+
+/* Toggle Switch (iOS / pear-desktop style) */
+.plugin-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.plugin-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.plugin-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.15);
+    transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 24px;
+    border: 1px solid var(--border-subtle);
+}
+
+.plugin-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: #cbd5e1;
+    transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.plugin-switch input:checked + .plugin-slider {
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+
+.plugin-switch input:checked + .plugin-slider:before {
+    transform: translateX(20px);
+    background-color: #0b132b;
+}
+
+/* Plugin quick action toolbar */
+.plugin-quick-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+/* Collapsible Configuration Panel */
+.plugin-config-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-top: 6px;
+    animation: modalFadeIn 0.18s ease-out;
+}
+
+.plugin-config-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Transcribe Dropzone */
+.transcribe-dropzone {
+    border: 2px dashed var(--border-muted);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.transcribe-dropzone:hover {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.03);
+}
+
+.transcribe-dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.08);
+    transform: scale(1.01);
+}
+
+.transcribe-dropzone.has-file {
+    border-color: rgba(34, 197, 94, 0.5);
+    background: rgba(34, 197, 94, 0.04);
+}
+
+
 
