@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"time"
 	"os"
 	"strings"
 	"testing"
@@ -162,6 +163,92 @@ func TestCalendarManager(t *testing.T) {
 	}
 	if !strings.Contains(appendedNote.Content, "- Extra observation about API") {
 		t.Errorf("expected observation in note content, got: %s", appendedNote.Content)
+	}
+}
+
+func TestGetEffectiveHandoffDate(t *testing.T) {
+	loc := time.Local
+
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected string
+	}{
+		// Tuesday early morning -> Monday
+		{
+			name:     "Tuesday 02:00 AM shifts to Monday",
+			input:    time.Date(2026, time.October, 20, 2, 0, 0, 0, loc), // Tuesday
+			expected: "2026-10-19",
+		},
+		// Wednesday early morning -> Tuesday
+		{
+			name:     "Wednesday 00:00:00 shifts to Tuesday",
+			input:    time.Date(2026, time.October, 21, 0, 0, 0, 0, loc), // Wednesday
+			expected: "2026-10-20",
+		},
+		// Thursday early morning boundary -> Wednesday
+		{
+			name:     "Thursday 04:59:59 shifts to Wednesday",
+			input:    time.Date(2026, time.October, 22, 4, 59, 59, 0, loc), // Thursday
+			expected: "2026-10-21",
+		},
+		// Friday early morning -> Thursday
+		{
+			name:     "Friday 03:30 AM shifts to Thursday",
+			input:    time.Date(2026, time.October, 23, 3, 30, 0, 0, loc), // Friday
+			expected: "2026-10-22",
+		},
+		// Saturday early morning -> Friday (skips weekend)
+		{
+			name:     "Saturday 01:00 AM shifts to Friday",
+			input:    time.Date(2026, time.October, 24, 1, 0, 0, 0, loc), // Saturday
+			expected: "2026-10-23",
+		},
+		// Sunday early morning -> Friday (skips weekend)
+		{
+			name:     "Sunday 03:00 AM shifts to Friday",
+			input:    time.Date(2026, time.October, 25, 3, 0, 0, 0, loc), // Sunday
+			expected: "2026-10-23",
+		},
+		// Monday early morning -> Friday (skips weekend)
+		{
+			name:     "Monday 02:00 AM shifts to Friday",
+			input:    time.Date(2026, time.October, 26, 2, 0, 0, 0, loc), // Monday
+			expected: "2026-10-23",
+		},
+		// Exactly 05:00 AM cutoff: stays on current day
+		{
+			name:     "Tuesday 05:00:00 AM cutoff stays on Tuesday",
+			input:    time.Date(2026, time.October, 20, 5, 0, 0, 0, loc), // Tuesday
+			expected: "2026-10-20",
+		},
+		// Afternoon: stays on current day
+		{
+			name:     "Wednesday 02:30 PM stays on Wednesday",
+			input:    time.Date(2026, time.October, 21, 14, 30, 0, 0, loc), // Wednesday
+			expected: "2026-10-21",
+		},
+		// Late evening: stays on current day
+		{
+			name:     "Friday 11:59:59 PM stays on Friday",
+			input:    time.Date(2026, time.October, 23, 23, 59, 59, 0, loc), // Friday
+			expected: "2026-10-23",
+		},
+		// Saturday afternoon stays on Saturday
+		{
+			name:     "Saturday 02:00 PM stays on Saturday",
+			input:    time.Date(2026, time.October, 24, 14, 0, 0, 0, loc), // Saturday
+			expected: "2026-10-24",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetEffectiveHandoffDate(tt.input)
+			if got != tt.expected {
+				t.Errorf("GetEffectiveHandoffDate(%v) = %s, expected %s", tt.input, got, tt.expected)
+			}
+		})
 	}
 }
 

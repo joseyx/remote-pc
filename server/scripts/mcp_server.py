@@ -114,11 +114,23 @@ def api_request(path, method="GET", body=None, retried=False):
         return None, f"Error conectando con Remote PC en {url}: {e}"
 
 # Tool Definitions
+def get_effective_handoff_date(now=None):
+    import datetime
+    if now is None:
+        now = datetime.datetime.now()
+    if now.hour < 5:
+        target = now - datetime.timedelta(days=1)
+        while target.weekday() in (5, 6):  # 5=Saturday, 6=Sunday
+            target -= datetime.timedelta(days=1)
+        return target.strftime("%Y-%m-%d")
+    return now.strftime("%Y-%m-%d")
+
 TOOLS = [
     {
         "name": "save_daily_handoff",
         "description": (
-            "Registra el cierre de tarea / handoff del día actual en el Calendario de Remote PC. "
+            "Registra el cierre de tarea / handoff en el Calendario de Remote PC. "
+            "Si se ejecuta de madrugada (entre 00:00 y 05:00), se guarda automáticamente en el día hábil anterior. "
             "Usa esta herramienta cuando el usuario pida cerrar el día, hacer el handoff, registrar el progreso diario, "
             "o al finalizar la sesión de trabajo. Redacta tú mismo el resumen con base en todo lo avanzado en esta conversación."
         ),
@@ -150,6 +162,10 @@ TOOLS = [
                     "type": "string",
                     "enum": ["claude", "agy", "developer"],
                     "description": "Agente responsable que redacta el handoff (por defecto claude)."
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Fecha YYYY-MM-DD del calendario donde registrar el handoff (opcional; si se omite, de 12am a 5am se asigna al día hábil anterior)."
                 }
             },
             "required": ["summary", "pending"]
@@ -396,6 +412,8 @@ def handle_save_daily_handoff(args):
         "pending": args.get("pending", ""),
         "blockers": args.get("blockers", "")
     }
+    if args.get("date"):
+        payload["date"] = args["date"]
 
     res, err = api_request("/api/calendar/handoff", method="POST", body=payload)
     if err:
@@ -459,8 +477,11 @@ def handle_get_today_note(args):
     return f"📅 **Nota Diaria ({res.get('date')})**:\n\n{content}\n\n*Handoffs registrados:* {len(handoffs)}"
 
 def handle_update_daily_handoff(args):
+    import datetime
     handoff_id = args.get("id")
     date = args.get("date", "")
+    if not date and datetime.datetime.now().hour < 5:
+        date = get_effective_handoff_date()
 
     if not handoff_id:
         note_res, _ = api_request(f"/api/calendar/note?date={date}" if date else "/api/calendar/note")

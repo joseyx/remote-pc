@@ -258,22 +258,38 @@ func (m *Manager) AppendDailyNote(date string, text string) (*DayNote, error) {
 	return m.GetDayNote(date)
 }
 
+// GetEffectiveHandoffDate returns the target calendar date (YYYY-MM-DD) for a handoff.
+// If t is in the early morning between 00:00:00 and 04:59:59 (12 AM to 5 AM), the handoff
+// is attributed to the previous business day (Monday through Friday, skipping weekends).
+// Otherwise, it returns the calendar date of t.
+func GetEffectiveHandoffDate(t time.Time) string {
+	if t.Hour() < 5 {
+		target := t.AddDate(0, 0, -1)
+		for target.Weekday() == time.Saturday || target.Weekday() == time.Sunday {
+			target = target.AddDate(0, 0, -1)
+		}
+		return target.Format("2006-01-02")
+	}
+	return t.Format("2006-01-02")
+}
+
 // AddHandoff records a structured end-of-day handoff and updates the daily note markdown
 func (m *Manager) AddHandoff(item HandoffItem, workDir string) (*HandoffItem, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	now := time.Now()
 	if item.Date == "" {
-		item.Date = time.Now().Format("2006-01-02")
+		item.Date = GetEffectiveHandoffDate(now)
 	}
 	if item.Time == "" {
-		item.Time = time.Now().Format("15:04")
+		item.Time = now.Format("15:04")
 	}
 	if item.ID == "" {
 		item.ID = uuid.New().String()
 	}
 	if item.CreatedAt.IsZero() {
-		item.CreatedAt = time.Now()
+		item.CreatedAt = now
 	}
 
 	// Capture automatic Git snapshot if directory is provided

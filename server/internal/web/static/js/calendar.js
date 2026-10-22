@@ -25,9 +25,27 @@ function getTodayFormatted() {
     return `${y}-${m}-${day}`;
 }
 
+function getEffectiveHandoffDate(d = new Date()) {
+    if (d.getHours() < 5) {
+        const target = new Date(d);
+        target.setDate(target.getDate() - 1);
+        while (target.getDay() === 0 || target.getDay() === 6) { // 0=Sunday, 6=Saturday
+            target.setDate(target.getDate() - 1);
+        }
+        const y = target.getFullYear();
+        const m = String(target.getMonth() + 1).padStart(2, '0');
+        const day = String(target.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 async function loadCalendarView() {
     const today = getTodayFormatted();
-    if (!calSelectedDate) calSelectedDate = today;
+    if (!calSelectedDate) calSelectedDate = getEffectiveHandoffDate();
     await fetchCalendarMonth(calCurrentYear, calCurrentMonth);
     await selectCalendarDate(calSelectedDate);
     await fetchCalendarStandup();
@@ -785,6 +803,20 @@ function openHandoffModalForActive() {
         `).join('');
     }
 
+    const dateInput = document.getElementById('handoff-date-input');
+    const dateHint = document.getElementById('handoff-date-hint');
+    const effectiveDate = getEffectiveHandoffDate();
+    if (dateInput) {
+        dateInput.value = effectiveDate;
+    }
+    if (dateHint) {
+        if (new Date().getHours() < 5) {
+            dateHint.textContent = '🌙 Madrugada: asignado al día hábil anterior';
+        } else {
+            dateHint.textContent = '';
+        }
+    }
+
     const modal = document.getElementById('modal-handoff');
     if (modal) modal.classList.add('open');
 
@@ -898,7 +930,8 @@ async function requestAgentRedactHandoff() {
             }
 
             // Poll for completion
-            const targetDate = calSelectedDate || getTodayFormatted();
+            const dateInput = document.getElementById('handoff-date-input');
+            const targetDate = (dateInput && dateInput.value) ? dateInput.value : getEffectiveHandoffDate();
             const initialCount = (calCurrentNote && calCurrentNote.handoffs) ? calCurrentNote.handoffs.length : 0;
             let attempts = 0;
             const poller = setInterval(async () => {
@@ -951,8 +984,11 @@ async function submitHandoffForm() {
     const targetBubble = allBubbles.find(b => b.id === bubbleId);
     const taskName = targetBubble ? targetBubble.name : 'Tarea';
 
+    const dateInput = document.getElementById('handoff-date-input');
+    const handoffDate = (dateInput && dateInput.value) ? dateInput.value : getEffectiveHandoffDate();
+
     const payload = {
-        date: calSelectedDate || getTodayFormatted(),
+        date: handoffDate,
         bubbleId,
         taskName,
         agent,
@@ -1027,6 +1063,16 @@ function openEndOfDayModal() {
         }
     }
 
+    const notice = document.getElementById('eod-early-morning-notice');
+    const targetDateSpan = document.getElementById('eod-target-date');
+    const effectiveDate = getEffectiveHandoffDate();
+    if (new Date().getHours() < 5) {
+        if (notice) notice.style.display = 'block';
+        if (targetDateSpan) targetDateSpan.textContent = effectiveDate;
+    } else {
+        if (notice) notice.style.display = 'none';
+    }
+
     const modal = document.getElementById('modal-end-of-day');
     if (modal) modal.classList.add('open');
 }
@@ -1079,7 +1125,7 @@ async function autoSaveAllActiveHandoffs() {
         ...(token ? { 'Authorization': 'Bearer ' + token } : {})
     };
 
-    const targetDate = calSelectedDate || getTodayFormatted();
+    const targetDate = getEffectiveHandoffDate();
 
     for (const b of activeBubblesWithTerms) {
         try {
