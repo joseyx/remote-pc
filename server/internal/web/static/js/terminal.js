@@ -473,11 +473,11 @@ function fitActiveTerminal() {
     if (!container || container.offsetWidth <= 0 || container.offsetHeight <= 0) {
         return;
     }
-    container.scrollLeft = 0;
+    if (container.scrollLeft !== 0) container.scrollLeft = 0;
     if (termObj && termObj.element) {
-        termObj.element.scrollLeft = 0;
+        if (termObj.element.scrollLeft !== 0) termObj.element.scrollLeft = 0;
         const vp = termObj.element.querySelector('.xterm-viewport');
-        if (vp) vp.scrollLeft = 0;
+        if (vp && vp.scrollLeft !== 0) vp.scrollLeft = 0;
     }
     if (fitAddon && termObj) {
         try {
@@ -830,11 +830,11 @@ function fitSplitTerminal() {
     if (!container || container.offsetWidth <= 0 || container.offsetHeight <= 0) {
         return;
     }
-    container.scrollLeft = 0;
+    if (container.scrollLeft !== 0) container.scrollLeft = 0;
     if (termObj2 && termObj2.element) {
-        termObj2.element.scrollLeft = 0;
+        if (termObj2.element.scrollLeft !== 0) termObj2.element.scrollLeft = 0;
         const vp = termObj2.element.querySelector('.xterm-viewport');
-        if (vp) vp.scrollLeft = 0;
+        if (vp && vp.scrollLeft !== 0) vp.scrollLeft = 0;
     }
     if (fitAddon2 && termObj2) {
         try {
@@ -1060,11 +1060,11 @@ let isQuakeOpen = false;
 function fitQuakeTerminal() {
     const embed = document.getElementById('quake-terminal-embed');
     if (!embed || embed.offsetWidth <= 0 || embed.offsetHeight <= 0) return;
-    embed.scrollLeft = 0;
+    if (embed.scrollLeft !== 0) embed.scrollLeft = 0;
     if (quakeTermObj && quakeTermObj.element) {
-        quakeTermObj.element.scrollLeft = 0;
+        if (quakeTermObj.element.scrollLeft !== 0) quakeTermObj.element.scrollLeft = 0;
         const vp = quakeTermObj.element.querySelector('.xterm-viewport');
-        if (vp) vp.scrollLeft = 0;
+        if (vp && vp.scrollLeft !== 0) vp.scrollLeft = 0;
     }
     if (quakeFitAddon && quakeTermObj) {
         try {
@@ -1232,20 +1232,36 @@ function clearQuakeTerminal() {
 // Terminal Container ResizeObserver
 // ==========================================
 let termResizeObserver = null;
+let lastObservedWrapperWidth = 0;
+let lastObservedWrapperHeight = 0;
+
 function initTerminalResizeObserver() {
     if (typeof ResizeObserver === 'undefined') return;
     if (termResizeObserver) {
         try { termResizeObserver.disconnect(); } catch (e) {}
     }
     let resizeTimer = null;
-    termResizeObserver = new ResizeObserver(() => {
+    termResizeObserver = new ResizeObserver((entries) => {
+        if (!entries || entries.length === 0) return;
+        const rect = entries[0].contentRect;
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        if (w <= 0 || h <= 0) return;
+
+        // Skip micro-jitter (<2px) and no-op calls to prevent layout loops
+        if (Math.abs(w - lastObservedWrapperWidth) < 2 && Math.abs(h - lastObservedWrapperHeight) < 2) {
+            return;
+        }
+        lastObservedWrapperWidth = w;
+        lastObservedWrapperHeight = h;
+
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
             if (activeTab === 'terminal') {
                 fitActiveTerminal();
                 if (isSplitActive) fitSplitTerminal();
             }
-        }, 50);
+        }, 80);
     });
 
     const wrapper = document.getElementById('terminal-embed-wrapper');
