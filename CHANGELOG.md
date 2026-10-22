@@ -3,6 +3,25 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.5.0] - 2026-10-22
+
+### 🚀 Añadido (Added)
+- **Asignación Inteligente de Handoffs en Madrugada**:
+  - Lógica automática para registrar handoffs realizados entre las `00:00:00` y las `04:59:59` (12:00 AM a 5:00 AM) en el calendario del **día hábil anterior**.
+  - Días hábiles laborales de Martes a Viernes retroceden al día inmediatamente anterior (Lunes a Jueves).
+  - Handoffs de madrugada en Sábado, Domingo o Lunes retroceden y se consolidan en el **Viernes hábil anterior**, evitando registrar jornadas en fines de semana.
+  - Horario diurno regular (`>= 05:00:00`) mantiene la fecha del día actual.
+- **Control de Fecha y Visibilidad en el Web Cockpit**:
+  - Selector de fecha incorporado en el modal de Handoff (`#modal-handoff`) permitiendo confirmar o modificar el día de registro con retroalimentación visual (`🌙 Madrugada: asignado al día hábil anterior`).
+  - Aviso contextual dinámico en el modal de Finalizar Jornada (`#modal-end-of-day`) indicando el día de registro objetivo para auto-guardados masivos.
+  - Inicialización del calendario diario enfocando la jornada hábil efectiva al ingresar en horas de la madrugada.
+- **Mejoras en el Protocolo MCP y CLI de Agentes**:
+  - Herramienta MCP `save_daily_handoff` actualizada con parámetro opcional `date` y directrices para agentes Claude Code y Antigravity.
+  - Auto-detección del día hábil anterior en `update_daily_handoff` y `delete_daily_handoff` al omitirse la fecha en horas de madrugada.
+  - Script CLI `remotepc-handoff.py` actualizado con soporte de fecha hábil.
+
+---
+
 ## [1.4.0] - 2026-10-21
 
 ### 🚀 Añadido (Added)
