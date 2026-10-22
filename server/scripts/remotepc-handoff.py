@@ -37,7 +37,7 @@ def main():
     parser.add_argument("--agent", default="claude", choices=["claude", "agy", "developer"], help="Agente responsable")
     parser.add_argument("--bubbleId", default="", help="ID del bubble (opcional, se auto-detecta por directorio)")
     parser.add_argument("--task", default="", help="Nombre de la tarea (opcional)")
-    parser.add_argument("--date", default="", help="Fecha YYYY-MM-DD (opcional, defecto hoy)")
+    parser.add_argument("--date", default="", help="Fecha YYYY-MM-DD (opcional; si se omite, de 12am a 5am se asigna al día hábil anterior)")
 
     args = parser.parse_args()
 

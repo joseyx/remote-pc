@@ -1617,7 +1617,7 @@ func (s *Server) handleCalendarHandoffAuto(w http.ResponseWriter, r *http.Reques
 
 	date := body.Date
 	if date == "" {
-		date = time.Now().Format("2006-01-02")
+		date = calendar.GetEffectiveHandoffDate(time.Now())
 	}
 
 	item := calendar.HandoffItem{

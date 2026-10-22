@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"orbit/internal/calendar"
 	"orbit/internal/plugin"
 )
 
@@ -26,7 +27,8 @@ type Tool struct {
 var Tools = []Tool{
 	{
 		Name: "save_daily_handoff",
-		Description: "Registra el cierre de tarea / handoff del día actual en el Calendario de Remote PC. " +
+		Description: "Registra el cierre de tarea / handoff en el Calendario de Remote PC. " +
+			"Si el handoff se registra en la madrugada (entre 00:00 y 05:00), se guarda automáticamente en el día hábil anterior. " +
 			"Usa esta herramienta cuando el usuario pida cerrar el día, hacer el handoff, registrar el progreso diario, " +
 			"o al finalizar la sesión de trabajo. Redacta tú mismo el resumen con base en todo lo avanzado en esta conversación.",
 		InputSchema: map[string]interface{}{
@@ -57,6 +59,10 @@ var Tools = []Tool{
 					"type":        "string",
 					"enum":        []string{"claude", "agy", "developer"},
 					"description": "Agente responsable que redacta el handoff (por defecto claude).",
+				},
+				"date": map[string]interface{}{
+					"type":        "string",
+					"description": "Fecha YYYY-MM-DD del calendario donde registrar el handoff (opcional; si se omite, se calcula automáticamente según la jornada, asignando la madrugada de 12am a 5am al día hábil anterior).",
 				},
 			},
 			"required": []string{"summary", "pending"},
@@ -691,6 +697,9 @@ func handleGetTodayNote(args map[string]interface{}) (string, error) {
 func handleUpdateDailyHandoff(args map[string]interface{}) (string, error) {
 	handoffID, _ := args["id"].(string)
 	date, _ := args["date"].(string)
+	if date == "" && time.Now().Hour() < 5 {
+		date = calendar.GetEffectiveHandoffDate(time.Now())
+	}
 
 	if handoffID == "" {
 		path := "/api/calendar/note"
@@ -757,6 +766,9 @@ func handleUpdateDailyHandoff(args map[string]interface{}) (string, error) {
 func handleDeleteDailyHandoff(args map[string]interface{}) (string, error) {
 	handoffID, _ := args["id"].(string)
 	date, _ := args["date"].(string)
+	if date == "" && time.Now().Hour() < 5 {
+		date = calendar.GetEffectiveHandoffDate(time.Now())
+	}
 	if handoffID == "" {
 		return "", fmt.Errorf("error: Se requiere el parámetro 'id' para eliminar el handoff")
 	}
