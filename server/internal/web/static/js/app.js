@@ -50,27 +50,38 @@ function handleWindowResize() {
 
 
 
+let lastSessionsSnapshot = '';
+
 async function fetchSessions() {
     try {
+        if (document.hidden) return; // Skip heavy DOM operations when tab is backgrounded
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         const res = await fetch('/api/sessions', { headers });
         if (!res.ok) return;
-        allSessions = await res.json();
-        allSessions.sort((a, b) => {
+        const sessions = await res.json();
+        sessions.sort((a, b) => {
             const tA = new Date(a.createdAt || 0).getTime();
             const tB = new Date(b.createdAt || 0).getTime();
             if (tA !== tB) return tA - tB;
             return (a.id || '').localeCompare(b.id || '');
         });
+
+        // Compute fingerprint to avoid destroying and recreating DOM every 3.5s when unchanged
+        const snapshot = sessions.map(s => `${s.id}:${s.isRunning}:${s.role}:${s.name || ''}:${s.bubbleId || ''}`).join('|');
+        allSessions = sessions;
         allSessions.forEach(s => {
             if (s.name && !sessionCustomNames[s.id]) {
                 sessionCustomNames[s.id] = s.name;
             }
         });
-        renderBubblesList();
-        if (currentBubble) {
-            updateBubbleSessionsUI();
+
+        if (snapshot !== lastSessionsSnapshot) {
+            lastSessionsSnapshot = snapshot;
+            renderBubblesList();
+            if (currentBubble) {
+                updateBubbleSessionsUI();
+            }
         }
     } catch (e) {
         console.error("Error al obtener sessions:", e);
@@ -139,6 +150,13 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            fetchServerAndSessions();
+            fetchSystemStats();
+        }
+    });
+
     // Activity settle check for audio/desktop notifications
     setInterval(() => {
         if (hadRecentActiveStream && (Date.now() - lastTermActivityTime > 2500)) {
@@ -161,6 +179,7 @@ async function refreshAll() {
 }
 
 async function fetchServerAndSessions() {
+    if (document.hidden) return; // Do not poll when tab is hidden
     await fetchServerInfo();
     await fetchSessions();
 }

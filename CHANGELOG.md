@@ -3,6 +3,20 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.5.1] - 2026-10-22
+
+### ⚡ Optimización y Rendimiento (Performance)
+- **Eliminación del Bucle de Reflow en Terminal (`ResizeObserver`)**:
+  - Corrección del bucle infinito de recálculo de layout en `terminal.js` incorporando detección y memorización de dimensiones con tolerancia de micro-jitter (< 2px) en `initTerminalResizeObserver()`.
+  - Asignación condicional de desplazamiento de scroll (`scrollLeft = 0`) para evitar ensuciar y forzar la reevaluación síncrona del layout (*forced synchronous reflow*) antes de llamar a `fitAddon.fit()`.
+- **Prevención de Destrucción Masiva del DOM en Polling (`fetchSessions`)**:
+  - Implementación de un mecanismo de huella digital (*snapshot fingerprint*) en `fetchSessions()`, eliminando la reescritura innecesaria de `#bubbles-container` y subtabs de terminales cada 3.5 segundos cuando no hay cambios de estado.
+  - Pausa inteligente del ciclo de polling cuando la pestaña se encuentra oculta o en segundo plano (`document.hidden`), con sincronización inmediata al recuperar el foco (`visibilitychange`).
+- **Control de Versiones de Recursos Estáticos (Cache Busting)**:
+  - Sufijo de control de versiones actualizado a `?v=2.3.1` en `index.html` (incluyendo `calendar.js`) para garantizar que los navegadores invaliden la caché previa y carguen los scripts optimizados.
+
+---
+
 ## [1.5.0] - 2026-10-22
 
 ### 🚀 Añadido (Added)
