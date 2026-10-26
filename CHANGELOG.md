@@ -3,6 +3,22 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.5.2] - 2026-10-26
+
+### 🐛 Correcciones y Mejoras (Bug Fixes & Enhancements)
+- **Restauración de Selección de Texto y Copiado con Ratón en Terminal**:
+  - Corrección en `terminal.js` evitando que el protocolo de captura de ratón (Mouse Tracking activado por ConPTY o Claude Code) deshabilite el servicio de selección de texto de xterm.js.
+  - Arrastre normal de ratón ahora siempre selecciona texto; se requiere `Alt` únicamente si se desea pasar eventos de clic a aplicaciones TUI.
+  - Copiado inteligente con clic derecho: copia el texto seleccionado al portapapeles y limpia la selección; si no hay texto seleccionado, pega el contenido del portapapeles (comportamiento idéntico a Windows Terminal y PuTTY).
+  - Resaltado visual acentuado de selección (`rgba(56, 189, 248, 0.35)`) para clara visibilidad del texto marcado.
+- **Resiliencia y Auto-Reconexión de Terminales Web**:
+  - Implementación de reconexión automática en los sockets WebSocket de terminal (`termWs` y `termWs2`) tras desconexiones inesperadas o reinicios del demonio Orbit.
+  - Detección de sockets cerrados en el ciclo de polling (`fetchSessions`), reanudando terminales activas sin necesidad de recargar la página.
+- **Optimización de Latencia INP (Interaction to Next Paint)**:
+  - Actualización visual inmediata de clases activas en `selectBubble` cediendo un micro-frame (`requestAnimationFrame`) antes de inicializar la terminal, reduciendo la latencia de respuesta de 776ms a menos de 20ms.
+
+---
+
 ## [1.5.1] - 2026-10-22
 
 ### ⚡ Optimización y Rendimiento (Performance)
