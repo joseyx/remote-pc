@@ -82,6 +82,9 @@ async function fetchSessions() {
             if (currentBubble) {
                 updateBubbleSessionsUI();
             }
+        } else if (currentBubble && activeBubbleSession && (!termWs || termWs.readyState === WebSocket.CLOSED)) {
+            // Reconnect dropped terminal if server is healthy
+            connectToSession(activeBubbleSession.id);
         }
     } catch (e) {
         console.error("Error al obtener sessions:", e);

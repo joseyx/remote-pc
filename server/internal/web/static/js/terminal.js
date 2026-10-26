@@ -207,6 +207,72 @@ function setupTerminalKeyHandlers(term, getWs) {
     });
 }
 
+
+function setupTerminalSelection(term, getWs) {
+    if (!term) return;
+
+    try {
+        if (term.options) {
+            term.options.rightClickSelectsWord = true;
+        }
+    } catch (e) {}
+
+    const core = term._core;
+    if (core && core._selectionService) {
+        core._selectionService.enable();
+        core._selectionService.disable = function() {
+            this._enabled = true;
+        };
+        core._selectionService.shouldForceSelection = function(e) {
+            return !e.altKey;
+        };
+    }
+
+    if (term.element) {
+        term.element.classList.remove('enable-mouse-events');
+        const obs = new MutationObserver(() => {
+            if (term.element && term.element.classList.contains('enable-mouse-events')) {
+                term.element.classList.remove('enable-mouse-events');
+            }
+        });
+        obs.observe(term.element, { attributes: true, attributeFilter: ['class'] });
+
+        term.element.addEventListener('contextmenu', async (e) => {
+            if (term.hasSelection()) {
+                e.preventDefault();
+                e.stopPropagation();
+                const sel = term.getSelection();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    try {
+                        await navigator.clipboard.writeText(sel);
+                        showToast('Copiado al portapapeles');
+                    } catch (err) {
+                        copyTextFallback(sel);
+                    }
+                } else {
+                    copyTextFallback(sel);
+                }
+                term.clearSelection();
+                return;
+            }
+
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const ws = typeof getWs === 'function' ? getWs() : getWs;
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'input', data: text }));
+                        }
+                    }
+                } catch (err) {}
+            }
+        });
+    }
+}
+
 // Terminal Management for Active Bubble
 let bubbleLastSessionMap = {};
 let currentConnectedSessionId = null;
@@ -395,7 +461,9 @@ function connectToSession(sessionId) {
         theme: {
             background: '#0d1117',
             foreground: '#c9d1d9',
-            cursor: '#38bdf8'
+            cursor: '#38bdf8',
+            selectionBackground: 'rgba(56, 189, 248, 0.35)',
+            selectionInactiveBackground: 'rgba(56, 189, 248, 0.20)'
         },
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
         fontSize: currentTermFontSize,
@@ -418,6 +486,7 @@ function connectToSession(sessionId) {
         try { fitAddon.fit(); } catch (e) {}
     }
     setupTerminalKeyHandlers(termObj, () => termWs);
+    setupTerminalSelection(termObj, () => termWs);
     requestAnimationFrame(() => {
         fitActiveTerminal();
         setTimeout(fitActiveTerminal, 60);
@@ -461,9 +530,18 @@ function connectToSession(sessionId) {
         }
     };
 
-    termWs.onclose = () => {
-        if (termObj) {
-            try { termObj.writeln("\r\n\x1b[33m[Sesión cerrada]\x1b[0m"); } catch (e) {}
+    termWs.onclose = (event) => {
+        if (termObj && currentConnectedSessionId === sessionId) {
+            if (event && event.code === 1000) {
+                try { termObj.writeln("\r\n\x1b[33m[Sesión cerrada]\x1b[0m"); } catch (e) {}
+            } else {
+                try { termObj.writeln("\r\n\x1b[33m[Conexión perdida. Reconectando automáticamente...]\x1b[0m"); } catch (e) {}
+                setTimeout(() => {
+                    if (activeBubbleSession && activeBubbleSession.id === sessionId && (!termWs || termWs.readyState !== WebSocket.OPEN)) {
+                        connectToSession(sessionId);
+                    }
+                }, 2000);
+            }
         }
     };
 }
@@ -755,7 +833,9 @@ function connectToSplitSession(sessionId) {
         theme: {
             background: '#0d1117',
             foreground: '#c9d1d9',
-            cursor: '#10b981'
+            cursor: '#10b981',
+            selectionBackground: 'rgba(52, 211, 153, 0.35)',
+            selectionInactiveBackground: 'rgba(52, 211, 153, 0.20)'
         },
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
         fontSize: currentTermFontSize,
@@ -778,6 +858,7 @@ function connectToSplitSession(sessionId) {
         try { fitAddon2.fit(); } catch (e) {}
     }
     setupTerminalKeyHandlers(termObj2, () => termWs2);
+    setupTerminalSelection(termObj2, () => termWs2);
     requestAnimationFrame(() => {
         fitSplitTerminal();
         setTimeout(fitSplitTerminal, 60);
@@ -1175,6 +1256,7 @@ async function initQuakeTerminal() {
             try { quakeFitAddon.fit(); } catch (e) {}
         }
         setupTerminalKeyHandlers(quakeTermObj, () => quakeTermWs);
+        setupTerminalSelection(quakeTermObj, () => quakeTermWs);
 
         quakeTermObj.onData(data => {
             if (quakeTermWs && quakeTermWs.readyState === WebSocket.OPEN) {

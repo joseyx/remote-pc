@@ -456,16 +456,25 @@ document.addEventListener('click', (e) => {
 
 // Select Bubble
 async function selectBubble(id) {
+    if (currentBubble && currentBubble.id === id) {
+        return;
+    }
     const b = allBubbles.find(x => x.id === id);
     if (!b) return;
     currentBubble = b;
-    renderBubblesList();
+
+    document.querySelectorAll('.bubble-card.active').forEach(c => c.classList.remove('active'));
+    const nextCard = document.getElementById('bubble-card-' + id);
+    if (nextCard) nextCard.classList.add('active');
 
     document.getElementById('workspace-empty-view').style.display = 'none';
     const activeCont = document.getElementById('active-bubble-container');
     activeCont.style.display = 'flex';
 
     updateBubbleHeaderUI();
+
+    // Yield so that selection state paints immediately (< 20ms INP)
+    await new Promise(resolve => requestAnimationFrame(resolve));
 
     // Load subtab sessions for this bubble
     await updateBubbleSessionsUI();
