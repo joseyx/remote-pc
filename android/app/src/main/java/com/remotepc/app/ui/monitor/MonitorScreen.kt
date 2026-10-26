@@ -133,7 +133,7 @@ fun MonitorScreen(
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
-                                text = "v${serverInfo?.version?.ifBlank { "1.5.1" } ?: "1.5.1"}",
+                                text = "v${serverInfo?.version?.ifBlank { "1.5.2" } ?: "1.5.2"}",
                                 color = TerminalAccent,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
