@@ -230,28 +230,61 @@ var Tools = []Tool{
 		},
 	},
 	{
+		Name: "list_workspaces",
+		Description: "Lista todos los proyectos y workspaces registrados en Orbit (ID, nombre, ruta base, ramas por defecto y descripción). " +
+			"Úsalo para saber qué proyectos están disponibles antes de crear un nuevo worktree.",
+		InputSchema: map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+		},
+	},
+	{
 		Name: "create_workspace_bubble",
 		Description: "Crea un nuevo workspace bubble y entorno de trabajo (git worktree aislado, branch y configuración) " +
-			"directamente desde el agente. Soporta espacios como Aditum y Brif.",
+			"con soporte para asignación de prioridad (P0/P1), contexto de tarea (TASK.md) y apertura automática de sesión de terminal en Orbit (Claude Code o PowerShell).",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"workspace": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"aditum", "brif"},
-					"description": "Espacio de trabajo donde crear la tarea ('aditum' o 'brif').",
+					"description": "Identificador del espacio de trabajo o proyecto (ej: 'aditum', 'brif', o cualquier ID devuelto por list_workspaces).",
 				},
 				"task_id": map[string]interface{}{
 					"type":        "string",
-					"description": "Identificador del ticket o tarea (ej: 'TAR-1150' para Aditum, o 'dialogos-mx' para Brif).",
+					"description": "Identificador del ticket o tarea (ej: 'TAR-1150' para Aditum, o 'dialogos-mx' para Brif, o 'feature-xyz').",
 				},
 				"name": map[string]interface{}{
 					"type":        "string",
 					"description": "Nombre legible para la tarea (opcional; por defecto igual a task_id).",
 				},
+				"priority": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"P0", "P1", "P2", "P3"},
+					"description": "Prioridad de la tarea: P0 (Máxima/Crítica), P1 (Alta), P2 (Media), P3 (Baja). Usa P0 cuando el usuario pida prioridad máxima.",
+				},
+				"task_description": map[string]interface{}{
+					"type":        "string",
+					"description": "Descripción detallada del objetivo de la tarea. Se redactará automáticamente en el archivo TASK.md (excluido de Git) dentro del nuevo worktree.",
+				},
+				"requirements": map[string]interface{}{
+					"type": "array",
+					"items": map[string]interface{}{
+						"type": "string",
+					},
+					"description": "Lista de requerimientos o criterios de aceptación para la tarea que se incluirán como checkboxes en TASK.md.",
+				},
+				"spawn_session": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Si se debe abrir automáticamente una terminal en Orbit en la ruta del nuevo worktree. Por defecto true.",
+				},
+				"session_role": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"claude", "shell"},
+					"description": "Tipo de sesión en Orbit: 'claude' para iniciar Claude Code interactivo de inmediato (usar si el usuario pide poner a Claude o a un agente a trabajar), o 'shell' para abrir PowerShell limpia. Por defecto 'shell'.",
+				},
 				"base_branch": map[string]interface{}{
 					"type":        "string",
-					"description": "Rama base para crear el worktree (opcional; ej: 'development').",
+					"description": "Rama base para crear el worktree (opcional; ej: 'development', 'main'). Si se omite, usa la default del workspace.",
 				},
 				"use_slim": map[string]interface{}{
 					"type":        "boolean",
@@ -521,6 +554,8 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 		return handleAppendDailyNote(args)
 	case "list_workspace_bubbles":
 		return handleListWorkspaceBubbles(args)
+	case "list_workspaces":
+		return handleListWorkspaces(args)
 	case "get_bubble_context":
 		return handleGetBubbleContext(args)
 	case "create_workspace_bubble":
@@ -915,6 +950,38 @@ func handleListWorkspaceBubbles(args map[string]interface{}) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
+func handleListWorkspaces(args map[string]interface{}) (string, error) {
+	var workspaces []map[string]interface{}
+	if err := apiRequest("/api/workspaces", "GET", nil, &workspaces, false); err != nil {
+		return "", fmt.Errorf("error al consultar workspaces: %w", err)
+	}
+
+	if len(workspaces) == 0 {
+		return "No hay workspaces registrados en Orbit.", nil
+	}
+
+	lines := []string{fmt.Sprintf("📁 **Workspaces registrados en Orbit (%d):**\n", len(workspaces))}
+	for _, ws := range workspaces {
+		id, _ := ws["id"].(string)
+		name, _ := ws["name"].(string)
+		wsType, _ := ws["type"].(string)
+		basePath, _ := ws["basePath"].(string)
+		defaultBase, _ := ws["defaultBase"].(string)
+		desc, _ := ws["description"].(string)
+
+		lines = append(lines, fmt.Sprintf("- **%s** (`%s` / tipo: `%s`)", name, id, wsType))
+		lines = append(lines, fmt.Sprintf("  - Ruta base: `%s`", basePath))
+		if defaultBase != "" {
+			lines = append(lines, fmt.Sprintf("  - Rama base: `%s`", defaultBase))
+		}
+		if desc != "" {
+			lines = append(lines, fmt.Sprintf("  - Detalle: %s", desc))
+		}
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
 func handleGetBubbleContext(args map[string]interface{}) (string, error) {
 	bubbleID, _ := args["bubble_id"].(string)
 	bubbleID = strings.TrimSpace(bubbleID)
@@ -1042,7 +1109,7 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 	taskID = strings.TrimSpace(taskID)
 
 	if workspace == "" || taskID == "" {
-		return "", fmt.Errorf("error: Se requieren 'workspace' ('aditum' o 'brif') y 'task_id' (ej: 'TAR-1150')")
+		return "", fmt.Errorf("error: Se requieren 'workspace' y 'task_id'")
 	}
 
 	name, _ := args["name"].(string)
@@ -1059,13 +1126,49 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 		isWorktree = wt
 	}
 
+	priority, _ := args["priority"].(string)
+	priority = strings.ToUpper(strings.TrimSpace(priority))
+	if priority == "MAXIMA" || priority == "MÁXIMA" || priority == "MAX" {
+		priority = "P0"
+	} else if priority == "ALTA" {
+		priority = "P1"
+	} else if priority == "MEDIA" {
+		priority = "P2"
+	} else if priority == "BAJA" {
+		priority = "P3"
+	}
+
+	taskDesc, _ := args["task_description"].(string)
+	var requirements []string
+	if rawReqs, ok := args["requirements"].([]interface{}); ok {
+		for _, r := range rawReqs {
+			if s, ok := r.(string); ok && strings.TrimSpace(s) != "" {
+				requirements = append(requirements, strings.TrimSpace(s))
+			}
+		}
+	}
+
+	spawnSession := true
+	if ss, ok := args["spawn_session"].(bool); ok {
+		spawnSession = ss
+	}
+	sessionRole := "shell"
+	if sr, ok := args["session_role"].(string); ok && strings.TrimSpace(sr) != "" {
+		sessionRole = strings.ToLower(strings.TrimSpace(sr))
+	}
+
 	payload := map[string]interface{}{
-		"workspace":  workspace,
-		"taskId":     taskID,
-		"name":       name,
-		"baseBranch": baseBranch,
-		"useSlim":    useSlim,
-		"isWorktree": isWorktree,
+		"workspace":       workspace,
+		"taskId":          taskID,
+		"name":            name,
+		"baseBranch":      baseBranch,
+		"useSlim":         useSlim,
+		"isWorktree":      isWorktree,
+		"priority":        priority,
+		"taskDescription": taskDesc,
+		"requirements":    requirements,
+		"spawnSession":    spawnSession,
+		"sessionRole":     sessionRole,
 	}
 
 	var res map[string]interface{}
@@ -1081,11 +1184,37 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 		fmt.Sprintf("- **Ruta:** `%v`", res["path"]),
 		fmt.Sprintf("- **Rama:** `%v`", res["branch"]),
 	}
+	if p, ok := res["priority"].(string); ok && p != "" {
+		pBadge := p
+		if p == "P0" {
+			pBadge = "🔴 P0 (Máxima)"
+		} else if p == "P1" {
+			pBadge = "🟠 P1 (Alta)"
+		} else if p == "P2" {
+			pBadge = "🟡 P2 (Media)"
+		} else if p == "P3" {
+			pBadge = "🟢 P3 (Baja)"
+		}
+		lines = append(lines, fmt.Sprintf("- **Prioridad:** %s", pBadge))
+	}
 	if p, ok := res["port"].(float64); ok && p > 0 {
 		lines = append(lines, fmt.Sprintf("- **Puerto dev:** %.0f", p))
 	}
 	if s, ok := res["dbSchema"].(string); ok && s != "" {
 		lines = append(lines, fmt.Sprintf("- **Esquema DB:** `%s`", s))
+	}
+	if taskDesc != "" || len(requirements) > 0 {
+		lines = append(lines, "- **Contexto:** `TASK.md` generado en la raíz y excluido de Git (.git/info/exclude)")
+	}
+	if meta, ok := res["metadata"].(map[string]interface{}); ok {
+		if sID, ok := meta["session_id"].(string); ok && sID != "" {
+			sRole, _ := meta["session_role"].(string)
+			terminalLabel := "PowerShell"
+			if sRole == "claude" {
+				terminalLabel = "Claude Code"
+			}
+			lines = append(lines, fmt.Sprintf("- **Terminal activa en Orbit:** %s (ID: `%s`)", terminalLabel, sID))
+		}
 	}
 
 	return strings.Join(lines, "\n"), nil

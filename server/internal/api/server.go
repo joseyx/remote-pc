@@ -1062,6 +1062,27 @@ func (s *Server) handleCreateBubble(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	if req.SpawnSession && b != nil && b.Path != "" {
+		role := strings.ToLower(strings.TrimSpace(req.SessionRole))
+		if role == "" {
+			role = "shell"
+		}
+		cmd := s.cfg.DefaultShell
+		if role == "claude" {
+			cmd = "claude"
+		}
+		sName := fmt.Sprintf("%s (%s)", b.Name, role)
+		sess, err := s.manager.CreateBubbleSession(sName, b.Path, cmd, b.ID, role, 120, 30)
+		if err == nil && sess != nil {
+			if b.Metadata == nil {
+				b.Metadata = make(map[string]string)
+			}
+			b.Metadata["session_id"] = sess.ID
+			b.Metadata["session_role"] = role
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(b)

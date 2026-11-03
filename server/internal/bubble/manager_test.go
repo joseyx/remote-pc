@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -160,5 +161,89 @@ func TestGenericGitBubbleLifecycle(t *testing.T) {
 	if _, ok := mgr.GetBubble(b.ID); ok {
 		t.Fatalf("expected bubble %s to be deleted", b.ID)
 	}
+}
+
+func TestCreateBubbleWithPriorityAndTaskBriefing(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "orbit-priority-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	repoDir := filepath.Join(tmpDir, "repo-test")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("failed to create repo dir: %v", err)
+	}
+
+	initCmd := exec.Command("git", "-C", repoDir, "init", "-b", "main")
+	if err := initCmd.Run(); err != nil {
+		_ = exec.Command("git", "-C", repoDir, "init").Run()
+		_ = exec.Command("git", "-C", repoDir, "checkout", "-b", "main").Run()
+	}
+	_ = exec.Command("git", "-C", repoDir, "config", "user.email", "test@orbit.local").Run()
+	_ = exec.Command("git", "-C", repoDir, "config", "user.name", "Orbit Tester").Run()
+	_ = exec.Command("git", "-C", repoDir, "commit", "--allow-empty", "-m", "initial commit").Run()
+
+	mgr := NewManager(tmpDir)
+	ws := WorkspaceInfo{
+		ID:          "repotest",
+		Name:        "Repo Test",
+		Type:        "repotest",
+		BasePath:    repoDir,
+		DefaultBase: "main",
+	}
+	if err := mgr.AddWorkspace(ws); err != nil {
+		t.Fatalf("AddWorkspace failed: %v", err)
+	}
+
+	b, err := mgr.CreateBubble(CreateBubbleRequest{
+		Workspace:       "repotest",
+		TaskID:          "tar-999",
+		Name:            "TAR-999 Fix Billing",
+		Priority:        "P0",
+		TaskDescription: "Fix billing calculation and negative amount handling.",
+		Requirements:    []string{"Validate non-negative balance", "Unit test edge cases"},
+		IsWorktree:      true,
+	})
+	if err != nil {
+		t.Fatalf("CreateBubble failed: %v", err)
+	}
+	if b == nil {
+		t.Fatalf("expected bubble, got nil")
+	}
+
+	if b.Priority != "P0" {
+		t.Errorf("expected priority P0, got '%s'", b.Priority)
+	}
+
+	// Verify TASK.md was written
+	taskPath := filepath.Join(b.Path, "TASK.md")
+	taskData, err := os.ReadFile(taskPath)
+	if err != nil {
+		t.Fatalf("failed to read TASK.md: %v", err)
+	}
+	taskStr := string(taskData)
+	if !strings.Contains(taskStr, "Prioridad:** P0") {
+		t.Errorf("TASK.md missing priority P0")
+	}
+	if !strings.Contains(taskStr, "Fix billing calculation") {
+		t.Errorf("TASK.md missing task description")
+	}
+	if !strings.Contains(taskStr, "- [ ] Validate non-negative balance") {
+		t.Errorf("TASK.md missing requirement checkbox")
+	}
+
+	// Verify TASK.md is excluded from Git (.git/info/exclude)
+	mainExclude := filepath.Join(repoDir, ".git", "info", "exclude")
+	exData, err := os.ReadFile(mainExclude)
+	if err != nil {
+		t.Fatalf("failed to read main repo exclude: %v", err)
+	}
+	if !strings.Contains(string(exData), "TASK.md") {
+		t.Errorf("expected TASK.md to be present in %s", mainExclude)
+	}
+
+	// Clean up
+	_ = mgr.DeleteBubble(b.ID)
 }
 

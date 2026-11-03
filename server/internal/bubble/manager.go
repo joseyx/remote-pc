@@ -998,6 +998,7 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 			if req.Name != "" {
 				created.Name = req.Name
 			}
+			m.finalizeCreatedBubbleLocked(created, req)
 			return created, nil
 		}
 		return nil, fmt.Errorf("worktree script completed but bubble could not be matched. Log:\n%s", string(out))
@@ -1044,6 +1045,7 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 					if req.Name != "" {
 						b.Name = req.Name
 					}
+					m.finalizeCreatedBubbleLocked(b, req)
 					return b, nil
 				}
 			}
@@ -1056,6 +1058,7 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 
 			if b, ok := m.bubbles["brif-main"]; ok {
 				b.Branch = branchName
+				m.finalizeCreatedBubbleLocked(b, req)
 				return b, nil
 			}
 		}
@@ -1147,6 +1150,7 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 					if port > 0 {
 						b.Port = port
 					}
+					m.finalizeCreatedBubbleLocked(b, req)
 					return b, nil
 				}
 			}
@@ -1162,11 +1166,13 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 			rootID := fmt.Sprintf("%s-root", ws.ID)
 			if b, ok := m.bubbles[rootID]; ok {
 				b.Branch = branchName
+				m.finalizeCreatedBubbleLocked(b, req)
 				return b, nil
 			}
 			// If not found, rescan and return root bubble
 			m.scanWorkspaceLocked(ws)
 			if b, ok := m.bubbles[rootID]; ok {
+				m.finalizeCreatedBubbleLocked(b, req)
 				return b, nil
 			}
 			return nil, fmt.Errorf("rama cambiada pero no se pudo actualizar la bubble root")
@@ -1345,4 +1351,133 @@ func (m *Manager) SetDevRunning(id string, running bool, pid int) {
 		b.DevPid = pid
 	}
 }
+
+func (m *Manager) finalizeCreatedBubbleLocked(b *Bubble, req CreateBubbleRequest) {
+	if b == nil {
+		return
+	}
+
+	if req.Priority != "" {
+		meta := m.metadata[b.ID]
+		meta.Priority = req.Priority
+		m.metadata[b.ID] = meta
+		b.Priority = req.Priority
+		_ = m.saveMetadataLocked()
+	}
+
+	writeTaskBriefing(b, req)
+}
+
+func writeTaskBriefing(b *Bubble, req CreateBubbleRequest) {
+	if b == nil || b.Path == "" {
+		return
+	}
+	// Only write if there is a task description, requirements, or explicit priority
+	if strings.TrimSpace(req.TaskDescription) == "" && len(req.Requirements) == 0 && req.Priority == "" {
+		return
+	}
+
+	var sb strings.Builder
+	title := b.Name
+	if title == "" {
+		title = req.TaskID
+	}
+	sb.WriteString(fmt.Sprintf("# Tarea: %s\n\n", title))
+	sb.WriteString(fmt.Sprintf("- **ID Bubble:** `%s`\n", b.ID))
+	if b.Priority != "" {
+		sb.WriteString(fmt.Sprintf("- **Prioridad:** %s\n", b.Priority))
+	}
+	if b.Branch != "" {
+		sb.WriteString(fmt.Sprintf("- **Rama:** `%s`\n", b.Branch))
+	}
+	sb.WriteString(fmt.Sprintf("- **Workspace:** %s\n", strings.ToUpper(string(b.Workspace))))
+	sb.WriteString(fmt.Sprintf("- **Fecha de creación:** %s\n", time.Now().Format("2006-01-02 15:04:05")))
+
+	if strings.TrimSpace(req.TaskDescription) != "" {
+		sb.WriteString("\n## Objetivo\n")
+		sb.WriteString(strings.TrimSpace(req.TaskDescription))
+		sb.WriteString("\n")
+	}
+
+	if len(req.Requirements) > 0 {
+		sb.WriteString("\n## Requerimientos\n")
+		for _, reqItem := range req.Requirements {
+			reqClean := strings.TrimSpace(reqItem)
+			if reqClean != "" {
+				sb.WriteString(fmt.Sprintf("- [ ] %s\n", reqClean))
+			}
+		}
+	}
+
+	taskFilePath := filepath.Join(b.Path, "TASK.md")
+	_ = os.WriteFile(taskFilePath, []byte(sb.String()), 0644)
+
+	// Ensure TASK.md is excluded from Git (.git/info/exclude)
+	excludeFileFromGit(b.Path, "TASK.md")
+}
+
+func excludeFileFromGit(worktreePath, pattern string) {
+	gitPath := filepath.Join(worktreePath, ".git")
+	fi, err := os.Stat(gitPath)
+	if err != nil {
+		return
+	}
+
+	var excludePaths []string
+
+	if fi.IsDir() {
+		// Standard Git repository
+		excludePaths = append(excludePaths, filepath.Join(gitPath, "info", "exclude"))
+	} else {
+		// Worktree .git file containing "gitdir: <path>"
+		data, err := os.ReadFile(gitPath)
+		if err == nil {
+			content := strings.TrimSpace(string(data))
+			if strings.HasPrefix(content, "gitdir:") {
+				targetGitDir := strings.TrimSpace(strings.TrimPrefix(content, "gitdir:"))
+				targetGitDir = filepath.Clean(targetGitDir)
+
+				// 1. Worktree's own exclude: <targetGitDir>/info/exclude
+				excludePaths = append(excludePaths, filepath.Join(targetGitDir, "info", "exclude"))
+
+				// 2. Main repository's exclude: <targetGitDir>/../../info/exclude
+				mainRepoGitDir := filepath.Clean(filepath.Join(targetGitDir, "..", ".."))
+				excludePaths = append(excludePaths, filepath.Join(mainRepoGitDir, "info", "exclude"))
+			}
+		}
+	}
+
+	for _, ep := range excludePaths {
+		_ = appendPatternIfMissing(ep, pattern)
+	}
+}
+
+func appendPatternIfMissing(filePath, pattern string) error {
+	dir := filepath.Dir(filePath)
+	_ = os.MkdirAll(dir, 0755)
+
+	data, err := os.ReadFile(filePath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	content := string(data)
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if strings.TrimSpace(line) == pattern {
+			return nil // Already present
+		}
+	}
+
+	var newContent strings.Builder
+	newContent.WriteString(content)
+	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+		newContent.WriteString("\n")
+	}
+	newContent.WriteString(pattern)
+	newContent.WriteString("\n")
+
+	return os.WriteFile(filePath, []byte(newContent.String()), 0644)
+}
+
 
