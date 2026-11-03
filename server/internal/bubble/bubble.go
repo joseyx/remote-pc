@@ -68,15 +68,20 @@ type SqlDumpInfo struct {
 }
 
 type CreateBubbleRequest struct {
-	Workspace   WorkspaceType `json:"workspace"`
-	TaskID      string        `json:"taskId"`                // e.g. "TAR-1120" (Aditum), "dialogos-mx" (Brif), or "feature-login"
-	Name        string        `json:"name"`                  // optional human name
-	BaseBranch  string        `json:"baseBranch"`            // e.g. "development", "main"
-	CloneBranch string        `json:"cloneBranch,omitempty"` // If set, checkout/clone this existing branch directly
-	UseSlim     bool          `json:"useSlim"`               // For Aditum: seed aditum_slim (true by default)
-	SeedSchema  string        `json:"seedSchema,omitempty"`  // Custom seed schema if any
-	SeedDump    string        `json:"seedDump,omitempty"`    // Custom SQL dump file path if any
-	Index       int           `json:"index"`                 // Port index 1-99 for Aditum
-	IsWorktree  bool          `json:"isWorktree"`            // true if isolated worktree, false if in-place branch
-	Port        int           `json:"port,omitempty"`        // Custom port override
+	Workspace       WorkspaceType `json:"workspace"`
+	TaskID          string        `json:"taskId"`                // e.g. "TAR-1120" (Aditum), "dialogos-mx" (Brif), or "feature-login"
+	Name            string        `json:"name"`                  // optional human name
+	BaseBranch      string        `json:"baseBranch"`            // e.g. "development", "main"
+	CloneBranch     string        `json:"cloneBranch,omitempty"` // If set, checkout/clone this existing branch directly
+	UseSlim         bool          `json:"useSlim"`               // For Aditum: seed aditum_slim (true by default)
+	SeedSchema      string        `json:"seedSchema,omitempty"`  // Custom seed schema if any
+	SeedDump        string        `json:"seedDump,omitempty"`    // Custom SQL dump file path if any
+	Index           int           `json:"index"`                 // Port index 1-99 for Aditum
+	IsWorktree      bool          `json:"isWorktree"`            // true if isolated worktree, false if in-place branch
+	Port            int           `json:"port,omitempty"`        // Custom port override
+	Priority        string        `json:"priority,omitempty"`    // e.g. "P0", "P1", "P2", "P3"
+	TaskDescription string        `json:"taskDescription,omitempty"`
+	Requirements    []string      `json:"requirements,omitempty"`
+	SpawnSession    bool          `json:"spawnSession,omitempty"`
+	SessionRole     string        `json:"sessionRole,omitempty"` // "claude" or "shell"
 }

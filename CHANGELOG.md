@@ -3,6 +3,23 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.6.0] - 2026-11-03
+
+### ✨ Nuevas Funcionalidades (Features)
+- **Aprovisionamiento de Worktrees Multiproyecto desde MCP**:
+  - Nueva herramienta MCP `list_workspaces` para descubrir dinámicamente los proyectos registrados en Orbit (`data/workspaces.json`) con sus ramas base, tecnologías y rutas.
+  - Actualización de `create_workspace_bubble` permitiendo aprovisionar tareas en cualquier proyecto sin restricciones de enum.
+- **Asignación Atómica de Prioridades (`P0`-`P3`)**:
+  - Parámetro de prioridad expuesto en la herramienta MCP y procesado en `CreateBubbleRequest`.
+  - Integración inmediata con `bubbles_metadata.json`, destacando la tarea en la cima del dashboard web de Orbit con su badge rojo `P0 (Máxima)`.
+- **Generación Automática de `TASK.md` y Exclusión de Git**:
+  - Creación automática del briefing de tarea en la raíz del nuevo worktree con detalles de objetivos, contexto y criterios de aceptación en checkboxes.
+  - Exclusión automática en `.git/info/exclude` tanto en el worktree como en el repositorio principal, garantizando que el archivo nunca se marque como untracked ni se commitee por error a los remotos.
+- **Apertura Inteligente de Sesión ConPTY**:
+  - Parámetros `spawn_session` y `session_role` (`claude` o `shell`), permitiendo iniciar directamente Claude Code interactivo o una PowerShell limpia vinculada a la burbuja en Orbit.
+
+---
+
 ## [1.5.2] - 2026-10-26
 
 ### 🐛 Correcciones y Mejoras (Bug Fixes & Enhancements)
