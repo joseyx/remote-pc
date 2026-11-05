@@ -3,6 +3,32 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.7.0] - 2026-11-05
+
+### ✨ Nuevas Funcionalidades (Features)
+- **Gestión de Estados de Ciclo de Vida para Tareas (Bubbles)**:
+  - Soporte para clasificar tareas en Orbit según su estado: `⚡ En curso` (`in_progress`), `⏳ Pendiente` (`pending`), `📥 En cola` (`queued`), `🚀 Entrega / PR` (`review`) y `✅ Finalizada` (`done`).
+  - Badges interactivos en las tarjetas de tareas con picker desplegable en un clic para actualizar el estado instantáneamente.
+  - Nuevo chip de ordenamiento `Estado` en el dashboard web para agrupar y ordenar las tareas por su fase de ciclo de vida.
+  - Selector de estado inicial en el modal de creación de tareas (`wizard-task-status`).
+- **Feedback Visual Inmediato al Eliminar Worktrees**:
+  - Estado de carga reactivo con spinner animado en el botón de confirmación y bloqueo de acciones concurrentes.
+  - Atenuación visual inmediata de la tarjeta del bubble (`.bubble-card.is-deleting`) con indicador `🗑️ Eliminando...`.
+  - Notificaciones toast de estado (`info` en progreso, `success` al completar, `error` si falla).
+- **Herramientas de Gestión de Ciclo de Vida en MCP**:
+  - Nueva herramienta MCP `update_workspace_bubble` que permite a agentes autónomos (Claude Code, Antigravity) actualizar el estado de ciclo de vida o la prioridad Notion de una tarea.
+  - Auto-detección inteligente del bubble basada en el directorio de trabajo actual (`cwd`).
+  - Parámetro `task_status` en `create_workspace_bubble` para asignar el estado inicial.
+  - Información de estado y prioridad visible en `list_workspace_bubbles` y `get_bubble_context`.
+
+### 🐛 Correcciones (Bug Fixes)
+- **Resolución Robusta de Rutas en Eliminación de Worktrees**:
+  - Corrección en `Manager.removeBubbleDirectory` pasando la ruta normalizada del worktree (`filepath.ToSlash(b.Path)`) en lugar del nombre de la rama a `remove-worktree.sh`.
+  - Soporte en `remove-worktree.sh` para detectar carpetas existentes directamente y fallback mediante `git worktree list --porcelain` si el nombre de carpeta difiere de la rama.
+  - Omisión de prompts interactivos en `DROP DATABASE` al ejecutarse con `--force`.
+
+---
+
 ## [1.6.0] - 2026-11-03
 
 ### ✨ Nuevas Funcionalidades (Features)

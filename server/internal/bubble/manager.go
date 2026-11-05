@@ -20,6 +20,7 @@ import (
 type BubbleMeta struct {
 	Priority   string `json:"priority,omitempty"`
 	CustomRank int    `json:"customRank,omitempty"`
+	TaskStatus string `json:"taskStatus,omitempty"`
 }
 
 type Manager struct {
@@ -623,10 +624,11 @@ func (m *Manager) applyMetadata(b *Bubble) {
 	if meta, ok := m.metadata[b.ID]; ok {
 		b.Priority = meta.Priority
 		b.CustomRank = meta.CustomRank
+		b.TaskStatus = meta.TaskStatus
 	}
 }
 
-func (m *Manager) UpdateBubbleMetadata(id string, priority *string, customRank *int) error {
+func (m *Manager) UpdateBubbleMetadata(id string, priority *string, customRank *int, taskStatus *string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -637,11 +639,15 @@ func (m *Manager) UpdateBubbleMetadata(id string, priority *string, customRank *
 	if customRank != nil {
 		meta.CustomRank = *customRank
 	}
+	if taskStatus != nil {
+		meta.TaskStatus = *taskStatus
+	}
 	m.metadata[id] = meta
 
 	if b, ok := m.bubbles[id]; ok {
 		b.Priority = meta.Priority
 		b.CustomRank = meta.CustomRank
+		b.TaskStatus = meta.TaskStatus
 	}
 
 	return m.saveMetadataLocked()
@@ -1205,7 +1211,11 @@ func (m *Manager) DeleteBubble(id string) error {
 	if b.Workspace == WorkspaceAditum && b.IsWorktree {
 		// Use remove-worktree.sh
 		removeScript := `/c/Users/Jose/bin/remove-worktree.sh`
-		cmd := exec.Command(bashPath, removeScript, b.Branch, "--force")
+		target := filepath.ToSlash(b.Path)
+		if target == "" {
+			target = b.Branch
+		}
+		cmd := exec.Command(bashPath, removeScript, target, "--force")
 		cmd.Dir = `C:\Users\Jose\Documents\Work\Aditum`
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -1365,6 +1375,14 @@ func (m *Manager) finalizeCreatedBubbleLocked(b *Bubble, req CreateBubbleRequest
 		_ = m.saveMetadataLocked()
 	}
 
+	if req.TaskStatus != "" {
+		meta := m.metadata[b.ID]
+		meta.TaskStatus = req.TaskStatus
+		m.metadata[b.ID] = meta
+		b.TaskStatus = req.TaskStatus
+		_ = m.saveMetadataLocked()
+	}
+
 	writeTaskBriefing(b, req)
 }
 
@@ -1386,6 +1404,9 @@ func writeTaskBriefing(b *Bubble, req CreateBubbleRequest) {
 	sb.WriteString(fmt.Sprintf("- **ID Bubble:** `%s`\n", b.ID))
 	if b.Priority != "" {
 		sb.WriteString(fmt.Sprintf("- **Prioridad:** %s\n", b.Priority))
+	}
+	if b.TaskStatus != "" {
+		sb.WriteString(fmt.Sprintf("- **Estado:** %s\n", b.TaskStatus))
 	}
 	if b.Branch != "" {
 		sb.WriteString(fmt.Sprintf("- **Rama:** `%s`\n", b.Branch))

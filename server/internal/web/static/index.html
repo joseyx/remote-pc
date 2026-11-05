@@ -217,6 +217,9 @@
                     <button class="sort-chip" id="sort-chip-priority" onclick="setBubbleSortMode('priority')" title="Orden por Prioridad Notion">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 3px;"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>Prioridad
                     </button>
+                    <button class="sort-chip" id="sort-chip-status" onclick="setBubbleSortMode('status')" title="Orden por Estado de Tarea">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 3px;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>Estado
+                    </button>
                     <button class="sort-chip" id="sort-chip-custom" onclick="setBubbleSortMode('custom')" title="Orden Manual (Arrastrar para ordenar)">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 3px;"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>Manual
                     </button>
@@ -292,6 +295,9 @@
                         <div class="bubble-active-title">
                             <span class="badge-ws" id="active-bubble-ws-badge">ADITUM</span>
                             <span id="active-bubble-title">TAR-XXXX</span>
+                            <span class="badge-task-status none" id="active-bubble-task-status" onclick="openTaskStatusPicker(event, currentBubble ? currentBubble.id : '')" style="cursor: pointer;" title="Cambiar estado de la tarea">
+                                ⚪ Estado
+                            </span>
                             <span class="badge-priority none" id="active-bubble-priority" onclick="openPriorityPicker(event, currentBubble ? currentBubble.id : '')" style="cursor: pointer;" title="Cambiar prioridad Notion">
                                 ⚪ Prioridad
                             </span>
@@ -315,7 +321,7 @@
                             🌐 Abrir :<span id="active-bubble-port">8080</span> ↗
                         </button>
                         <!-- Delete / Cleanup Worktree -->
-                        <button class="btn btn-danger btn-sm" onclick="confirmDeleteBubble()" title="Eliminar worktree">
+                        <button class="btn btn-danger btn-sm" id="btn-bubble-delete" onclick="confirmDeleteBubble()" title="Eliminar worktree">
                             🗑️
                         </button>
                     </div>
@@ -896,6 +902,21 @@
                         <input type="number" id="generic-port" class="form-control" placeholder="Ej. 3000">
                         <span class="form-hint">Se exportará como <code>PORT</code> y <code>SERVER_PORT</code> en <code>.worktree.env</code>.</span>
                     </div>
+                </div>
+
+                <!-- Global Task Status for New Bubble -->
+                <div class="form-group" style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+                    <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Estado Inicial de la Tarea</span>
+                        <span style="font-size: 11px; color: var(--text-dim);">Orbit Bubble State</span>
+                    </label>
+                    <select id="wizard-task-status" class="form-control">
+                        <option value="in_progress" selected>⚡ En curso</option>
+                        <option value="pending">⏳ Pendiente</option>
+                        <option value="queued">📥 En cola</option>
+                        <option value="review">🚀 Pendiente de entrega</option>
+                        <option value="done">✅ Finalizada</option>
+                    </select>
                 </div>
 
             </div>
@@ -1957,7 +1978,7 @@
                     Host en línea
                 </span>
                 <span style="color: var(--border-subtle); font-size: 10px;">·</span>
-                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;" id="modal-orbit-version">Orbit v1.6.0</span>
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;" id="modal-orbit-version">Orbit v1.7.0</span>
                 <button class="btn btn-sm" id="btn-check-update-stats" onclick="checkForUpdates(false)" style="padding: 1px 7px; font-size: 10px; border-color: rgba(59, 130, 246, 0.3); color: #93c5fd;" title="Buscar actualizaciones de Orbit">🔍 Buscar actualización</button>
                 <button class="btn btn-sm" id="btn-open-doctor" onclick="openDoctorModal()" style="padding: 1px 7px; font-size: 10px; border-color: rgba(52, 211, 153, 0.3); color: #34d399;" title="Diagnóstico de entorno y herramientas (Orbit Doctor)">🩺 Doctor</button>
             </div>
@@ -2001,6 +2022,29 @@
                 <!-- Dynamically injected items -->
             </div>
         </div>
+    </div>
+
+    <!-- Floating Task Status Picker Menu -->
+    <div id="task-status-picker-menu" class="floating-picker-menu">
+        <div class="priority-picker-header">Estado de la Tarea</div>
+        <button class="priority-picker-item" onclick="selectTaskStatus('in_progress')">
+            <span>⚡</span> <span><strong>En curso</strong></span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskStatus('pending')">
+            <span>⏳</span> <span><strong>Pendiente</strong></span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskStatus('queued')">
+            <span>📥</span> <span><strong>En cola</strong></span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskStatus('review')">
+            <span>🚀</span> <span><strong>Pendiente de entrega</strong></span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskStatus('done')">
+            <span>✅</span> <span><strong>Finalizada</strong></span>
+        </button>
+        <button class="priority-picker-item" onclick="selectTaskStatus('')">
+            <span>⚪</span> <span style="color: var(--text-dim);">Sin estado</span>
+        </button>
     </div>
 
     <!-- Floating Priority Picker Menu -->

@@ -262,6 +262,11 @@ var Tools = []Tool{
 					"enum":        []string{"P0", "P1", "P2", "P3"},
 					"description": "Prioridad de la tarea: P0 (Máxima/Crítica), P1 (Alta), P2 (Media), P3 (Baja). Usa P0 cuando el usuario pida prioridad máxima.",
 				},
+				"task_status": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"in_progress", "pending", "queued", "review", "done"},
+					"description": "Estado inicial de la tarea: 'in_progress' (⚡ En curso), 'pending' (⏳ Pendiente), 'queued' (📥 En cola), 'review' (🚀 Pendiente de entrega/PR), 'done' (✅ Finalizada). Por defecto 'in_progress'.",
+				},
 				"task_description": map[string]interface{}{
 					"type":        "string",
 					"description": "Descripción detallada del objetivo de la tarea. Se redactará automáticamente en el archivo TASK.md (excluido de Git) dentro del nuevo worktree.",
@@ -296,6 +301,31 @@ var Tools = []Tool{
 				},
 			},
 			"required": []string{"workspace", "task_id"},
+		},
+	},
+	{
+		Name: "update_workspace_bubble",
+		Description: "Actualiza el estado de ciclo de vida (in_progress, pending, queued, review, done) o la prioridad (P0, P1, P2, P3) de una tarea / bubble en Remote PC. " +
+			"Permite a los agentes de IA marcar tareas como completadas (done), en revisión (review), en curso (in_progress) o cambiar su prioridad Notion. " +
+			"Si se omite 'bubble_id', se auto-detecta según el directorio de trabajo actual.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"bubble_id": map[string]interface{}{
+					"type":        "string",
+					"description": "ID del bubble o nombre de tarea (opcional; se auto-detecta del directorio actual si se omite).",
+				},
+				"task_status": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"in_progress", "pending", "queued", "review", "done", "none"},
+					"description": "Nuevo estado de la tarea: 'in_progress' (⚡ En curso), 'pending' (⏳ Pendiente), 'queued' (📥 En cola), 'review' (🚀 Pendiente de entrega/revisión), 'done' (✅ Finalizada), o 'none' (⚪ Sin estado).",
+				},
+				"priority": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"P0", "P1", "P2", "P3", ""},
+					"description": "Nueva prioridad Notion: 'P0' (Urgente/Máxima), 'P1' (Alta), 'P2' (Media), 'P3' (Baja) o '' (Sin prioridad).",
+				},
+			},
 		},
 	},
 	{
@@ -560,6 +590,8 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 		return handleGetBubbleContext(args)
 	case "create_workspace_bubble":
 		return handleCreateWorkspaceBubble(args)
+	case "update_workspace_bubble":
+		return handleUpdateWorkspaceBubble(args)
 	case "start_project_server":
 		return handleStartProjectServer(args)
 	case "get_project_server_status":
@@ -942,8 +974,17 @@ func handleListWorkspaceBubbles(args map[string]interface{}) (string, error) {
 			worktreeBadge = " (Worktree)"
 		}
 
+		prioInfo := ""
+		if p, ok := b["priority"].(string); ok && p != "" {
+			prioInfo = fmt.Sprintf(" | Prioridad: %s", p)
+		}
+		statusLabel := ""
+		if ts, ok := b["taskStatus"].(string); ok && ts != "" {
+			statusLabel = fmt.Sprintf(" | Estado: `%s`", ts)
+		}
+
 		lines = append(lines, fmt.Sprintf("\n- %s **%s** [%s]%s", statusIcon, name, ws, worktreeBadge))
-		lines = append(lines, fmt.Sprintf("  - **ID:** `%v` | **Rama:** `%s`%s%s", b["id"], branch, portInfo, schemaInfo))
+		lines = append(lines, fmt.Sprintf("  - **ID:** `%v` | **Rama:** `%s`%s%s%s%s", b["id"], branch, portInfo, schemaInfo, prioInfo, statusLabel))
 		lines = append(lines, fmt.Sprintf("  - **Ruta:** `%v`", b["path"]))
 	}
 
@@ -1057,8 +1098,13 @@ func handleGetBubbleContext(args map[string]interface{}) (string, error) {
 	if s, ok := matched["dbSchema"].(string); ok && s != "" {
 		lines = append(lines, fmt.Sprintf("- **Esquema DB:** `%s`", s))
 	}
-	if pr, ok := matched["priority"].(float64); ok {
+	if pr, ok := matched["priority"].(string); ok && pr != "" {
+		lines = append(lines, fmt.Sprintf("- **Prioridad:** %s", pr))
+	} else if pr, ok := matched["priority"].(float64); ok {
 		lines = append(lines, fmt.Sprintf("- **Prioridad:** %.0f", pr))
+	}
+	if ts, ok := matched["taskStatus"].(string); ok && ts != "" {
+		lines = append(lines, fmt.Sprintf("- **Estado de la tarea:** `%s`", ts))
 	}
 
 	if gitSt.Branch != "" {
@@ -1157,6 +1203,12 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 		sessionRole = strings.ToLower(strings.TrimSpace(sr))
 	}
 
+	taskStatus, _ := args["task_status"].(string)
+	taskStatus = strings.ToLower(strings.TrimSpace(taskStatus))
+	if taskStatus == "" {
+		taskStatus = "in_progress"
+	}
+
 	payload := map[string]interface{}{
 		"workspace":       workspace,
 		"taskId":          taskID,
@@ -1165,6 +1217,7 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 		"useSlim":         useSlim,
 		"isWorktree":      isWorktree,
 		"priority":        priority,
+		"taskStatus":      taskStatus,
 		"taskDescription": taskDesc,
 		"requirements":    requirements,
 		"spawnSession":    spawnSession,
@@ -1183,6 +1236,9 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 		fmt.Sprintf("- **Espacio:** %v", strings.ToUpper(fmt.Sprintf("%v", res["workspace"]))),
 		fmt.Sprintf("- **Ruta:** `%v`", res["path"]),
 		fmt.Sprintf("- **Rama:** `%v`", res["branch"]),
+	}
+	if ts, ok := res["taskStatus"].(string); ok && ts != "" {
+		lines = append(lines, fmt.Sprintf("- **Estado inicial:** `%s`", ts))
 	}
 	if p, ok := res["priority"].(string); ok && p != "" {
 		pBadge := p
@@ -1218,6 +1274,111 @@ func handleCreateWorkspaceBubble(args map[string]interface{}) (string, error) {
 	}
 
 	return strings.Join(lines, "\n"), nil
+}
+
+func handleUpdateWorkspaceBubble(args map[string]interface{}) (string, error) {
+	bubbleID, _ := args["bubble_id"].(string)
+	bubbleID = strings.TrimSpace(bubbleID)
+
+	var bubbles []map[string]interface{}
+	if err := apiRequest("/api/bubbles", "GET", nil, &bubbles, false); err != nil {
+		return "", fmt.Errorf("error al consultar bubbles: %w", err)
+	}
+
+	var matched map[string]interface{}
+	if bubbleID != "" {
+		for _, b := range bubbles {
+			id, _ := b["id"].(string)
+			name, _ := b["name"].(string)
+			if id == bubbleID || strings.EqualFold(id, bubbleID) || strings.EqualFold(name, bubbleID) ||
+				strings.Contains(strings.ToLower(id), strings.ToLower(bubbleID)) ||
+				strings.Contains(strings.ToLower(name), strings.ToLower(bubbleID)) {
+				matched = b
+				break
+			}
+		}
+	} else {
+		// Auto-detect from current working directory
+		cwd, err := os.Getwd()
+		if err == nil {
+			normCwd := filepath.Clean(cwd)
+			for _, b := range bubbles {
+				p, _ := b["path"].(string)
+				if p != "" && (normCwd == filepath.Clean(p) || strings.HasPrefix(normCwd, filepath.Clean(p))) {
+					matched = b
+					break
+				}
+			}
+		}
+	}
+
+	if matched == nil {
+		var available []string
+		for _, b := range bubbles {
+			if id, ok := b["id"].(string); ok {
+				available = append(available, id)
+			}
+		}
+		return fmt.Sprintf("No se encontró la tarea/bubble especificada.\nBubbles disponibles: %s", strings.Join(available, ", ")), nil
+	}
+
+	targetID, _ := matched["id"].(string)
+	targetName, _ := matched["name"].(string)
+
+	patchBody := make(map[string]interface{})
+	var changes []string
+
+	if ts, ok := args["task_status"].(string); ok && ts != "" {
+		normTs := strings.ToLower(strings.TrimSpace(ts))
+		if normTs == "none" {
+			normTs = ""
+		}
+		patchBody["taskStatus"] = normTs
+		statusIcon := "⚪ Sin estado"
+		switch normTs {
+		case "in_progress":
+			statusIcon = "⚡ En curso"
+		case "pending":
+			statusIcon = "⏳ Pendiente"
+		case "queued":
+			statusIcon = "📥 En cola"
+		case "review":
+			statusIcon = "🚀 Pendiente de entrega"
+		case "done":
+			statusIcon = "✅ Finalizada"
+		default:
+			if normTs != "" {
+				statusIcon = normTs
+			}
+		}
+		changes = append(changes, fmt.Sprintf("Estado: %s", statusIcon))
+	}
+
+	if pr, ok := args["priority"].(string); ok {
+		normPr := strings.ToUpper(strings.TrimSpace(pr))
+		if normPr == "MAXIMA" || normPr == "MÁXIMA" || normPr == "MAX" {
+			normPr = "P0"
+		} else if normPr == "ALTA" {
+			normPr = "P1"
+		} else if normPr == "MEDIA" {
+			normPr = "P2"
+		} else if normPr == "BAJA" {
+			normPr = "P3"
+		}
+		patchBody["priority"] = normPr
+		changes = append(changes, fmt.Sprintf("Prioridad: `%s`", normPr))
+	}
+
+	if len(patchBody) == 0 {
+		return "No se especificó 'task_status' ni 'priority' para actualizar.", nil
+	}
+
+	var updated map[string]interface{}
+	if err := apiRequest(fmt.Sprintf("/api/bubbles/%s", targetID), "PATCH", patchBody, &updated, false); err != nil {
+		return "", fmt.Errorf("error al actualizar metadata de la bubble: %w", err)
+	}
+
+	return fmt.Sprintf("✅ Tarea **%s** (`%s`) actualizada exitosamente:\n- %s", targetName, targetID, strings.Join(changes, "\n- ")), nil
 }
 
 func handleStartProjectServer(args map[string]interface{}) (string, error) {

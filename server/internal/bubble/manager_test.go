@@ -247,3 +247,46 @@ func TestCreateBubbleWithPriorityAndTaskBriefing(t *testing.T) {
 	_ = mgr.DeleteBubble(b.ID)
 }
 
+func TestUpdateBubbleMetadataTaskStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := NewManager(tmpDir)
+
+	testBubble := &Bubble{
+		ID:        "test-status-bubble",
+		Name:      "Test Status Bubble",
+		Workspace: WorkspaceGeneral,
+		Path:      tmpDir,
+		Status:    StatusIdle,
+	}
+	mgr.bubbles[testBubble.ID] = testBubble
+
+	prio := "P1"
+	rank := 3
+	status := "in_progress"
+	if err := mgr.UpdateBubbleMetadata(testBubble.ID, &prio, &rank, &status); err != nil {
+		t.Fatalf("UpdateBubbleMetadata failed: %v", err)
+	}
+
+	b, ok := mgr.GetBubble(testBubble.ID)
+	if !ok {
+		t.Fatalf("bubble not found")
+	}
+	if b.Priority != "P1" {
+		t.Errorf("expected P1, got %s", b.Priority)
+	}
+	if b.CustomRank != 3 {
+		t.Errorf("expected rank 3, got %d", b.CustomRank)
+	}
+	if b.TaskStatus != "in_progress" {
+		t.Errorf("expected in_progress, got %s", b.TaskStatus)
+	}
+
+	metaData, err := os.ReadFile(filepath.Join(tmpDir, "bubbles_metadata.json"))
+	if err != nil {
+		t.Fatalf("failed to read bubbles_metadata.json: %v", err)
+	}
+	if !strings.Contains(string(metaData), `"taskStatus": "in_progress"`) {
+		t.Errorf("expected taskStatus in metadata json, got %s", string(metaData))
+	}
+}
+

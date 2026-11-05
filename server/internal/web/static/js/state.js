@@ -28,6 +28,22 @@ function getPriorityInfo(p) {
     return PRIORITY_CONFIG[p] || PRIORITY_CONFIG[''];
 }
 
+// Bubble Task Status State & Config
+let taskStatusPickerBubbleId = null;
+
+const TASK_STATUS_CONFIG = {
+    'in_progress': { label: 'En curso',             shortLabel: 'En curso',    icon: '⚡', weight: 1, class: 'in_progress' },
+    'pending':     { label: 'Pendiente',            shortLabel: 'Pendiente',   icon: '⏳', weight: 2, class: 'pending' },
+    'queued':      { label: 'En cola',              shortLabel: 'En cola',     icon: '📥', weight: 3, class: 'queued' },
+    'review':      { label: 'Pendiente de entrega', shortLabel: 'Por entregar', icon: '🚀', weight: 4, class: 'review' },
+    'done':        { label: 'Finalizada',           shortLabel: 'Finalizada',  icon: '✅', weight: 5, class: 'done' },
+    '':            { label: 'Sin estado',           shortLabel: 'Estado',      icon: '⚪', weight: 99, class: 'none' }
+};
+
+function getTaskStatusInfo(s) {
+    return TASK_STATUS_CONFIG[s] || TASK_STATUS_CONFIG[''];
+}
+
 // Universal App Dialog State & Methods (Alert / Confirm / Prompt)
 let customDialogResolver = null;
 
