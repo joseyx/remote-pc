@@ -284,6 +284,9 @@ func mergeBubblesMetadata(srcFile, dstFile string, s *MigrationSummary) {
 			if destV.CustomRank == 0 && v.CustomRank != 0 {
 				destV.CustomRank = v.CustomRank
 			}
+			if destV.TaskStatus == "" && v.TaskStatus != "" {
+				destV.TaskStatus = v.TaskStatus
+			}
 			dstMeta[k] = destV
 		}
 	}
