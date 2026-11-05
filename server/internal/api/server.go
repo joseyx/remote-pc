@@ -1101,6 +1101,7 @@ func (s *Server) handleDeleteBubble(w http.ResponseWriter, r *http.Request) {
 type UpdateBubbleMetaReq struct {
 	Priority   *string `json:"priority,omitempty"`
 	CustomRank *int    `json:"customRank,omitempty"`
+	TaskStatus *string `json:"taskStatus,omitempty"`
 }
 
 func (s *Server) handleUpdateBubbleMetadata(w http.ResponseWriter, r *http.Request) {
@@ -1114,7 +1115,7 @@ func (s *Server) handleUpdateBubbleMetadata(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if err := s.bubbleMgr.UpdateBubbleMetadata(id, req.Priority, req.CustomRank); err != nil {
+	if err := s.bubbleMgr.UpdateBubbleMetadata(id, req.Priority, req.CustomRank, req.TaskStatus); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

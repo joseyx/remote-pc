@@ -137,6 +137,22 @@ function renderBubblesList() {
             const wA = getPriorityInfo(a.priority).weight;
             const wB = getPriorityInfo(b.priority).weight;
             if (wA !== wB) return wA - wB;
+            const sA = getTaskStatusInfo(a.taskStatus).weight;
+            const sB = getTaskStatusInfo(b.taskStatus).weight;
+            if (sA !== sB) return sA - sB;
+            const rA = (typeof a.customRank === 'number' && a.customRank > 0) ? a.customRank : 99999;
+            const rB = (typeof b.customRank === 'number' && b.customRank > 0) ? b.customRank : 99999;
+            if (rA !== rB) return rA - rB;
+            return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+        });
+    } else if (bubbleSortMode === 'status') {
+        filtered.sort((a, b) => {
+            const sA = getTaskStatusInfo(a.taskStatus).weight;
+            const sB = getTaskStatusInfo(b.taskStatus).weight;
+            if (sA !== sB) return sA - sB;
+            const wA = getPriorityInfo(a.priority).weight;
+            const wB = getPriorityInfo(b.priority).weight;
+            if (wA !== wB) return wA - wB;
             const rA = (typeof a.customRank === 'number' && a.customRank > 0) ? a.customRank : 99999;
             const rB = (typeof b.customRank === 'number' && b.customRank > 0) ? b.customRank : 99999;
             if (rA !== rB) return rA - rB;
@@ -186,6 +202,7 @@ function renderBubblesList() {
         const hasTerms = bSessions.length > 0;
         const claudeCount = bSessions.filter(s => s.role === 'claude').length;
         const pInfo = getPriorityInfo(b.priority);
+        const sInfo = getTaskStatusInfo(b.taskStatus);
         const isCustom = bubbleSortMode === 'custom';
 
         return `
@@ -205,6 +222,9 @@ function renderBubblesList() {
                         <span class="bubble-name" title="${escapeHtml(b.name)}">${escapeHtml(b.name)}</span>
                     </div>
                     <div class="bubble-card-status-group">
+                        <span class="badge-task-status ${sInfo.class}" onclick="openTaskStatusPicker(event, '${b.id}')" title="Estado: ${sInfo.label} (Clic para cambiar)">
+                            ${sInfo.icon} ${sInfo.shortLabel}
+                        </span>
                         <span class="badge-priority ${pInfo.class}" onclick="openPriorityPicker(event, '${b.id}')" title="Prioridad Notion: ${pInfo.label} (Clic para cambiar)">
                             ${pInfo.icon} ${b.priority || 'P-'}
                         </span>
@@ -242,13 +262,15 @@ function setBubbleSortMode(mode) {
         showToast("Modo manual: arrastra las tarjetas para ordenar");
     } else if (mode === 'priority') {
         showToast("Ordenado por prioridad de Notion");
+    } else if (mode === 'status') {
+        showToast("Ordenado por estado de tarea");
     } else {
         showToast("Ordenado alfabéticamente (A-Z)");
     }
 }
 
 function updateSortBarUI() {
-    ['alpha', 'priority', 'custom'].forEach(m => {
+    ['alpha', 'priority', 'status', 'custom'].forEach(m => {
         const btn = document.getElementById(`sort-chip-${m}`);
         if (btn) btn.classList.toggle('active', bubbleSortMode === m);
     });
@@ -341,6 +363,99 @@ async function selectTaskPriority(priority) {
         }
     } catch (err) {
         console.error("Error setting priority:", err);
+        showToast("Error al conectar con servidor");
+    }
+}
+
+// Task Status Picker
+function openTaskStatusPicker(e, bubbleId) {
+    if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+    }
+    if (!bubbleId && currentBubble) {
+        bubbleId = currentBubble.id;
+    }
+    if (!bubbleId) return;
+
+    taskStatusPickerBubbleId = bubbleId;
+    closePriorityPicker();
+    const menu = document.getElementById('task-status-picker-menu');
+    if (!menu) return;
+
+    const b = allBubbles.find(x => x.id === bubbleId);
+    const currentS = (b && b.taskStatus) ? b.taskStatus : '';
+
+    menu.querySelectorAll('.priority-picker-item').forEach(item => {
+        const itemOnClick = item.getAttribute('onclick') || '';
+        item.classList.toggle('active', itemOnClick.includes(`'${currentS}'`));
+    });
+
+    menu.style.display = 'flex';
+    const rect = (e && e.currentTarget) ? e.currentTarget.getBoundingClientRect() : { top: 120, left: 160, bottom: 140 };
+    const menuWidth = 195;
+    let left = rect.left;
+    if (left + menuWidth > window.innerWidth - 10) {
+        left = window.innerWidth - menuWidth - 10;
+    }
+    let top = rect.bottom + 4;
+    if (top + 230 > window.innerHeight) {
+        top = Math.max(10, rect.top - 230);
+    }
+    menu.style.left = `${Math.max(10, left)}px`;
+    menu.style.top = `${Math.max(10, top)}px`;
+}
+
+function closeTaskStatusPicker() {
+    const menu = document.getElementById('task-status-picker-menu');
+    if (menu) menu.style.display = 'none';
+    taskStatusPickerBubbleId = null;
+}
+
+async function selectTaskStatus(taskStatus) {
+    if (!taskStatusPickerBubbleId) return;
+    const bId = taskStatusPickerBubbleId;
+    closeTaskStatusPicker();
+
+    const target = allBubbles.find(x => x.id === bId);
+    const sInfo = getTaskStatusInfo(taskStatus);
+    if (target) {
+        target.taskStatus = taskStatus;
+        if (currentBubble && currentBubble.id === bId) {
+            currentBubble.taskStatus = taskStatus;
+            updateBubbleHeaderUI();
+        }
+        renderBubblesList();
+    }
+
+    try {
+        const token = serverInfo ? serverInfo.authToken : '';
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        };
+        const res = await fetch(`/api/bubbles/${bId}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ taskStatus })
+        });
+        if (!res.ok) {
+            console.error("Error setting task status:", await res.text());
+            showToast("Error al guardar estado de la tarea");
+        } else {
+            const updated = await res.json();
+            if (target) {
+                target.taskStatus = updated.taskStatus;
+            }
+            if (currentBubble && currentBubble.id === bId) {
+                currentBubble.taskStatus = updated.taskStatus;
+                updateBubbleHeaderUI();
+            }
+            renderBubblesList();
+            showToast(`Estado "${sInfo.label}" guardado`);
+        }
+    } catch (err) {
+        console.error("Error setting task status:", err);
         showToast("Error al conectar con servidor");
     }
 }
@@ -452,6 +567,10 @@ document.addEventListener('click', (e) => {
     if (menu && menu.style.display === 'flex' && !menu.contains(e.target) && !e.target.closest('.badge-priority')) {
         closePriorityPicker();
     }
+    const statusMenu = document.getElementById('task-status-picker-menu');
+    if (statusMenu && statusMenu.style.display === 'flex' && !statusMenu.contains(e.target) && !e.target.closest('.badge-task-status')) {
+        closeTaskStatusPicker();
+    }
 });
 
 // Select Bubble
@@ -497,6 +616,14 @@ function updateBubbleHeaderUI() {
     document.getElementById('active-bubble-ws-badge').className = `badge-ws ${currentBubble.workspace}`;
     document.getElementById('active-bubble-title').textContent = currentBubble.name;
     document.getElementById('active-bubble-branch-name').textContent = currentBubble.branch || 'main';
+
+    const statusBadge = document.getElementById('active-bubble-task-status');
+    if (statusBadge) {
+        const sInfo = getTaskStatusInfo(currentBubble.taskStatus);
+        statusBadge.className = `badge-task-status ${sInfo.class}`;
+        statusBadge.innerHTML = `${sInfo.icon} ${currentBubble.taskStatus ? sInfo.label : 'Estado'}`;
+        statusBadge.title = `Estado: ${sInfo.label} (Clic para cambiar)`;
+    }
 
     const prioBadge = document.getElementById('active-bubble-priority');
     if (prioBadge) {
@@ -576,20 +703,59 @@ async function confirmDeleteBubble() {
     const ok = await appConfirm(msg, "Eliminar Tarea", "Eliminar Worktree", "Cancelar", true, "🗑️");
     if (!ok) return;
 
+    const deletingBubbleId = currentBubble.id;
+    const deletingBubbleName = currentBubble.name;
+    const delBtn = document.getElementById('btn-bubble-delete');
+    const originalBtnHtml = delBtn ? delBtn.innerHTML : '🗑️';
+
+    // 1. Immediate visual feedback: button spinner & disable action buttons
+    if (delBtn) {
+        delBtn.disabled = true;
+        delBtn.innerHTML = `<span class="orbit-spinner" style="display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; vertical-align:middle; margin-right:4px;"></span> Eliminando...`;
+    }
+    const devBtn = document.getElementById('btn-bubble-dev-toggle');
+    if (devBtn) devBtn.disabled = true;
+    const previewBtn = document.getElementById('btn-bubble-preview-external');
+    if (previewBtn) previewBtn.disabled = true;
+
+    // 2. Immediate visual feedback: mark the bubble card in sidebar as deleting
+    const cardEl = document.getElementById(`bubble-card-${deletingBubbleId}`);
+    if (cardEl) {
+        cardEl.classList.add('is-deleting');
+    }
+
+    // 3. Immediate toast notification
+    showToast(`⏳ Eliminando "${deletingBubbleName}" y limpiando recursos...`);
+
     try {
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        const res = await fetch(`/api/bubbles/${currentBubble.id}`, { method: 'DELETE', headers });
+        const res = await fetch(`/api/bubbles/${deletingBubbleId}`, { method: 'DELETE', headers });
         if (res.ok) {
-            showToast("Worktree eliminado.");
+            showToast(`✅ Worktree "${deletingBubbleName}" eliminado exitosamente.`);
             currentBubble = null;
             document.getElementById('active-bubble-container').style.display = 'none';
             document.getElementById('workspace-empty-view').style.display = 'flex';
             await fetchBubbles();
         } else {
-            appAlert("Error al eliminar worktree: " + (await res.text()), "Error", "❌");
+            const errText = await res.text();
+            if (delBtn) {
+                delBtn.disabled = false;
+                delBtn.innerHTML = originalBtnHtml;
+            }
+            if (devBtn) devBtn.disabled = false;
+            if (previewBtn) previewBtn.disabled = false;
+            if (cardEl) cardEl.classList.remove('is-deleting');
+            appAlert("Error al eliminar worktree: " + errText, "Error", "❌");
         }
     } catch (e) {
+        if (delBtn) {
+            delBtn.disabled = false;
+            delBtn.innerHTML = originalBtnHtml;
+        }
+        if (devBtn) devBtn.disabled = false;
+        if (previewBtn) previewBtn.disabled = false;
+        if (cardEl) cardEl.classList.remove('is-deleting');
         appAlert("Error de red: " + e, "Error de Red", "❌");
     }
 }
@@ -1043,6 +1209,9 @@ async function submitCreateBubble() {
                 body.cloneBranch = existingBranch;
             }
         }
+
+        const taskStatus = document.getElementById('wizard-task-status')?.value || 'in_progress';
+        body.taskStatus = taskStatus;
 
         const res = await fetch('/api/bubbles', { method: 'POST', headers, body: JSON.stringify(body) });
         if (res.ok) {

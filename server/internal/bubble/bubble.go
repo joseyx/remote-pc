@@ -38,6 +38,7 @@ type Bubble struct {
 	DevPid     int               `json:"devPid,omitempty"`
 	Priority   string            `json:"priority,omitempty"`
 	CustomRank int               `json:"customRank,omitempty"`
+	TaskStatus string            `json:"taskStatus,omitempty"`
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
@@ -80,6 +81,7 @@ type CreateBubbleRequest struct {
 	IsWorktree      bool          `json:"isWorktree"`            // true if isolated worktree, false if in-place branch
 	Port            int           `json:"port,omitempty"`        // Custom port override
 	Priority        string        `json:"priority,omitempty"`    // e.g. "P0", "P1", "P2", "P3"
+	TaskStatus      string        `json:"taskStatus,omitempty"`  // e.g. "in_progress", "pending", "queued", "review", "done"
 	TaskDescription string        `json:"taskDescription,omitempty"`
 	Requirements    []string      `json:"requirements,omitempty"`
 	SpawnSession    bool          `json:"spawnSession,omitempty"`
