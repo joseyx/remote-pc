@@ -6,8 +6,8 @@ import (
 )
 
 func TestToolsCatalog(t *testing.T) {
-	if len(Tools) != 14 {
-		t.Fatalf("expected 14 tools, got %d", len(Tools))
+	if len(Tools) != 15 {
+		t.Fatalf("expected 15 tools, got %d", len(Tools))
 	}
 
 	expectedTools := map[string]bool{
@@ -22,6 +22,7 @@ func TestToolsCatalog(t *testing.T) {
 		"list_workspaces":           true,
 		"get_bubble_context":        true,
 		"create_workspace_bubble":   true,
+		"update_workspace_bubble":   true,
 		"start_project_server":      true,
 		"get_project_server_status": true,
 		"stop_project_server":       true,
@@ -100,7 +101,7 @@ func TestServerToolsValidation(t *testing.T) {
 func TestPluginDynamicTools(t *testing.T) {
 	// Without plugin enabled, GetTools() returns base Tools
 	tools := GetTools()
-	if len(tools) != 14 {
-		t.Fatalf("expected 14 default tools without plugin, got %d", len(tools))
+	if len(tools) != 15 {
+		t.Fatalf("expected 15 default tools without plugin, got %d", len(tools))
 	}
 }
