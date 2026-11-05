@@ -1205,7 +1205,11 @@ func (m *Manager) DeleteBubble(id string) error {
 	if b.Workspace == WorkspaceAditum && b.IsWorktree {
 		// Use remove-worktree.sh
 		removeScript := `/c/Users/Jose/bin/remove-worktree.sh`
-		cmd := exec.Command(bashPath, removeScript, b.Branch, "--force")
+		target := filepath.ToSlash(b.Path)
+		if target == "" {
+			target = b.Branch
+		}
+		cmd := exec.Command(bashPath, removeScript, target, "--force")
 		cmd.Dir = `C:\Users\Jose\Documents\Work\Aditum`
 		out, err := cmd.CombinedOutput()
 		if err != nil {
