@@ -182,6 +182,7 @@ type ClientConnection struct {
 
 type Manager struct {
 	mu           sync.RWMutex
+	saveMu       sync.Mutex
 	sessions     map[string]*Session
 	connections  map[string]*ClientConnection
 	maxHistoryKB int
@@ -418,6 +419,8 @@ func (m *Manager) closeAllPTYsInternal(killWorkers bool) {
 }
 
 func (m *Manager) SaveState() error {
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.saveStateLocked()
@@ -456,10 +459,11 @@ func (m *Manager) saveStateLocked() error {
 		return err
 	}
 
-	tmpFile := m.statePath + ".tmp"
+	tmpFile := fmt.Sprintf("%s.%d.tmp", m.statePath, time.Now().UnixNano())
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
 		return err
 	}
+	defer func() { _ = os.Remove(tmpFile) }()
 	return os.Rename(tmpFile, m.statePath)
 }
 

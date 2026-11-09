@@ -173,6 +173,7 @@ func TestSessionLifecycle(t *testing.T) {
 	if s.Name != "RenamedTerm" {
 		t.Errorf("expected name 'RenamedTerm', got %q", s.Name)
 	}
+	time.Sleep(50 * time.Millisecond)
 
 	// Write input
 	testMarker := "SESSION_TEST_OUTPUT"
