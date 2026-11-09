@@ -5,10 +5,13 @@
 // Interactive Terminal Objects (Primary & Split)
 let termObj = null;
 let fitAddon = null;
+let canvasAddon = null;
 let termWs = null;
 let termObj2 = null;
 let fitAddon2 = null;
+let canvasAddon2 = null;
 let termWs2 = null;
+let quakeCanvasAddon = null;
 let isSplitActive = false;
 let splitDirection = 'horizontal';
 let splitSecondarySession = null;
@@ -437,6 +440,10 @@ function connectToSession(sessionId) {
         termWs.close();
         termWs = null;
     }
+    if (canvasAddon) {
+        try { canvasAddon.dispose(); } catch (e) {}
+        canvasAddon = null;
+    }
     if (fitAddon) {
         try { fitAddon.dispose(); } catch (e) {}
         fitAddon = null;
@@ -482,6 +489,14 @@ function connectToSession(sessionId) {
     }
 
     termObj.open(container);
+    if (typeof CanvasAddon !== 'undefined' && CanvasAddon.CanvasAddon) {
+        try {
+            canvasAddon = new CanvasAddon.CanvasAddon();
+            termObj.loadAddon(canvasAddon);
+        } catch (e) {
+            console.warn("CanvasAddon primary error:", e);
+        }
+    }
     if (fitAddon) {
         try { fitAddon.fit(); } catch (e) {}
     }
@@ -814,6 +829,10 @@ function connectToSplitSession(sessionId) {
         termWs2.close();
         termWs2 = null;
     }
+    if (canvasAddon2) {
+        try { canvasAddon2.dispose(); } catch (e) {}
+        canvasAddon2 = null;
+    }
     if (fitAddon2) {
         try { fitAddon2.dispose(); } catch (e) {}
         fitAddon2 = null;
@@ -854,6 +873,14 @@ function connectToSplitSession(sessionId) {
     }
 
     termObj2.open(container);
+    if (typeof CanvasAddon !== 'undefined' && CanvasAddon.CanvasAddon) {
+        try {
+            canvasAddon2 = new CanvasAddon.CanvasAddon();
+            termObj2.loadAddon(canvasAddon2);
+        } catch (e) {
+            console.warn("CanvasAddon split error:", e);
+        }
+    }
     if (fitAddon2) {
         try { fitAddon2.fit(); } catch (e) {}
     }
@@ -941,6 +968,10 @@ function closeSplit() {
     if (termWs2) {
         termWs2.close();
         termWs2 = null;
+    }
+    if (canvasAddon2) {
+        try { canvasAddon2.dispose(); } catch (e) {}
+        canvasAddon2 = null;
     }
     if (termObj2) {
         termObj2.dispose();
@@ -1227,6 +1258,10 @@ async function initQuakeTerminal() {
             quakeTermWs.close();
             quakeTermWs = null;
         }
+        if (quakeCanvasAddon) {
+            try { quakeCanvasAddon.dispose(); } catch (e) {}
+            quakeCanvasAddon = null;
+        }
         if (quakeTermObj) {
             try { quakeTermObj.dispose(); } catch (e) {}
             quakeTermObj = null;
@@ -1252,6 +1287,14 @@ async function initQuakeTerminal() {
         }
 
         quakeTermObj.open(embed);
+        if (typeof CanvasAddon !== 'undefined' && CanvasAddon.CanvasAddon) {
+            try {
+                quakeCanvasAddon = new CanvasAddon.CanvasAddon();
+                quakeTermObj.loadAddon(quakeCanvasAddon);
+            } catch (e) {
+                console.warn("CanvasAddon quake error:", e);
+            }
+        }
         if (quakeFitAddon) {
             try { quakeFitAddon.fit(); } catch (e) {}
         }

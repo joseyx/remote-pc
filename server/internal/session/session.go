@@ -84,20 +84,43 @@ func (rb *ringBuffer) Write(p []byte) (int, error) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
-	// If buffer exceeds max size, trim old bytes cleanly at newline boundary
+	origLen := len(p)
+	if len(p) > rb.maxSize {
+		p = p[len(p)-rb.maxSize:]
+	}
+
+	// If buffer exceeds max size, trim old bytes cleanly with headroom at newline boundary
 	if rb.buf.Len()+len(p) > rb.maxSize {
-		excess := (rb.buf.Len() + len(p)) - rb.maxSize
+		excess := (rb.buf.Len() + len(p)) - rb.maxSize + 4 // Account for \x1b[0m reset sequence
+		// Batch trim headroom: trim at least 1/8th of maxSize (min 16KB, max 128KB) so we
+		// don't re-trim and re-copy the whole buffer on every single subsequent byte.
+		minTrim := rb.maxSize / 8
+		if minTrim < 16*1024 {
+			minTrim = 16 * 1024
+		}
+		if minTrim > 128*1024 {
+			minTrim = 128 * 1024
+		}
+		if minTrim > rb.maxSize/2 {
+			minTrim = rb.maxSize / 2
+		}
+
+		trimTarget := excess
+		if trimTarget < minTrim {
+			trimTarget = minTrim
+		}
+
 		b := rb.buf.Bytes()
-		if excess >= len(b) {
+		if trimTarget >= len(b) {
 			rb.buf.Reset()
 		} else {
-			// Find first newline at or after excess so we never slice mid-character or mid-escape sequence
-			idx := bytes.IndexByte(b[excess:], '\n')
+			// Find first newline at or after trimTarget so we never slice mid-character or mid-escape sequence
+			idx := bytes.IndexByte(b[trimTarget:], '\n')
 			var remaining []byte
-			if idx != -1 && (excess+idx+1) < len(b) {
-				remaining = b[excess+idx+1:]
+			if idx != -1 && (trimTarget+idx+1) < len(b) {
+				remaining = b[trimTarget+idx+1:]
 			} else {
-				remaining = b[excess:]
+				remaining = b[trimTarget:]
 			}
 			rb.buf.Reset()
 			// Reset ANSI attributes so discarded text formatting never bleeds into remaining history
@@ -105,7 +128,8 @@ func (rb *ringBuffer) Write(p []byte) (int, error) {
 			rb.buf.Write(remaining)
 		}
 	}
-	return rb.buf.Write(p)
+	_, err := rb.buf.Write(p)
+	return origLen, err
 }
 
 func (rb *ringBuffer) Bytes() []byte {
@@ -113,6 +137,29 @@ func (rb *ringBuffer) Bytes() []byte {
 	defer rb.mu.Unlock()
 	res := make([]byte, rb.buf.Len())
 	copy(res, rb.buf.Bytes())
+	return res
+}
+
+func (rb *ringBuffer) Tail(maxBytes int) []byte {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	b := rb.buf.Bytes()
+	if len(b) <= maxBytes {
+		res := make([]byte, len(b))
+		copy(res, b)
+		return res
+	}
+
+	start := len(b) - maxBytes
+	idx := bytes.IndexByte(b[start:], '\n')
+	if idx != -1 && (start+idx+1) < len(b) {
+		start = start + idx + 1
+	}
+
+	res := make([]byte, len(b)-start+4)
+	copy(res[:4], []byte("\x1b[0m"))
+	copy(res[4:], b[start:])
 	return res
 }
 
@@ -151,7 +198,7 @@ func NewManager(maxHistoryKB int, statePath ...string) *Manager {
 
 	// Periodic buffer flush every 15 seconds (only when dirty to eliminate disk thrashing)
 	go func() {
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
@@ -209,8 +256,8 @@ func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string,
 	m.mu.Lock()
 	m.sessions[s.ID] = s
 	m.dirty.Store(true)
-	_ = m.saveStateLocked()
 	m.mu.Unlock()
+	go func() { _ = m.SaveState() }()
 
 	// Start asynchronous output pump
 	go s.readLoop()
@@ -222,22 +269,22 @@ func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string,
 
 func (m *Manager) RenameSession(id, newName string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	s, ok := m.sessions[id]
 	if !ok {
+		m.mu.Unlock()
 		return errors.New("session not found")
 	}
 	s.mu.Lock()
 	s.Name = newName
 	s.mu.Unlock()
 	m.dirty.Store(true)
-	_ = m.saveStateLocked()
+	m.mu.Unlock()
+	go func() { _ = m.SaveState() }()
 	return nil
 }
 
 func (m *Manager) DeleteBubbleSessions(bubbleID string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	for id, s := range m.sessions {
 		if s.BubbleID == bubbleID {
 			delete(m.sessions, id)
@@ -245,7 +292,8 @@ func (m *Manager) DeleteBubbleSessions(bubbleID string) {
 		}
 	}
 	m.dirty.Store(true)
-	_ = m.saveStateLocked()
+	m.mu.Unlock()
+	go func() { _ = m.SaveState() }()
 }
 
 func (m *Manager) CloseAllPTYs() {
@@ -276,11 +324,8 @@ func (m *Manager) saveStateLocked() error {
 	list := make([]StoredSession, 0, len(m.sessions))
 	for _, s := range m.sessions {
 		s.mu.RLock()
-		buf := s.buffer.Bytes()
-		// Limit saved history buffer to 512KB per session to keep JSON agile
-		if len(buf) > 512*1024 {
-			buf = buf[len(buf)-512*1024:]
-		}
+		// Limit saved history buffer to 64KB per session to keep JSON agile, lightweight and fast
+		buf := s.buffer.Tail(64 * 1024)
 		st := StoredSession{
 			ID:        s.ID,
 			Name:      s.Name,
@@ -297,7 +342,7 @@ func (m *Manager) saveStateLocked() error {
 		list = append(list, st)
 	}
 
-	data, err := json.MarshalIndent(list, "", "  ")
+	data, err := json.Marshal(list)
 	if err != nil {
 		return err
 	}
@@ -567,8 +612,8 @@ func (m *Manager) DeleteSession(id string) error {
 	}
 	delete(m.sessions, id)
 	m.dirty.Store(true)
-	_ = m.saveStateLocked()
 	m.mu.Unlock()
+	go func() { _ = m.SaveState() }()
 
 	return s.Close()
 }

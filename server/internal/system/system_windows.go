@@ -76,11 +76,11 @@ func GetStats(includeTop ...bool) SystemStats {
 			UsedPageGB:  math.Round(usedPageGB*10) / 10,
 			PagePercent: pagePct,
 		},
-		Services: []ServiceInfo{
-			checkService("mysql", "MySQL 8.0 (Local)", 3306),
-			checkService("aditum", "Aditum Main Dev", 8080),
-			checkService("brif", "Brif Scrapper Web", 8000),
-		},
+		Services: CheckServices([]ServiceTarget{
+			{ID: "mysql", Name: "MySQL 8.0 (Local)", Port: 3306},
+			{ID: "aditum", Name: "Aditum Main Dev", Port: 8080},
+			{ID: "brif", Name: "Brif Scrapper Web", Port: 8000},
+		}),
 		CheckedAt: time.Now(),
 	}
 

@@ -149,7 +149,7 @@ func (m *Manager) runQuick(timeout time.Duration, args ...string) ([]byte, error
 
 func (m *Manager) Status() Status {
 	m.mu.RLock()
-	if time.Since(m.lastFetch) < 3*time.Second && !m.isBusy {
+	if time.Since(m.lastFetch) < 25*time.Second && !m.isBusy {
 		st := m.lastStatus
 		m.mu.RUnlock()
 		return st
