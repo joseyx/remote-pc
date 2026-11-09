@@ -133,6 +133,12 @@ func (rp *RemotePTY) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 
+	// Fast path: if data fits directly into caller's slice, return without buffer write overhead
+	if len(data) <= len(p) {
+		copy(p, data)
+		return len(data), nil
+	}
+
 	rp.mu.Lock()
 	rp.readBuf.Write(data)
 	n, err := rp.readBuf.Read(p)

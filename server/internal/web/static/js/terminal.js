@@ -1,3 +1,14 @@
+const termTextEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+
+function sendTerminalInput(ws, data) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (termTextEncoder) {
+        ws.send(termTextEncoder.encode(data));
+    } else {
+        ws.send(data);
+    }
+}
+
 // ==========================================
 // Terminal Engine (XTerm, Split, Quake, Search)
 // ==========================================
@@ -508,11 +519,7 @@ function connectToSession(sessionId) {
         setTimeout(fitActiveTerminal, 250);
     });
 
-    termObj.onData(data => {
-        if (termWs && termWs.readyState === WebSocket.OPEN) {
-            termWs.send(JSON.stringify({ type: "input", data }));
-        }
-    });
+    termObj.onData(data => sendTerminalInput(termWs, data));
 
     const token = serverInfo ? serverInfo.authToken : '';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -892,11 +899,7 @@ function connectToSplitSession(sessionId) {
         setTimeout(fitSplitTerminal, 250);
     });
 
-    termObj2.onData(data => {
-        if (termWs2 && termWs2.readyState === WebSocket.OPEN) {
-            termWs2.send(JSON.stringify({ type: "input", data }));
-        }
-    });
+    termObj2.onData(data => sendTerminalInput(termWs2, data));
 
     const token = serverInfo ? serverInfo.authToken : '';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1074,9 +1077,7 @@ function clearActiveTerminal() {
 }
 
 function sendTerminalKey(keyStr) {
-    if (termWs && termWs.readyState === WebSocket.OPEN) {
-        termWs.send(JSON.stringify({ type: "input", data: keyStr }));
-    }
+    sendTerminalInput(termWs, keyStr);
 }
 
 function handleMobileInputKey(e) {
@@ -1301,11 +1302,7 @@ async function initQuakeTerminal() {
         setupTerminalKeyHandlers(quakeTermObj, () => quakeTermWs);
         setupTerminalSelection(quakeTermObj, () => quakeTermWs);
 
-        quakeTermObj.onData(data => {
-            if (quakeTermWs && quakeTermWs.readyState === WebSocket.OPEN) {
-                quakeTermWs.send(JSON.stringify({ type: "input", data }));
-            }
-        });
+        quakeTermObj.onData(data => sendTerminalInput(quakeTermWs, data));
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/session/${quakeSessionId}?token=${encodeURIComponent(token)}`;
