@@ -3,6 +3,7 @@ package system
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,12 @@ type MemoryStats struct {
 	PagePercent int     `json:"pagePercent"`
 }
 
+type ServiceTarget struct {
+	ID   string
+	Name string
+	Port int
+}
+
 type ServiceInfo struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
@@ -39,10 +46,24 @@ type SystemStats struct {
 
 func checkService(id, name string, port int) ServiceInfo {
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 40*time.Millisecond)
 	if err != nil {
 		return ServiceInfo{ID: id, Name: name, Port: port, Running: false}
 	}
 	_ = conn.Close()
 	return ServiceInfo{ID: id, Name: name, Port: port, Running: true, PingMs: time.Since(start).Milliseconds()}
+}
+
+func CheckServices(targets []ServiceTarget) []ServiceInfo {
+	results := make([]ServiceInfo, len(targets))
+	var wg sync.WaitGroup
+	wg.Add(len(targets))
+	for i, t := range targets {
+		go func(idx int, target ServiceTarget) {
+			defer wg.Done()
+			results[idx] = checkService(target.ID, target.Name, target.Port)
+		}(i, t)
+	}
+	wg.Wait()
+	return results
 }
