@@ -3,6 +3,36 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.8.0] - 2026-11-09
+
+### ✨ Nuevas Funcionalidades (Features)
+- **Zero-Downtime Terminal Resilience (PTY Host Desacoplado)**:
+  - Las terminales interactivas (sesiones de Claude Code, servidores de desarrollo, scripts) ahora se ejecutan en procesos workers desacoplados (`CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS`), completamente aislados del ciclo de vida del servidor web de Orbit.
+  - Al actualizar Orbit (`orbit update`) o reiniciar el servicio, el servidor ejecuta un `DetachAllPTYs()` para desconectar los sockets sin matar los procesos hijos.
+  - Al iniciar la nueva versión de Orbit, `RestoreSessions()` detecta los sockets activos y reconecta las terminales intactas preservando sus PIDs y estado en memoria.
+  - Protocolo de transporte binario framed (`[tipo: 1B][longitud: 4B][payload]`) sobre sockets de dominio UNIX nativos de Windows (`AF_UNIX`).
+  - Ring buffer circular en memoria de **2 MB** por terminal para retener y reproducir el scrollback generado mientras el servidor o el cliente web están desconectados.
+- **Hot Web Assets Reloading (Actualización de Frontend sin Reinicio)**:
+  - Nuevo comando CLI `orbit extract-static` para volcar los assets compilados de la interfaz en disco (`%LOCALAPPDATA%\Orbit\static`).
+  - El servidor web prioriza los recursos estáticos en disco con fallback al binario compilado (`embed.FS`), permitiendo aplicar cambios de UI y estilos en caliente sin reiniciar el servicio backend.
+
+### ⚡ Optimización y Rendimiento (Performance)
+- **Optimizaciones en Buffer de Terminal y Persistencia Asíncrona**:
+  - Implementación de recorte por lotes (*batch trimming* con headroom) en el ring buffer de sesiones, eliminando reasignaciones masivas de 512 KB por cada tecla o caracter recibido (benchmark ~12.8 ns/op).
+  - Serialización ágil del estado de sesiones (`sessions_state.json`), limitando el historial persistido a 64 KB por terminal y desacoplando el guardado a segundo plano.
+  - Serialización con exclusión mutua dedicada (`saveMu`) y nombres de archivo temporales únicos por nanosegundo para eliminar colisiones de bloqueo de archivos en Windows.
+- **Renderizado Gráfico Acelerado por Canvas en Web UI**:
+  - Integración de `xterm-addon-canvas.js` para renderizar el texto y los cursores de la terminal directamente en el lienzo Canvas con aceleración por GPU, reduciendo el consumo de CPU y la latencia visual.
+- **Reducción de Spawning y Consultas del Sistema**:
+  - Caché de 25 segundos para consultas de estado de Windscribe CLI, eliminando la creación continua de subprocesos en bucles de polling.
+  - Caché de 30 segundos para detección de IPs locales y ejecución en paralelo de chequeos de salud de servicios con timeout de 40 ms.
+
+### 🐛 Correcciones (Bug Fixes)
+- **Responsive en Barra de Herramientas del Sidebar (`bubbles-sort-bar`)**:
+  - Corrección de desbordamiento visual (`overflow: hidden` y `flex-wrap`) en los botones de ordenamiento y toggle de layout (grid/compact), evitando que los controles queden cortados en anchos de panel reducidos.
+
+---
+
 ## [1.7.0] - 2026-11-05
 
 ### ✨ Nuevas Funcionalidades (Features)
