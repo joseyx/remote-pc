@@ -110,30 +110,22 @@
 .task-sort-bar {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     margin-top: 4px;
     margin-bottom: 2px;
     background-color: var(--bg-base);
-    padding: 3px;
+    padding: 2px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-subtle);
 }
 
-.task-sort-bar .sort-bar-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    padding: 0 4px;
-    letter-spacing: 0.5px;
-}
-
 .sort-chip {
     flex: 1;
+    min-width: 0;
     background: transparent;
-    border: none;
+    border: 1px solid transparent;
     color: var(--text-dim);
-    padding: 4px 6px;
+    padding: 4px 3px;
     border-radius: 4px;
     font-size: 11px;
     font-weight: 600;
@@ -142,9 +134,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 3px;
     transition: all 0.15s ease;
     white-space: nowrap;
+}
+
+.sort-chip svg {
+    flex-shrink: 0;
 }
 
 .sort-chip:hover {
@@ -156,7 +152,7 @@
     background-color: var(--bg-elevated);
     color: var(--accent);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-color: rgba(56, 189, 248, 0.3);
 }
 
 /* Priority Badges */
