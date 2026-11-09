@@ -345,8 +345,10 @@ func TestMultiRepoWorktreeDelete(t *testing.T) {
 
 	// Verify resolveGitRepo resolves scrapperRepo instead of wsParent
 	resolvedRepo := mgr.resolveGitRepo(b)
-	if !strings.EqualFold(filepath.Clean(resolvedRepo), filepath.Clean(scrapperRepo)) {
-		t.Fatalf("expected resolved repo %s, got %s", scrapperRepo, resolvedRepo)
+	resolvedInfo, err1 := os.Stat(resolvedRepo)
+	scrapperInfo, err2 := os.Stat(scrapperRepo)
+	if err1 != nil || err2 != nil || !os.SameFile(resolvedInfo, scrapperInfo) {
+		t.Fatalf("expected resolved repo to match %s, got %s", scrapperRepo, resolvedRepo)
 	}
 
 	// 4. Delete bubble
