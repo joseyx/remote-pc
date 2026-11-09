@@ -427,10 +427,14 @@
 .bubble-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    overscroll-behavior-y: contain;
+    will-change: scroll-position;
+    contain: content;
 }
 
 .bubble-card {
@@ -439,17 +443,19 @@
     border-radius: var(--radius-md);
     padding: 10px 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     display: flex;
     flex-direction: column;
     gap: 6px;
     position: relative;
+    contain: layout style;
+    transform: translateZ(0);
 }
 
 .bubble-card:hover {
     border-color: var(--border-muted);
     background-color: var(--bg-elevated);
-    transform: translateY(-1px);
+    transform: translateY(-1px) translateZ(0);
 }
 
 .bubble-card.active {
