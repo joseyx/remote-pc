@@ -3,6 +3,7 @@ package bubble
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -768,6 +769,8 @@ func (m *Manager) scanGitWorktrees(wsType WorkspaceType, repoPath string) {
 
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	var currentPath, currentHead, currentBranch string
+	var currentPrunable bool
+	hasPrunable := false
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -778,15 +781,28 @@ func (m *Manager) scanGitWorktrees(wsType WorkspaceType, repoPath string) {
 		} else if strings.HasPrefix(line, "branch ") {
 			currentBranch = strings.TrimPrefix(line, "branch ")
 			currentBranch = strings.TrimPrefix(currentBranch, "refs/heads/")
+		} else if strings.HasPrefix(line, "prunable") {
+			currentPrunable = true
+			hasPrunable = true
 		} else if line == "" && currentPath != "" {
-			m.registerDiscoveredWorktree(wsType, repoPath, currentPath, currentHead, currentBranch)
+			if !currentPrunable {
+				m.registerDiscoveredWorktree(wsType, repoPath, currentPath, currentHead, currentBranch)
+			}
 			currentPath = ""
 			currentHead = ""
 			currentBranch = ""
+			currentPrunable = false
 		}
 	}
-	if currentPath != "" {
+	if currentPath != "" && !currentPrunable {
 		m.registerDiscoveredWorktree(wsType, repoPath, currentPath, currentHead, currentBranch)
+	}
+
+	if hasPrunable {
+		// Prune dead worktrees from Git automatically
+		go func() {
+			_ = exec.Command("git", "-C", repoPath, "worktree", "prune").Run()
+		}()
 	}
 }
 
@@ -794,6 +810,13 @@ func (m *Manager) registerDiscoveredWorktree(wsType WorkspaceType, repoPath, wtP
 	normPath := filepath.Clean(wtPath)
 	normRepo := filepath.Clean(repoPath)
 	isRoot := strings.EqualFold(normPath, normRepo)
+
+	// Worktree paths must actually exist on disk; if deleted or pruned outside, skip registering
+	if !isRoot {
+		if _, err := os.Stat(normPath); err != nil {
+			return
+		}
+	}
 
 	if wsType == WorkspaceBrif && isRoot {
 		if b, ok := m.bubbles["brif-main"]; ok {
@@ -1188,12 +1211,75 @@ func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
 	return nil, fmt.Errorf("error inesperado al crear bubble")
 }
 
+// resolveGitRepo finds the root Git repository directory for a bubble.
+// For worktrees, it inspects the worktree's .git pointer or queries git directly.
+// For multi-repo workspaces (such as Brif), it resolves the correct sub-repository.
+func (m *Manager) resolveGitRepo(b *Bubble) string {
+	if b == nil {
+		return ""
+	}
+
+	// 1. If b.Path exists on disk, query git for the common .git directory
+	if b.Path != "" {
+		gitEntry := filepath.Join(b.Path, ".git")
+		if info, err := os.Stat(gitEntry); err == nil {
+			if !info.IsDir() {
+				cmd := exec.Command("git", "-C", b.Path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+				if out, err := cmd.Output(); err == nil {
+					commonDir := strings.TrimSpace(string(out))
+					if commonDir != "" {
+						mainRepo := filepath.Dir(filepath.Clean(commonDir))
+						if _, err := os.Stat(filepath.Join(mainRepo, ".git")); err == nil {
+							return mainRepo
+						}
+					}
+				}
+			} else {
+				return b.Path
+			}
+		}
+	}
+
+	// 2. Multi-repo workspace resolution
+	if ws, ok := m.workspaces[b.Workspace]; ok {
+		// For WorkspaceBrif, default sub-repo is brif-scrapper
+		if b.Workspace == WorkspaceBrif {
+			scrapper := filepath.Join(ws.BasePath, "brif-scrapper")
+			if _, err := os.Stat(filepath.Join(scrapper, ".git")); err == nil {
+				return scrapper
+			}
+		}
+
+		// Check if ws.BasePath itself is a git repository
+		if _, err := os.Stat(filepath.Join(ws.BasePath, ".git")); err == nil {
+			return ws.BasePath
+		}
+
+		// Check subdirectories of ws.BasePath in case worktree belongs to another sub-repo
+		if entries, err := os.ReadDir(ws.BasePath); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					subRepo := filepath.Join(ws.BasePath, entry.Name())
+					if _, err := os.Stat(filepath.Join(subRepo, ".git")); err == nil {
+						cmd := exec.Command("git", "-C", subRepo, "worktree", "list", "--porcelain")
+						if out, err := cmd.Output(); err == nil && strings.Contains(string(out), filepath.ToSlash(b.Path)) {
+							return subRepo
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
 func (m *Manager) DeleteBubble(id string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	b, ok := m.bubbles[id]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("bubble %s not found", id)
 	}
 
@@ -1203,44 +1289,60 @@ func (m *Manager) DeleteBubble(id string) error {
 		delete(m.devCmds, id)
 	}
 
+	workspace := b.Workspace
+	isWorktree := b.IsWorktree
+	bubblePath := b.Path
+	branch := b.Branch
+	repoPath := m.resolveGitRepo(b)
+
+	// Remove from in-memory bubbles and metadata maps immediately under lock
+	delete(m.bubbles, id)
+	delete(m.metadata, id)
+	_ = m.saveMetadataLocked()
+	m.mu.Unlock()
+
 	bashPath := `C:\Program Files\Git\bin\bash.exe`
 	if _, err := os.Stat(bashPath); err != nil {
 		bashPath = "bash.exe"
 	}
 
-	if b.Workspace == WorkspaceAditum && b.IsWorktree {
-		// Use remove-worktree.sh
+	if workspace == WorkspaceAditum && isWorktree {
+		// Use remove-worktree.sh with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
 		removeScript := `/c/Users/Jose/bin/remove-worktree.sh`
-		target := filepath.ToSlash(b.Path)
+		target := filepath.ToSlash(bubblePath)
 		if target == "" {
-			target = b.Branch
+			target = branch
 		}
-		cmd := exec.Command(bashPath, removeScript, target, "--force")
+		cmd := exec.CommandContext(ctx, bashPath, removeScript, target, "--force")
 		cmd.Dir = `C:\Users\Jose\Documents\Work\Aditum`
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("remove-worktree.sh failed: %w (%s)", err, string(out))
+			log.Printf("[DeleteBubble] Aditum remove-worktree warning: %v (%s)", err, string(out))
 		}
-	} else if b.IsWorktree {
-		// Generic git worktree remove
-		basePath := ""
-		if ws, ok := m.workspaces[b.Workspace]; ok {
-			basePath = ws.BasePath
-		}
-		if basePath != "" {
-			cmd := exec.Command("git", "-C", basePath, "worktree", "remove", "--force", b.Path)
+	} else if isWorktree {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		if repoPath != "" {
+			cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "worktree", "remove", "--force", bubblePath)
 			_ = cmd.Run()
-			_ = exec.Command("git", "-C", basePath, "worktree", "prune").Run()
+			_ = exec.CommandContext(ctx, "git", "-C", repoPath, "worktree", "prune").Run()
 		} else {
-			cmd := exec.Command("git", "worktree", "remove", "--force", b.Path)
+			cmd := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", bubblePath)
 			_ = cmd.Run()
 		}
-		if _, err := os.Stat(b.Path); err == nil {
-			_ = os.RemoveAll(b.Path)
+
+		if _, err := os.Stat(bubblePath); err == nil {
+			if err := os.RemoveAll(bubblePath); err != nil {
+				// Retry once after brief pause in case a closing process released file handle
+				time.Sleep(250 * time.Millisecond)
+				_ = os.RemoveAll(bubblePath)
+			}
 		}
 	}
 
-	delete(m.bubbles, id)
 	return nil
 }
 

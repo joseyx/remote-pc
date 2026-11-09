@@ -379,10 +379,23 @@ func (m *Manager) RenameSession(id, newName string) error {
 	return nil
 }
 
-func (m *Manager) DeleteBubbleSessions(bubbleID string) {
+func (m *Manager) DeleteBubbleSessions(bubbleID string, bubblePath string) {
 	m.mu.Lock()
+	cleanPath := ""
+	if bubblePath != "" {
+		cleanPath = strings.ToLower(filepath.Clean(bubblePath))
+	}
 	for id, s := range m.sessions {
-		if s.BubbleID == bubbleID {
+		match := false
+		if bubbleID != "" && s.BubbleID == bubbleID {
+			match = true
+		} else if cleanPath != "" && s.Cwd != "" {
+			sCwd := strings.ToLower(filepath.Clean(s.Cwd))
+			if sCwd == cleanPath || strings.HasPrefix(sCwd, cleanPath+string(filepath.Separator)) {
+				match = true
+			}
+		}
+		if match {
 			delete(m.sessions, id)
 			_ = s.Close()
 		}

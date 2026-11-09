@@ -1,6 +1,7 @@
 package bubble
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -287,6 +288,122 @@ func TestUpdateBubbleMetadataTaskStatus(t *testing.T) {
 	}
 	if !strings.Contains(string(metaData), `"taskStatus": "in_progress"`) {
 		t.Errorf("expected taskStatus in metadata json, got %s", string(metaData))
+	}
+}
+
+func TestMultiRepoWorktreeDelete(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Setup multi-repo workspace structure (like Brif):
+	// wsParent is NOT a git repo, but contains sub-repos (brif-scrapper)
+	wsParent := filepath.Join(tmpDir, "brif-ws")
+	if err := os.MkdirAll(wsParent, 0755); err != nil {
+		t.Fatalf("failed to create wsParent: %v", err)
+	}
+
+	scrapperRepo := filepath.Join(wsParent, "brif-scrapper")
+	if err := os.MkdirAll(scrapperRepo, 0755); err != nil {
+		t.Fatalf("failed to create scrapperRepo: %v", err)
+	}
+
+	_ = exec.Command("git", "-C", scrapperRepo, "init", "-b", "develop").Run()
+	_ = exec.Command("git", "-C", scrapperRepo, "config", "user.email", "tester@orbit.local").Run()
+	_ = exec.Command("git", "-C", scrapperRepo, "config", "user.name", "Orbit Tester").Run()
+	_ = exec.Command("git", "-C", scrapperRepo, "commit", "--allow-empty", "-m", "initial commit").Run()
+
+	mgr := NewManager(tmpDir)
+	ws := WorkspaceInfo{
+		ID:          "brif",
+		Name:        "Brif",
+		Type:        WorkspaceBrif,
+		BasePath:    wsParent,
+		DefaultBase: "develop",
+		DefaultPort: 8000,
+	}
+	if err := mgr.AddWorkspace(ws); err != nil {
+		t.Fatalf("AddWorkspace failed: %v", err)
+	}
+
+	// 2. Create a worktree outside the repo (e.g. C:\Users\...\brif-scrapper-feat-x)
+	wtDir := filepath.Join(tmpDir, "brif-scrapper-feat-x")
+	cmd := exec.Command("git", "-C", scrapperRepo, "worktree", "add", "-b", "feat/feat-x", wtDir, "develop")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to create git worktree: %v\nOutput: %s", err, string(out))
+	}
+
+	// 3. Scan worktrees
+	mgr.scanGitWorktrees(WorkspaceBrif, scrapperRepo)
+
+	bubbleID := fmt.Sprintf("%s-%s", WorkspaceBrif, strings.ToLower(filepath.Base(wtDir)))
+	b, ok := mgr.GetBubble(bubbleID)
+	if !ok {
+		t.Fatalf("expected bubble %s to be registered", bubbleID)
+	}
+	if !b.IsWorktree {
+		t.Fatalf("expected bubble to be a worktree")
+	}
+
+	// Verify resolveGitRepo resolves scrapperRepo instead of wsParent
+	resolvedRepo := mgr.resolveGitRepo(b)
+	if !strings.EqualFold(filepath.Clean(resolvedRepo), filepath.Clean(scrapperRepo)) {
+		t.Fatalf("expected resolved repo %s, got %s", scrapperRepo, resolvedRepo)
+	}
+
+	// 4. Delete bubble
+	if err := mgr.DeleteBubble(bubbleID); err != nil {
+		t.Fatalf("DeleteBubble failed: %v", err)
+	}
+
+	// Bubble must be removed from memory
+	if _, ok := mgr.GetBubble(bubbleID); ok {
+		t.Fatalf("expected bubble %s to be deleted from manager", bubbleID)
+	}
+
+	// Worktree directory on disk must be removed
+	if _, err := os.Stat(wtDir); !os.IsNotExist(err) {
+		t.Fatalf("expected worktree directory %s to be removed from disk", wtDir)
+	}
+
+	// Git worktree must no longer be registered in scrapperRepo
+	wtListCmd := exec.Command("git", "-C", scrapperRepo, "worktree", "list", "--porcelain")
+	out, err := wtListCmd.Output()
+	if err != nil {
+		t.Fatalf("failed to run git worktree list: %v", err)
+	}
+	if strings.Contains(string(out), filepath.ToSlash(wtDir)) {
+		t.Fatalf("expected worktree %s to be removed from git worktree list, but found in:\n%s", wtDir, string(out))
+	}
+}
+
+func TestScanGitWorktreesIgnoresPrunableAndNonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	repoDir := filepath.Join(tmpDir, "repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+	_ = exec.Command("git", "-C", repoDir, "init", "-b", "main").Run()
+	_ = exec.Command("git", "-C", repoDir, "config", "user.email", "tester@orbit.local").Run()
+	_ = exec.Command("git", "-C", repoDir, "config", "user.name", "Orbit Tester").Run()
+	_ = exec.Command("git", "-C", repoDir, "commit", "--allow-empty", "-m", "init").Run()
+
+	wtDir := filepath.Join(tmpDir, "repo-wt")
+	if out, err := exec.Command("git", "-C", repoDir, "worktree", "add", "-b", "wt-branch", wtDir, "main").CombinedOutput(); err != nil {
+		t.Fatalf("failed to add worktree: %v (%s)", err, string(out))
+	}
+
+	// Delete wtDir directly from filesystem without git worktree remove
+	if err := os.RemoveAll(wtDir); err != nil {
+		t.Fatalf("failed to remove wtDir: %v", err)
+	}
+
+	mgr := NewManager(tmpDir)
+	// scanGitWorktrees should detect that wtDir does not exist / is prunable and NOT register it
+	mgr.scanGitWorktrees("repo", repoDir)
+
+	bubbleID := fmt.Sprintf("repo-%s", strings.ToLower(filepath.Base(wtDir)))
+	if _, ok := mgr.GetBubble(bubbleID); ok {
+		t.Fatalf("expected non-existent / prunable worktree bubble %s NOT to be registered", bubbleID)
 	}
 }
 
