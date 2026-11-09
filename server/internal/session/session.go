@@ -9,12 +9,16 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"orbit/internal/config"
 	"orbit/internal/pty"
 )
 
@@ -32,31 +36,35 @@ type SessionInfo struct {
 }
 
 type StoredSession struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Cwd       string    `json:"cwd"`
-	Command   string    `json:"command"`
-	BubbleID  string    `json:"bubbleId,omitempty"`
-	Role      string    `json:"role,omitempty"`
-	Cols      uint16    `json:"cols"`
-	Rows      uint16    `json:"rows"`
-	BufferB64 string    `json:"bufferB64,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Cwd        string    `json:"cwd"`
+	Command    string    `json:"command"`
+	BubbleID   string    `json:"bubbleId,omitempty"`
+	Role       string    `json:"role,omitempty"`
+	Cols       uint16    `json:"cols"`
+	Rows       uint16    `json:"rows"`
+	BufferB64  string    `json:"bufferB64,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	SocketPath string    `json:"socketPath,omitempty"`
+	WorkerPID  int       `json:"workerPid,omitempty"`
 }
 
 type Session struct {
-	ID        string
-	Name      string
-	Cwd       string
-	Command   string
-	PID       int
-	IsRunning bool
-	ExitCode  int
-	CreatedAt time.Time
-	BubbleID  string
-	Role      string
-	Cols      uint16
-	Rows      uint16
+	ID         string
+	Name       string
+	Cwd        string
+	Command    string
+	PID        int
+	IsRunning  bool
+	ExitCode   int
+	CreatedAt  time.Time
+	BubbleID   string
+	Role       string
+	Cols       uint16
+	Rows       uint16
+	SocketPath string
+	WorkerPID  int
 
 	pty pty.PTY
 
@@ -174,10 +182,12 @@ type ClientConnection struct {
 
 type Manager struct {
 	mu           sync.RWMutex
+	saveMu       sync.Mutex
 	sessions     map[string]*Session
 	connections  map[string]*ClientConnection
 	maxHistoryKB int
 	statePath    string
+	dataDir      string
 	stopTicker   chan struct{}
 	dirty        atomic.Bool
 }
@@ -188,11 +198,17 @@ func NewManager(maxHistoryKB int, statePath ...string) *Manager {
 		sp = statePath[0]
 	}
 
+	dataDir := filepath.Dir(sp)
+	if dataDir == "." || dataDir == "" {
+		dataDir = config.GetDataDir()
+	}
+
 	m := &Manager{
 		sessions:     make(map[string]*Session),
 		connections:  make(map[string]*ClientConnection),
 		maxHistoryKB: maxHistoryKB,
 		statePath:    sp,
+		dataDir:      dataDir,
 		stopTicker:   make(chan struct{}),
 	}
 
@@ -215,6 +231,83 @@ func NewManager(maxHistoryKB int, statePath ...string) *Manager {
 	return m
 }
 
+func (m *Manager) SetDataDir(dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.dataDir = dir
+}
+
+func (m *Manager) runDir() string {
+	d := m.dataDir
+	if d == "" {
+		d = config.GetDataDir()
+	}
+	rd := filepath.Join(d, "run")
+	// If path length would exceed UNIX domain socket limits (104 on macOS, 108 on Linux/Windows),
+	// fallback to standard temporary directory which is short (e.g. /tmp/orbit-run or os.TempDir())
+	if len(rd)+30 >= 100 {
+		if runtime.GOOS != "windows" {
+			rd = "/tmp/orbit-run"
+		} else {
+			rd = filepath.Join(os.TempDir(), "orbit-run")
+		}
+	}
+	_ = os.MkdirAll(rd, 0755)
+	return rd
+}
+
+func (m *Manager) startPTY(sessionID, command, cwd string, cols, rows uint16) (pty.PTY, string, int, error) {
+	if cols == 0 {
+		cols = 120
+	}
+	if rows == 0 {
+		rows = 30
+	}
+
+	shortID := sessionID
+	if len(shortID) > 16 {
+		shortID = shortID[:16]
+	}
+	sockPath := filepath.Join(m.runDir(), fmt.Sprintf("pty-%s.sock", shortID))
+
+	// Try spawning detached PTY worker
+	exePath, err := os.Executable()
+	if err != nil {
+		exePath = os.Args[0]
+	}
+
+	canSpawn := false
+	if fi, err := os.Stat(exePath); err == nil && !fi.IsDir() {
+		base := strings.ToLower(filepath.Base(exePath))
+		if !strings.HasSuffix(base, ".test.exe") && !strings.HasSuffix(base, ".test") {
+			canSpawn = true
+		}
+	}
+
+	if canSpawn {
+		if spawnErr := pty.SpawnWorker(exePath, sessionID, sockPath, command, cwd, cols, rows); spawnErr == nil {
+			// Retry connecting to worker socket (up to 2.5 seconds)
+			for i := 0; i < 25; i++ {
+				time.Sleep(100 * time.Millisecond)
+				if rp, dialErr := pty.DialRemotePTY(sessionID, sockPath, 400*time.Millisecond); dialErr == nil {
+					return rp, sockPath, rp.WorkerPID(), nil
+				}
+			}
+			log.Printf("[Session %s] Timeout connecting to PTY worker socket %s, falling back to in-process PTY", sessionID, sockPath)
+			_ = os.Remove(sockPath)
+		} else {
+			log.Printf("[Session %s] Failed to spawn PTY worker: %v, falling back to in-process PTY", sessionID, spawnErr)
+		}
+	}
+
+	// Fallback to in-process PTY
+	p, err := pty.Start(command, cwd, cols, rows)
+	if err != nil {
+		return nil, "", 0, err
+	}
+	return p, "", 0, nil
+}
+
 func (m *Manager) CreateSession(name, cwd, command string, cols, rows uint16) (*Session, error) {
 	return m.CreateBubbleSession(name, cwd, command, "", "shell", cols, rows)
 }
@@ -230,27 +323,30 @@ func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string,
 		role = "shell"
 	}
 
-	p, err := pty.Start(command, cwd, cols, rows)
+	sessionID := uuid.New().String()
+	p, sockPath, workerPID, err := m.startPTY(sessionID, command, cwd, cols, rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start pty: %w", err)
 	}
 
 	s := &Session{
-		ID:        uuid.New().String(),
-		Name:      name,
-		Cwd:       cwd,
-		Command:   command,
-		PID:       p.ProcessID(),
-		IsRunning: true,
-		CreatedAt: time.Now(),
-		BubbleID:  bubbleID,
-		Role:      role,
-		Cols:      cols,
-		Rows:      rows,
-		pty:       p,
-		buffer:    newRingBuffer(m.maxHistoryKB * 1024),
-		listeners: make(map[chan []byte]struct{}),
-		onWrite:   func() { m.dirty.Store(true) },
+		ID:         sessionID,
+		Name:       name,
+		Cwd:        cwd,
+		Command:    command,
+		PID:        p.ProcessID(),
+		IsRunning:  true,
+		CreatedAt:  time.Now(),
+		BubbleID:   bubbleID,
+		Role:       role,
+		Cols:       cols,
+		Rows:       rows,
+		SocketPath: sockPath,
+		WorkerPID:  workerPID,
+		pty:        p,
+		buffer:     newRingBuffer(m.maxHistoryKB * 1024),
+		listeners:  make(map[chan []byte]struct{}),
+		onWrite:    func() { m.dirty.Store(true) },
 	}
 
 	m.mu.Lock()
@@ -297,6 +393,14 @@ func (m *Manager) DeleteBubbleSessions(bubbleID string) {
 }
 
 func (m *Manager) CloseAllPTYs() {
+	m.closeAllPTYsInternal(true)
+}
+
+func (m *Manager) DetachAllPTYs() {
+	m.closeAllPTYsInternal(false)
+}
+
+func (m *Manager) closeAllPTYsInternal(killWorkers bool) {
 	if m.stopTicker != nil {
 		select {
 		case m.stopTicker <- struct{}{}:
@@ -306,11 +410,17 @@ func (m *Manager) CloseAllPTYs() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, s := range m.sessions {
-		_ = s.Close()
+		if killWorkers {
+			_ = s.Close()
+		} else {
+			_ = s.Detach()
+		}
 	}
 }
 
 func (m *Manager) SaveState() error {
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.saveStateLocked()
@@ -327,16 +437,18 @@ func (m *Manager) saveStateLocked() error {
 		// Limit saved history buffer to 64KB per session to keep JSON agile, lightweight and fast
 		buf := s.buffer.Tail(64 * 1024)
 		st := StoredSession{
-			ID:        s.ID,
-			Name:      s.Name,
-			Cwd:       s.Cwd,
-			Command:   s.Command,
-			BubbleID:  s.BubbleID,
-			Role:      s.Role,
-			Cols:      s.Cols,
-			Rows:      s.Rows,
-			BufferB64: base64.StdEncoding.EncodeToString(buf),
-			CreatedAt: s.CreatedAt,
+			ID:         s.ID,
+			Name:       s.Name,
+			Cwd:        s.Cwd,
+			Command:    s.Command,
+			BubbleID:   s.BubbleID,
+			Role:       s.Role,
+			Cols:       s.Cols,
+			Rows:       s.Rows,
+			BufferB64:  base64.StdEncoding.EncodeToString(buf),
+			CreatedAt:  s.CreatedAt,
+			SocketPath: s.SocketPath,
+			WorkerPID:  s.WorkerPID,
 		}
 		s.mu.RUnlock()
 		list = append(list, st)
@@ -347,10 +459,11 @@ func (m *Manager) saveStateLocked() error {
 		return err
 	}
 
-	tmpFile := m.statePath + ".tmp"
+	tmpFile := fmt.Sprintf("%s.%d.tmp", m.statePath, time.Now().UnixNano())
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
 		return err
 	}
+	defer func() { _ = os.Remove(tmpFile) }()
 	return os.Rename(tmpFile, m.statePath)
 }
 
@@ -397,16 +510,61 @@ func (m *Manager) RestoreSessions() error {
 			cmd = "powershell.exe"
 		}
 
-		// Prevent auto-spawning heavy interactive AI agents (Claude Code, Antigravity)
-		// and their massive nested MCP process trees (Playwright, Chrome DevTools, etc.) on server boot.
-		// Instead, restore as a clean shell in the same workspace directory, preserving 100% of the history buffer.
+		// 1. Check if an active PTY worker socket exists from a previous run (Hot update / restart)
+		if st.SocketPath != "" {
+			if _, statErr := os.Stat(st.SocketPath); statErr == nil {
+				if rp, dialErr := pty.DialRemotePTY(st.ID, st.SocketPath, 1*time.Second); dialErr == nil {
+					ring := newRingBuffer(m.maxHistoryKB * 1024)
+					if len(st.BufferB64) > 0 {
+						bufBytes, _ := base64.StdEncoding.DecodeString(st.BufferB64)
+						if len(bufBytes) > 0 {
+							ring.Write(bufBytes)
+						}
+					}
+
+					s := &Session{
+						ID:         st.ID,
+						Name:       st.Name,
+						Cwd:        st.Cwd,
+						Command:    cmd,
+						PID:        rp.ProcessID(),
+						IsRunning:  true,
+						CreatedAt:  st.CreatedAt,
+						BubbleID:   st.BubbleID,
+						Role:       st.Role,
+						Cols:       cols,
+						Rows:       rows,
+						SocketPath: st.SocketPath,
+						WorkerPID:  rp.WorkerPID(),
+						pty:        rp,
+						buffer:     ring,
+						listeners:  make(map[chan []byte]struct{}),
+						onWrite:    func() { m.dirty.Store(true) },
+					}
+
+					m.sessions[s.ID] = s
+					go s.readLoop()
+					go s.waitLoop()
+					restoredCount++
+					log.Printf("[Session Restore] Reconnected to LIVE PTY Worker %s (%s) [PID %d] in %s", s.ID, s.Name, s.PID, s.Cwd)
+					continue
+				} else {
+					log.Printf("[Session Restore] Failed to reconnect to worker at %s: %v", st.SocketPath, dialErr)
+				}
+				// Stale socket, cleanup
+				_ = os.Remove(st.SocketPath)
+			}
+		}
+
+		// 2. Fallback: Worker is not alive (e.g. system reboot or killed).
+		// Start a fresh shell preserving history buffer.
 		isAgent := st.Role == "claude" || st.Role == "agy" || cmd == "claude" || cmd == "agy"
 		launchCmd := cmd
 		if isAgent {
 			launchCmd = "powershell.exe"
 		}
 
-		p, err := pty.Start(launchCmd, st.Cwd, cols, rows)
+		p, sockPath, workerPID, err := m.startPTY(st.ID, launchCmd, st.Cwd, cols, rows)
 		if err != nil {
 			log.Printf("[Session Restore] Could not restart PTY for session %s: %v", st.ID, err)
 			continue
@@ -426,21 +584,23 @@ func (m *Manager) RestoreSessions() error {
 		}
 
 		s := &Session{
-			ID:        st.ID,
-			Name:      st.Name,
-			Cwd:       st.Cwd,
-			Command:   cmd,
-			PID:       p.ProcessID(),
-			IsRunning: true,
-			CreatedAt: st.CreatedAt,
-			BubbleID:  st.BubbleID,
-			Role:      st.Role,
-			Cols:      cols,
-			Rows:      rows,
-			pty:       p,
-			buffer:    ring,
-			listeners: make(map[chan []byte]struct{}),
-			onWrite:   func() { m.dirty.Store(true) },
+			ID:         st.ID,
+			Name:       st.Name,
+			Cwd:        st.Cwd,
+			Command:    cmd,
+			PID:        p.ProcessID(),
+			IsRunning:  true,
+			CreatedAt:  st.CreatedAt,
+			BubbleID:   st.BubbleID,
+			Role:       st.Role,
+			Cols:       cols,
+			Rows:       rows,
+			SocketPath: sockPath,
+			WorkerPID:  workerPID,
+			pty:        p,
+			buffer:     ring,
+			listeners:  make(map[chan []byte]struct{}),
+			onWrite:    func() { m.dirty.Store(true) },
 		}
 
 		m.sessions[s.ID] = s
@@ -551,6 +711,21 @@ func (s *Session) Unsubscribe(ch chan []byte) {
 
 	delete(s.listeners, ch)
 	close(ch)
+}
+
+type DetachablePTY interface {
+	Detach() error
+}
+
+func (s *Session) Detach() error {
+	s.mu.Lock()
+	s.IsRunning = false
+	s.mu.Unlock()
+
+	if dp, ok := s.pty.(DetachablePTY); ok {
+		return dp.Detach()
+	}
+	return s.pty.Close()
 }
 
 func (s *Session) Close() error {

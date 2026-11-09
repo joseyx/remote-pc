@@ -22,8 +22,10 @@ import (
 	"orbit/internal/installer"
 	"orbit/internal/mcp"
 	"orbit/internal/migration"
+	"orbit/internal/pty"
 	"orbit/internal/session"
 	"orbit/internal/updater"
+	"orbit/internal/web"
 )
 
 var Version = "1.7.0"
@@ -56,6 +58,10 @@ func main() {
 
 		case "service", "daemon":
 			serviceCLI(exePath)
+			return
+
+		case "pty-host":
+			ptyHostCLI()
 			return
 
 		case "token":
@@ -110,6 +116,20 @@ func main() {
 			}
 			return
 
+		case "extract-static", "extract-web":
+			cfg := config.LoadConfig()
+			dest := filepath.Join(cfg.DataDir, "static")
+			if len(os.Args) > 2 {
+				dest = os.Args[2]
+			}
+			if err := web.ExtractStaticAssets(dest); err != nil {
+				fmt.Fprintf(os.Stderr, "Error extrayendo assets web: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("✓ Assets web extraídos exitosamente a: %s\n", dest)
+			fmt.Println("  Ahora puedes modificar HTML/CSS/JS y ver los cambios en tiempo real recargando el navegador (F5).")
+			return
+
 		case "install":
 			if err := installer.Install(exePath); err != nil {
 				fmt.Fprintf(os.Stderr, "Error instalando Orbit: %v\n", err)
@@ -140,11 +160,9 @@ func main() {
 
 	openFlag := flag.Bool("open", true, "Open web dashboard in browser on start (default: true)")
 	noOpenFlag := flag.Bool("no-open", false, "Do not open web dashboard in browser on start")
-	flag.Parse()
-
-	shouldOpen := *openFlag && !*noOpenFlag
 
 	cfg := config.LoadConfig()
+	shouldOpen := *openFlag && !*noOpenFlag
 	if sum, err := migration.AutoMigrate(cfg.DataDir); err == nil && sum != nil && sum.WorkspacesCount > 0 {
 		log.Printf("[Migration] Auto-migración completada: %d workspaces configurados", sum.WorkspacesCount)
 	}
@@ -445,4 +463,29 @@ func openBrowser(url string) error {
 		cmd = exec.Command("xdg-open", url)
 	}
 	return cmd.Start()
+}
+
+func ptyHostCLI() {
+	fs := flag.NewFlagSet("pty-host", flag.ExitOnError)
+	sessionID := fs.String("session-id", "", "Session UUID")
+	socketPath := fs.String("socket", "", "UNIX socket path")
+	cwd := fs.String("dir", "", "Working directory")
+	cmdStr := fs.String("cmd", "", "Command to execute")
+	cols := fs.Int("cols", 120, "Initial terminal columns")
+	rows := fs.Int("rows", 30, "Initial terminal rows")
+
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing pty-host flags: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *socketPath == "" {
+		fmt.Fprintln(os.Stderr, "Missing required flag: --socket")
+		os.Exit(1)
+	}
+
+	if err := pty.RunWorker(*sessionID, *socketPath, *cmdStr, *cwd, uint16(*cols), uint16(*rows)); err != nil {
+		fmt.Fprintf(os.Stderr, "PTY Worker error: %v\n", err)
+		os.Exit(1)
+	}
 }

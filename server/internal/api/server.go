@@ -156,8 +156,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/plugins/{id}/config", s.withAuth(s.handleUpdatePluginConfig))
 	mux.HandleFunc("POST /api/plugins/groq-whisper/transcribe", s.withAuth(s.handleGroqWhisperTranscribe))
 
-	// Embedded Desktop Web Dashboard
-	mux.Handle("/", web.Handler())
+	// Embedded Desktop Web Dashboard (with hot-reload support if static assets exist on disk)
+	mux.Handle("/", web.Handler(s.cfg.DataDir))
 
 	return mux
 }
@@ -374,7 +374,8 @@ func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
 		if err := s.manager.SaveState(); err != nil {
 			log.Printf("Error saving session state prior to update restart: %v", err)
 		}
-		s.manager.CloseAllPTYs()
+		// Seamless zero-downtime restart: detach from PTY workers so child processes keep running uninterrupted
+		s.manager.DetachAllPTYs()
 
 		exePath, err := os.Executable()
 		if err != nil {
