@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRingBuffer_WriteAndTrim(t *testing.T) {
@@ -114,6 +115,9 @@ func TestManager_SaveAndRestoreState(t *testing.T) {
 	if s.Name != "Renamed Terminal" {
 		t.Fatalf("expected session name 'Renamed Terminal', got '%s'", s.Name)
 	}
+
+	// Allow background SaveState goroutine from RenameSession to complete before tmpDir cleanup
+	time.Sleep(100 * time.Millisecond)
 }
 
 func BenchmarkRingBuffer_WriteWhenFull(b *testing.B) {
