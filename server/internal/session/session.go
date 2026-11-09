@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -194,6 +195,15 @@ func (m *Manager) runDir() string {
 		d = config.GetDataDir()
 	}
 	rd := filepath.Join(d, "run")
+	// If path length would exceed UNIX domain socket limits (104 on macOS, 108 on Linux/Windows),
+	// fallback to standard temporary directory which is short (e.g. /tmp/orbit-run or os.TempDir())
+	if len(rd)+30 >= 100 {
+		if runtime.GOOS != "windows" {
+			rd = "/tmp/orbit-run"
+		} else {
+			rd = filepath.Join(os.TempDir(), "orbit-run")
+		}
+	}
 	_ = os.MkdirAll(rd, 0755)
 	return rd
 }
@@ -206,7 +216,11 @@ func (m *Manager) startPTY(sessionID, command, cwd string, cols, rows uint16) (p
 		rows = 30
 	}
 
-	sockPath := filepath.Join(m.runDir(), fmt.Sprintf("pty-%s.sock", sessionID))
+	shortID := sessionID
+	if len(shortID) > 16 {
+		shortID = shortID[:16]
+	}
+	sockPath := filepath.Join(m.runDir(), fmt.Sprintf("pty-%s.sock", shortID))
 
 	// Try spawning detached PTY worker
 	exePath, err := os.Executable()
@@ -485,6 +499,8 @@ func (m *Manager) RestoreSessions() error {
 					restoredCount++
 					log.Printf("[Session Restore] Reconnected to LIVE PTY Worker %s (%s) [PID %d] in %s", s.ID, s.Name, s.PID, s.Cwd)
 					continue
+				} else {
+					log.Printf("[Session Restore] Failed to reconnect to worker at %s: %v", st.SocketPath, dialErr)
 				}
 				// Stale socket, cleanup
 				_ = os.Remove(st.SocketPath)

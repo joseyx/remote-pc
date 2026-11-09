@@ -93,7 +93,19 @@ func TestSessionLifecycle(t *testing.T) {
 func TestSessionRestoreWithRemotePTY(t *testing.T) {
 	tempDir := t.TempDir()
 	stateFile := filepath.Join(tempDir, "sessions_state.json")
-	sockPath := filepath.Join(tempDir, "pty-test-sess-restore.sock")
+
+	var sockDir string
+	if runtime.GOOS != "windows" {
+		var err error
+		sockDir, err = os.MkdirTemp("/tmp", "sess-t-*")
+		if err != nil {
+			t.Fatalf("failed to create temp sock dir: %v", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	} else {
+		sockDir = tempDir
+	}
+	sockPath := filepath.Join(sockDir, "pty-test.sock")
 
 	shellCmd := "powershell.exe -NoLogo -NoProfile"
 	if runtime.GOOS != "windows" {
@@ -103,16 +115,36 @@ func TestSessionRestoreWithRemotePTY(t *testing.T) {
 	sessionID := "test-sess-restore-001"
 
 	// 1. Launch a standalone PTY worker
+	workerErrCh := make(chan error, 1)
 	go func() {
-		_ = pty.RunWorker(sessionID, sockPath, shellCmd, tempDir, 80, 24)
+		workerErrCh <- pty.RunWorker(sessionID, sockPath, shellCmd, tempDir, 80, 24)
 	}()
 
-	// Wait for worker socket to become active
-	for i := 0; i < 20; i++ {
+	t.Cleanup(func() {
+		rp, err := pty.DialRemotePTY(sessionID, sockPath, 500*time.Millisecond)
+		if err == nil {
+			_ = rp.Close()
+		}
+	})
+
+	// Wait for worker socket to become active and ready for connections
+	var preCheck *pty.RemotePTY
+	for i := 0; i < 40; i++ {
 		time.Sleep(100 * time.Millisecond)
-		if _, err := os.Stat(sockPath); err == nil {
+		select {
+		case err := <-workerErrCh:
+			t.Fatalf("worker exited early: %v", err)
+		default:
+		}
+		var err error
+		preCheck, err = pty.DialRemotePTY(sessionID, sockPath, 200*time.Millisecond)
+		if err == nil {
+			_ = preCheck.Detach()
 			break
 		}
+	}
+	if preCheck == nil {
+		t.Fatalf("worker failed to start and accept connections at %s within 4s", sockPath)
 	}
 
 	// 2. Prepare state file pointing to this worker socket

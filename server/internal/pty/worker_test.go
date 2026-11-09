@@ -12,7 +12,19 @@ import (
 
 func TestWorkerSpawnAndReconnect(t *testing.T) {
 	tempDir := t.TempDir()
-	sockPath := filepath.Join(tempDir, "test-worker.sock")
+
+	var sockDir string
+	if runtime.GOOS != "windows" {
+		var err error
+		sockDir, err = os.MkdirTemp("/tmp", "pty-t-*")
+		if err != nil {
+			t.Fatalf("failed to create temp sock dir: %v", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	} else {
+		sockDir = tempDir
+	}
+	sockPath := filepath.Join(sockDir, "test.sock")
 
 	shellCmd := "powershell.exe -NoLogo -NoProfile"
 	if runtime.GOOS != "windows" {
@@ -31,9 +43,14 @@ func TestWorkerSpawnAndReconnect(t *testing.T) {
 	// Wait for socket to become available
 	var client1 *RemotePTY
 	var err error
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		time.Sleep(100 * time.Millisecond)
-		client1, err = DialRemotePTY(sessionID, sockPath, 500*time.Millisecond)
+		select {
+		case wErr := <-workerErrCh:
+			t.Fatalf("worker failed early: %v", wErr)
+		default:
+		}
+		client1, err = DialRemotePTY(sessionID, sockPath, 300*time.Millisecond)
 		if err == nil {
 			break
 		}

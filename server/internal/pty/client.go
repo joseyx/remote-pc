@@ -216,6 +216,16 @@ func (rp *RemotePTY) Close() error {
 
 	// Tell worker to cleanly terminate ConPTY and child
 	_ = WriteControlFrame(rp.conn, &ControlMsg{Type: "close"})
+
+	// Give worker time to handle close frame and terminate child gracefully before abruptly tearing down connection
+	_ = rp.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	buf := make([]byte, 64)
+	for {
+		_, err := rp.conn.Read(buf)
+		if err != nil {
+			break
+		}
+	}
 	return rp.conn.Close()
 }
 
