@@ -1116,7 +1116,11 @@ func (s *Server) handleCreateBubble(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteBubble(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	s.manager.DeleteBubbleSessions(id)
+	bubblePath := ""
+	if b, ok := s.bubbleMgr.GetBubble(id); ok && b != nil {
+		bubblePath = b.Path
+	}
+	s.manager.DeleteBubbleSessions(id, bubblePath)
 	if err := s.bubbleMgr.DeleteBubble(id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -727,36 +727,59 @@ async function confirmDeleteBubble() {
     // 3. Immediate toast notification
     showToast(`⏳ Eliminando "${deletingBubbleName}" y limpiando recursos...`);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
     try {
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        const res = await fetch(`/api/bubbles/${deletingBubbleId}`, { method: 'DELETE', headers });
+        const res = await fetch(`/api/bubbles/${deletingBubbleId}`, {
+            method: 'DELETE',
+            headers,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         if (res.ok) {
             showToast(`✅ Worktree "${deletingBubbleName}" eliminado exitosamente.`);
-            currentBubble = null;
-            document.getElementById('active-bubble-container').style.display = 'none';
-            document.getElementById('workspace-empty-view').style.display = 'flex';
+            
+            // Immediately remove from in-memory bubbles array
+            allBubbles = allBubbles.filter(b => b.id !== deletingBubbleId);
+            
+            // If current bubble is the one being deleted, switch back to empty view
+            if (currentBubble && currentBubble.id === deletingBubbleId) {
+                currentBubble = null;
+                const activeCont = document.getElementById('active-bubble-container');
+                if (activeCont) activeCont.style.display = 'none';
+                const emptyView = document.getElementById('workspace-empty-view');
+                if (emptyView) emptyView.style.display = 'flex';
+            }
+
+            // Immediately re-render sidebar so card disappears cleanly
+            renderBubblesList();
+
+            // Background sync with backend
             await fetchBubbles();
         } else {
             const errText = await res.text();
-            if (delBtn) {
-                delBtn.disabled = false;
-                delBtn.innerHTML = originalBtnHtml;
-            }
-            if (devBtn) devBtn.disabled = false;
-            if (previewBtn) previewBtn.disabled = false;
             if (cardEl) cardEl.classList.remove('is-deleting');
             appAlert("Error al eliminar worktree: " + errText, "Error", "❌");
         }
     } catch (e) {
+        clearTimeout(timeoutId);
+        if (cardEl) cardEl.classList.remove('is-deleting');
+        if (e.name === 'AbortError') {
+            appAlert("La eliminación de la bubble tardó demasiado tiempo en el servidor.", "Tiempo agotado", "⚠️");
+        } else {
+            appAlert("Error de red: " + e, "Error de Red", "❌");
+        }
+    } finally {
         if (delBtn) {
             delBtn.disabled = false;
             delBtn.innerHTML = originalBtnHtml;
         }
         if (devBtn) devBtn.disabled = false;
         if (previewBtn) previewBtn.disabled = false;
-        if (cardEl) cardEl.classList.remove('is-deleting');
-        appAlert("Error de red: " + e, "Error de Red", "❌");
     }
 }
 
