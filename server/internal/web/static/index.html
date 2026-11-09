@@ -2010,7 +2010,7 @@
     </div>
 
     <!-- Command Palette Modal (Ctrl+K) -->
-    <div id="command-palette-modal" class="modal" onclick="if(event.target===this) closeCommandPalette()" style="align-items: flex-start; padding-top: 12vh;">
+    <div id="command-palette-modal" class="modal-overlay" onclick="if(event.target===this) closeCommandPalette()" style="display: none; align-items: flex-start; padding-top: 12vh; z-index: 10000;">
         <div class="cmd-palette-content">
             <div class="cmd-palette-header">
                 <span class="cmd-palette-icon">⌘</span>
