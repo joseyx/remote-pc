@@ -3,7 +3,7 @@
 
 #define MyAppName "Orbit"
 #ifndef MyAppVersion
-#define MyAppVersion "1.7.0"
+#define MyAppVersion "1.8.0"
 #endif
 #define MyAppPublisher "Orbit"
 #define MyAppExeName "orbit.exe"

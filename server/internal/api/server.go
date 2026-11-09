@@ -156,8 +156,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/plugins/{id}/config", s.withAuth(s.handleUpdatePluginConfig))
 	mux.HandleFunc("POST /api/plugins/groq-whisper/transcribe", s.withAuth(s.handleGroqWhisperTranscribe))
 
-	// Embedded Desktop Web Dashboard
-	mux.Handle("/", web.Handler())
+	// Embedded Desktop Web Dashboard (with hot-reload support if static assets exist on disk)
+	mux.Handle("/", web.Handler(s.cfg.DataDir))
 
 	return mux
 }
@@ -281,7 +281,7 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 		Version:      s.version,
 		Hostname:     hostname,
 		Port:         s.cfg.Port,
-		LanIps:       getLANIPs(),
+		LanIps:       getLANIPsCached(),
 		AuthToken:    curToken,
 		Uptime:       uptimeStr,
 		StartedAt:    s.startedAt,
@@ -374,7 +374,8 @@ func (s *Server) handleSystemUpdate(w http.ResponseWriter, r *http.Request) {
 		if err := s.manager.SaveState(); err != nil {
 			log.Printf("Error saving session state prior to update restart: %v", err)
 		}
-		s.manager.CloseAllPTYs()
+		// Seamless zero-downtime restart: detach from PTY workers so child processes keep running uninterrupted
+		s.manager.DetachAllPTYs()
 
 		exePath, err := os.Executable()
 		if err != nil {
@@ -645,6 +646,31 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 	conns := s.manager.ListConnections()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(conns)
+}
+
+var (
+	cachedLANIPs     []string
+	cachedLANIPsTime time.Time
+	cachedLANIPsMu   sync.RWMutex
+)
+
+func getLANIPsCached() []string {
+	cachedLANIPsMu.RLock()
+	if time.Since(cachedLANIPsTime) < 30*time.Second && cachedLANIPs != nil {
+		ips := cachedLANIPs
+		cachedLANIPsMu.RUnlock()
+		return ips
+	}
+	cachedLANIPsMu.RUnlock()
+
+	cachedLANIPsMu.Lock()
+	defer cachedLANIPsMu.Unlock()
+	if time.Since(cachedLANIPsTime) < 30*time.Second && cachedLANIPs != nil {
+		return cachedLANIPs
+	}
+	cachedLANIPs = getLANIPs()
+	cachedLANIPsTime = time.Now()
+	return cachedLANIPs
 }
 
 func getLANIPs() []string {
