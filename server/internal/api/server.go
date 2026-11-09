@@ -281,7 +281,7 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 		Version:      s.version,
 		Hostname:     hostname,
 		Port:         s.cfg.Port,
-		LanIps:       getLANIPs(),
+		LanIps:       getLANIPsCached(),
 		AuthToken:    curToken,
 		Uptime:       uptimeStr,
 		StartedAt:    s.startedAt,
@@ -645,6 +645,31 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 	conns := s.manager.ListConnections()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(conns)
+}
+
+var (
+	cachedLANIPs     []string
+	cachedLANIPsTime time.Time
+	cachedLANIPsMu   sync.RWMutex
+)
+
+func getLANIPsCached() []string {
+	cachedLANIPsMu.RLock()
+	if time.Since(cachedLANIPsTime) < 30*time.Second && cachedLANIPs != nil {
+		ips := cachedLANIPs
+		cachedLANIPsMu.RUnlock()
+		return ips
+	}
+	cachedLANIPsMu.RUnlock()
+
+	cachedLANIPsMu.Lock()
+	defer cachedLANIPsMu.Unlock()
+	if time.Since(cachedLANIPsTime) < 30*time.Second && cachedLANIPs != nil {
+		return cachedLANIPs
+	}
+	cachedLANIPs = getLANIPs()
+	cachedLANIPsTime = time.Now()
+	return cachedLANIPs
 }
 
 func getLANIPs() []string {
