@@ -3,6 +3,22 @@
    ========================================== */
 
 /* Command Palette Modal (Ctrl+K) */
+#command-palette-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: none;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 12vh;
+}
+
 .cmd-palette-content {
     background-color: var(--bg-surface);
     border: 1px solid var(--border-muted);

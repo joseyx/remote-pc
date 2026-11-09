@@ -3,6 +3,22 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.8.1] - 2026-11-09
+
+### 🐛 Correcciones (Bug Fixes)
+- **Eliminación del Espacio Vacío Bajo el Sidebar**:
+  - Corrección de `#command-palette-modal` en `modals.css` e `index.html` configurándolo con `position: fixed; inset: 0; z-index: 10000; display: none;`, eliminándolo del flujo del layout flexbox del `body` para que el contenedor principal y el sidebar se extiendan de forma continua y completa hasta el borde inferior de la ventana.
+- **Segmented Control y Visualización de Opciones de Orden**:
+  - Reemplazo de la barra de ordenamiento en el sidebar por un *segmented control* uniforme (`flex: 1`, `min-width: 0`), eliminando el texto estático `Orden:` redundante y ajustando el espaciado para que `A-Z`, `Prioridad`, `Estado` y `Manual` se muestren completos sin recorte ni desbordamiento.
+  - Inclusión de atributos de accesibilidad `role="group"` y `aria-label="Criterio de ordenamiento de tareas"`.
+
+### ⚡ Optimización y Rendimiento (Performance)
+- **Scroll del Sidebar a 60 FPS con Aceleración por GPU**:
+  - Incorporación de `contain: content;`, `overscroll-behavior-y: contain;` y `will-change: scroll-position;` en `.bubble-list`.
+  - Acotación de transiciones en `.bubble-card` a propiedades específicas (`background-color`, `border-color`, `transform`, `box-shadow`) junto con contención de layout (`contain: layout style;`) y aceleración `transform: translateZ(0)`, eliminando tirones y reflows del hilo principal al desplazar el cursor sobre las tarjetas.
+
+---
+
 ## [1.8.0] - 2026-11-09
 
 ### ✨ Nuevas Funcionalidades (Features)
