@@ -54,7 +54,6 @@ function isSessionRunning(sessionId) {
 function scheduleTerminalReconnect(sessionId) {
     if (termReconnectTimer || !sessionId) return;
     const delay = Math.min(TERM_RECONNECT_BASE_MS * Math.pow(2, termReconnectAttempts), TERM_RECONNECT_MAX_MS);
-    termReconnectAttempts++;
     termReconnectTimer = setTimeout(() => {
         termReconnectTimer = null;
         if (!activeBubbleSession || activeBubbleSession.id !== sessionId) return;
@@ -62,6 +61,7 @@ function scheduleTerminalReconnect(sessionId) {
         // Never yank the user out of Git/Preview/Calendar for a background reconnect:
         // ensureActiveTerminalConnected() picks it up when the terminal tab is shown again.
         if (activeTab !== 'terminal') return;
+        termReconnectAttempts++; // only attempts that actually run count towards the backoff
         connectToSession(sessionId);
     }, delay);
 }
@@ -478,6 +478,7 @@ function connectToSession(sessionId) {
     if (currentConnectedSessionId === sessionId && termObj && termWs && termWs.readyState === WebSocket.OPEN) {
         return;
     }
+    if (currentConnectedSessionId !== sessionId) termReconnectAttempts = 0;
     currentConnectedSessionId = sessionId;
     lastSentCols = 0;
     lastSentRows = 0;

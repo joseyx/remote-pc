@@ -17,6 +17,17 @@
     justify-content: center;
     align-items: flex-start;
     padding-top: 12vh;
+    /* Opened/closed with inline `display` (not .open): opt out of the .modal-overlay hidden state,
+       otherwise Ctrl+K shows an invisible, unclickable palette that steals keyboard focus. */
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* The universal app dialog also toggles inline `display` and animates its own inline
+   opacity/pointer-events, so it must not inherit the .open-driven visibility toggle. */
+#modal-custom-dialog {
+    visibility: visible;
 }
 
 .cmd-palette-content {
