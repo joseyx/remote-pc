@@ -662,7 +662,15 @@ function updateBubbleHeaderUI() {
 // Switch Workspace Tabs
 function switchWorkspaceTab(tab) {
     if (tab === 'term') tab = 'terminal';
+    const prevTab = activeTab;
     activeTab = tab;
+
+    // A hidden Preview iframe (same-site localhost dev app) keeps running its HMR/timers on Orbit's
+    // renderer thread. Entering the tab reloads it from the URL input anyway, so unload it on leave.
+    if (prevTab === 'preview' && tab !== 'preview') {
+        const frame = document.getElementById('preview-iframe');
+        if (frame && frame.getAttribute('src') !== 'about:blank') frame.src = 'about:blank';
+    }
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
 
@@ -673,7 +681,11 @@ function switchWorkspaceTab(tab) {
     if (pane) pane.classList.add('active');
 
     if (tab === 'terminal') {
-        setTimeout(fitActiveTerminal, 100);
+        setTimeout(() => {
+            // Picks up a background reconnect that was deferred while another tab was shown.
+            if (typeof ensureActiveTerminalConnected === 'function') ensureActiveTerminalConnected();
+            fitActiveTerminal();
+        }, 100);
     } else if (tab === 'preview') {
         reloadPreviewFrame();
     } else if (tab === 'git') {

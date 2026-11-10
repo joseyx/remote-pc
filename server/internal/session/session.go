@@ -434,21 +434,28 @@ func (m *Manager) closeAllPTYsInternal(killWorkers bool) {
 func (m *Manager) SaveState() error {
 	m.saveMu.Lock()
 	defer m.saveMu.Unlock()
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.saveStateLocked()
-}
 
-func (m *Manager) saveStateLocked() error {
 	if m.statePath == "" {
 		return nil
 	}
 
+	// Snapshot under the manager lock, but do the encoding and disk I/O after releasing it:
+	// holding m.mu during WriteFile/Rename (slow on Windows with AV scanning) stalls
+	// GetSession/ListSessions/RegisterConnection for every WebSocket and API poll.
+	m.mu.RLock()
+	list, buffers := m.snapshotLocked()
+	m.mu.RUnlock()
+
+	return m.writeState(list, buffers)
+}
+
+// snapshotLocked copies the persistable fields and a bounded history tail of every session.
+// Caller must hold m.mu (read or write).
+func (m *Manager) snapshotLocked() ([]StoredSession, [][]byte) {
 	list := make([]StoredSession, 0, len(m.sessions))
+	buffers := make([][]byte, 0, len(m.sessions))
 	for _, s := range m.sessions {
 		s.mu.RLock()
-		// Limit saved history buffer to 64KB per session to keep JSON agile, lightweight and fast
-		buf := s.buffer.Tail(64 * 1024)
 		st := StoredSession{
 			ID:         s.ID,
 			Name:       s.Name,
@@ -458,13 +465,22 @@ func (m *Manager) saveStateLocked() error {
 			Role:       s.Role,
 			Cols:       s.Cols,
 			Rows:       s.Rows,
-			BufferB64:  base64.StdEncoding.EncodeToString(buf),
 			CreatedAt:  s.CreatedAt,
 			SocketPath: s.SocketPath,
 			WorkerPID:  s.WorkerPID,
 		}
 		s.mu.RUnlock()
+		// Limit saved history buffer to 64KB per session to keep JSON agile, lightweight and fast.
+		// The ring buffer has its own mutex, so no session lock is needed here.
+		buffers = append(buffers, s.buffer.Tail(64*1024))
 		list = append(list, st)
+	}
+	return list, buffers
+}
+
+func (m *Manager) writeState(list []StoredSession, buffers [][]byte) error {
+	for i := range list {
+		list[i].BufferB64 = base64.StdEncoding.EncodeToString(buffers[i])
 	}
 
 	data, err := json.Marshal(list)
@@ -678,10 +694,16 @@ func (s *Session) waitLoop() {
 	}
 }
 
+// WriteInput forwards user input to the PTY.
+// The session lock is only held to read IsRunning: the PTY write itself can block (e.g. a large
+// paste while the child isn't draining stdin), and holding s.mu across it would make a pending
+// Resize/Subscribe block readLoop's broadcast and ListSessions, freezing the whole API.
+// s.pty is immutable after construction and the PTY implementations are safe for concurrent Close.
 func (s *Session) WriteInput(data []byte) error {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if !s.IsRunning {
+	running := s.IsRunning
+	s.mu.RUnlock()
+	if !running {
 		return errors.New("session is not running")
 	}
 	_, err := s.pty.Write(data)
@@ -692,11 +714,10 @@ func (s *Session) Resize(cols, rows uint16) error {
 	s.mu.Lock()
 	s.Cols = cols
 	s.Rows = rows
+	running := s.IsRunning
 	s.mu.Unlock()
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if !s.IsRunning {
+	if !running {
 		return errors.New("session is not running")
 	}
 	return s.pty.Resize(cols, rows)
@@ -708,13 +729,21 @@ func (s *Session) GetHistory() []byte {
 	return s.buffer.Bytes()
 }
 
+// subscribeReplayMaxBytes caps the history replayed to a newly attached client.
+// The browser keeps only a few thousand lines of scrollback, so replaying the full 2 MB ring
+// buffer made xterm.js parse megabytes on every terminal switch, delaying the echo of keystrokes.
+const subscribeReplayMaxBytes = 512 * 1024
+
+// subscriberChanSize is the number of output chunks buffered per client before chunks are dropped.
+const subscriberChanSize = 256
+
 func (s *Session) Subscribe() (chan []byte, []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ch := make(chan []byte, 100)
+	ch := make(chan []byte, subscriberChanSize)
 	s.listeners[ch] = struct{}{}
-	history := s.buffer.Bytes()
+	history := s.buffer.Tail(subscribeReplayMaxBytes)
 	return ch, history
 }
 

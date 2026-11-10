@@ -83,8 +83,9 @@ async function fetchSessions() {
                 updateBubbleSessionsUI();
             }
         } else if (currentBubble && activeBubbleSession && (!termWs || termWs.readyState === WebSocket.CLOSED)) {
-            // Reconnect dropped terminal if server is healthy
-            connectToSession(activeBubbleSession.id);
+            // Reconnect dropped terminal if server is healthy (deduplicated with ws.onclose, backed off,
+            // skipped for exited sessions and never switches the active tab)
+            scheduleTerminalReconnect(activeBubbleSession.id);
         }
     } catch (e) {
         console.error("Error al obtener sessions:", e);
