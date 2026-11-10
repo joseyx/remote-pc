@@ -188,6 +188,13 @@ function copyTextFallback(text) {
 function setupTerminalKeyHandlers(term, getWs) {
     if (!term) return;
     term.attachCustomKeyEventHandler((e) => {
+        // Quake toggle (F12 / Ctrl+`): let it bubble to the global window shortcut. Otherwise xterm
+        // consumes F12 (sends \x1b[24~ to the shell and stops propagation), so the shortcut did
+        // nothing while focus was inside any terminal, including the Quake terminal itself.
+        if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.key === '`')) {
+            return false;
+        }
+
         // Zoom shortcuts: Ctrl + =, Ctrl + -, Ctrl + 0
         if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
             if (e.type === 'keydown') changeTerminalFontSize(1);
