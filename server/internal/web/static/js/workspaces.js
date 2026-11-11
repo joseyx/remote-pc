@@ -3,14 +3,21 @@
 // ==========================================
 
 let allWorkspaces = [];
+// Raw body of the last /api/workspaces response, so live refreshes only re-render the tabs on change.
+let lastWorkspacesJson = '';
 
-async function fetchWorkspaces() {
+// onlyIfChanged: used when a live "workspaces" hint arrives (a workspace added or edited in another
+// tab or device). Workspaces are not polled: listing them runs git for each one.
+async function fetchWorkspaces({ onlyIfChanged = false } = {}) {
     try {
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         const res = await fetch('/api/workspaces', { headers });
         if (!res.ok) return;
-        allWorkspaces = await res.json();
+        const json = await res.text();
+        if (onlyIfChanged && json === lastWorkspacesJson) return;
+        lastWorkspacesJson = json;
+        allWorkspaces = JSON.parse(json);
         renderWorkspaceTabs();
     } catch (e) {
         console.error("Error al obtener workspaces:", e);
@@ -57,30 +64,76 @@ function renderWorkspaceTabs() {
     container.innerHTML = html;
 }
 
+// Raw body of the last /api/bubbles response. The periodic poll compares against it so the sidebar
+// is only re-rendered when bubbles actually changed (the server returns them in a stable order).
+let lastBubblesJson = '';
+// When /api/bubbles last answered; the fallback poll uses it while live hints are flowing.
+let lastBubblesFetchAt = 0;
+// Set when a change was held back because a drag was in progress; applied when the drag ends.
+let bubblesRefreshDeferred = false;
+// Set when a sessions update had to skip re-rendering the sidebar during a drag.
+let sidebarRenderDeferred = false;
+// The poll, live hints and UI actions can overlap and their responses arrive out of order: each
+// request gets a number and a response older than the last one applied is dropped.
+let bubblesRequestSeq = 0;
+let bubblesAppliedSeq = 0;
+
 // Fetch Bubbles
-async function fetchBubbles() {
+// onlyIfChanged: used by the periodic poll and live hints to pick up bubbles created or updated outside
+// this page (MCP agents, other browser tabs, the Android app) without re-rendering the sidebar when
+// nothing changed. Without it (UI actions) the response is always applied, which also corrects any
+// optimistic local change the server rejected.
+async function fetchBubbles({ onlyIfChanged = false } = {}) {
     try {
         if (!allWorkspaces || allWorkspaces.length === 0) {
             await fetchWorkspaces();
         }
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const seq = ++bubblesRequestSeq;
         const res = await fetch('/api/bubbles', { headers });
         if (!res.ok) return;
-        allBubbles = await res.json();
+        const json = await res.text();
+        if (seq < bubblesAppliedSeq) return; // a newer response was already applied
+        lastBubblesFetchAt = Date.now();
+        if (onlyIfChanged) {
+            if (json === lastBubblesJson) {
+                bubblesAppliedSeq = seq;
+                return;
+            }
+            if (draggedBubbleId) {
+                // Re-rendering would cancel the drag: apply the change when it ends.
+                bubblesRefreshDeferred = true;
+                return;
+            }
+        }
+        bubblesAppliedSeq = seq;
+        lastBubblesJson = json;
+        allBubbles = JSON.parse(json);
         allBubbles.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
-        renderBubblesList();
-        // If a bubble was active, update its status
+        // Keep the open bubble in sync, or close it if it was deleted elsewhere
         if (currentBubble) {
             const updated = allBubbles.find(b => b.id === currentBubble.id);
             if (updated) {
                 currentBubble = updated;
                 updateBubbleHeaderUI();
+            } else {
+                showWorkspaceEmptyView();
             }
         }
+        renderBubblesList();
     } catch (e) {
         console.error("Error al obtener bubbles:", e);
     }
+}
+
+// Clears the selection and shows the empty workspace view (the open bubble no longer exists).
+function showWorkspaceEmptyView() {
+    currentBubble = null;
+    const activeCont = document.getElementById('active-bubble-container');
+    if (activeCont) activeCont.style.display = 'none';
+    const emptyView = document.getElementById('workspace-empty-view');
+    if (emptyView) emptyView.style.display = 'flex';
 }
 
 let filterOnlyWithTerminals = false;
@@ -494,6 +547,15 @@ function onBubbleDragEnd(e) {
         el.classList.remove('dragging', 'drag-over');
     });
     draggedBubbleId = null;
+    // Apply what was held back during the drag (also when it was cancelled without a drop)
+    if (bubblesRefreshDeferred) {
+        bubblesRefreshDeferred = false;
+        sidebarRenderDeferred = false;
+        fetchBubbles(); // always applies and re-renders, covering deferred session changes too
+    } else if (sidebarRenderDeferred) {
+        sidebarRenderDeferred = false;
+        renderBubblesList();
+    }
 }
 
 async function onBubbleDrop(e, targetBubbleId) {
@@ -760,11 +822,7 @@ async function confirmDeleteBubble() {
             
             // If current bubble is the one being deleted, switch back to empty view
             if (currentBubble && currentBubble.id === deletingBubbleId) {
-                currentBubble = null;
-                const activeCont = document.getElementById('active-bubble-container');
-                if (activeCont) activeCont.style.display = 'none';
-                const emptyView = document.getElementById('workspace-empty-view');
-                if (emptyView) emptyView.style.display = 'flex';
+                showWorkspaceEmptyView();
             }
 
             // Immediately re-render sidebar so card disappears cleanly
