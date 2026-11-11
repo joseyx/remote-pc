@@ -38,6 +38,8 @@ type Manager struct {
 	// onChange is notified after anything that changes the bubble list or a bubble's state, so the
 	// Cockpit can refresh at once instead of waiting for its next poll. It must not block.
 	onChange atomic.Pointer[func()]
+	// onWorkspacesChange is notified after the workspace list changes. It must not block.
+	onWorkspacesChange atomic.Pointer[func()]
 }
 
 func NewManager(dataDir ...string) *Manager {
@@ -189,6 +191,7 @@ func resolveWorkspaceRepo(ws *WorkspaceInfo) {
 }
 
 func (m *Manager) AddWorkspace(ws WorkspaceInfo) error {
+	defer m.notifyWorkspacesChange()
 	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -222,6 +225,7 @@ func (m *Manager) AddWorkspace(ws WorkspaceInfo) error {
 }
 
 func (m *Manager) UpdateWorkspace(id string, ws WorkspaceInfo) error {
+	defer m.notifyWorkspacesChange()
 	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -277,6 +281,7 @@ func (m *Manager) UpdateWorkspace(id string, ws WorkspaceInfo) error {
 }
 
 func (m *Manager) LinkRepo(workspaceID, repoURL string) error {
+	defer m.notifyWorkspacesChange()
 	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -329,6 +334,7 @@ func (m *Manager) LinkRepo(workspaceID, repoURL string) error {
 }
 
 func (m *Manager) DeleteWorkspace(id string) error {
+	defer m.notifyWorkspacesChange()
 	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -593,6 +599,17 @@ func (m *Manager) SetOnChange(fn func()) {
 
 func (m *Manager) notifyChange() {
 	if fn := m.onChange.Load(); fn != nil {
+		(*fn)()
+	}
+}
+
+// SetOnWorkspacesChange registers the callback notified after workspaces are added, edited or removed.
+func (m *Manager) SetOnWorkspacesChange(fn func()) {
+	m.onWorkspacesChange.Store(&fn)
+}
+
+func (m *Manager) notifyWorkspacesChange() {
+	if fn := m.onWorkspacesChange.Load(); fn != nil {
 		(*fn)()
 	}
 }
@@ -1299,7 +1316,6 @@ func (m *Manager) resolveGitRepo(b *Bubble) string {
 }
 
 func (m *Manager) DeleteBubble(id string) error {
-	defer m.notifyChange()
 	m.mu.Lock()
 
 	b, ok := m.bubbles[id]
@@ -1325,6 +1341,8 @@ func (m *Manager) DeleteBubble(id string) error {
 	delete(m.metadata, id)
 	_ = m.saveMetadataLocked()
 	m.mu.Unlock()
+	// Notify now: the worktree cleanup below can take up to 20 s and the bubble is already gone.
+	m.notifyChange()
 
 	bashPath := `C:\Program Files\Git\bin\bash.exe`
 	if _, err := os.Stat(bashPath); err != nil {

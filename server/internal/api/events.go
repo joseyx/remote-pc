@@ -11,17 +11,18 @@ import (
 // Live change notifications for the Cockpit.
 //
 // Pages used to learn about bubbles and sessions created elsewhere (MCP agents, other tabs, the
-// Android app) only through polling. The hub pushes a tiny {"type":"bubbles"} or
-// {"type":"sessions"} hint over /ws/events whenever one of them changes, and the page re-fetches
-// the list it already knows how to render. Hints carry no data, so a dropped or duplicated one is
+// Android app) only through polling. The hub pushes a tiny {"type":"bubbles"}, {"type":"sessions"}
+// or {"type":"workspaces"} hint over /ws/events whenever one of them changes, and the page
+// re-fetches the list it already knows how to render. Hints carry no data, so a dropped or duplicated one is
 // harmless: the next hint, or the page's fallback poll, catches up.
 //
 // Only lifecycle changes publish hints (create, rename, delete, exit, metadata, dev server state);
 // terminal output never does, so typing and streaming output cost nothing here.
 
 const (
-	eventKindBubbles  = "bubbles"
-	eventKindSessions = "sessions"
+	eventKindBubbles    = "bubbles"
+	eventKindSessions   = "sessions"
+	eventKindWorkspaces = "workspaces"
 
 	// eventCoalesceWindow merges the bursts a single operation produces (creating a bubble rescans
 	// worktrees, then spawns its terminal) into one hint per kind.

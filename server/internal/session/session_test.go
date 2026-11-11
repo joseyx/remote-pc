@@ -396,9 +396,14 @@ func TestManager_NotifiesLifecycleChangesButNotOutput(t *testing.T) {
 	waitFor(1, "create")
 
 	// Terminal output must never publish a change.
-	_ = s.WriteInput([]byte(echo))
+	if err := s.WriteInput([]byte(echo)); err != nil {
+		t.Fatalf("WriteInput failed: %v", err)
+	}
 	deadline := time.Now().Add(10 * time.Second)
-	for !bytes.Contains(s.GetHistory(), []byte("NOTIFY_OUTPUT")) && time.Now().Before(deadline) {
+	for !bytes.Contains(s.GetHistory(), []byte("NOTIFY_OUTPUT")) {
+		if time.Now().After(deadline) {
+			t.Fatal("terminal output never arrived")
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	time.Sleep(200 * time.Millisecond)

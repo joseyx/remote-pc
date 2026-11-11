@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"orbit/internal/bubble"
 )
 
 // drain collects every hint that arrives on ch within d.
@@ -104,5 +106,20 @@ func TestEventsWebSocket_PushesBubbleChangesAndRequiresAuth(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("hint took %v", elapsed)
+	}
+}
+
+func TestEvents_WorkspaceChangesPublishWorkspacesAndBubbles(t *testing.T) {
+	srv, cleanup := setupTestServer(t)
+	defer cleanup()
+	ch := srv.events.subscribe()
+	defer srv.events.unsubscribe(ch)
+
+	if err := srv.bubbleMgr.AddWorkspace(bubble.WorkspaceInfo{ID: "evt-test", Name: "Evt Test", Type: "evt-test", BasePath: t.TempDir()}); err != nil {
+		t.Fatalf("AddWorkspace failed: %v", err)
+	}
+	joined := strings.Join(drain(ch, 500*time.Millisecond), ",")
+	if !strings.Contains(joined, `{"type":"workspaces"}`) || !strings.Contains(joined, `{"type":"bubbles"}`) {
+		t.Fatalf("adding a workspace should publish workspaces and bubbles hints, got %q", joined)
 	}
 }

@@ -51,15 +51,25 @@ function handleWindowResize() {
 
 
 let lastSessionsSnapshot = '';
+// Responses of the poll and of live hints can arrive out of order; older ones are dropped.
+let sessionsRequestSeq = 0;
+let sessionsAppliedSeq = 0;
+// Last name the server reported for each session. A change there (renamed from another tab, device
+// or agent) replaces the locally cached name, while a local rename the server has not applied yet
+// is kept, because the server keeps reporting the same old name until then.
+const serverSessionNames = {};
 
 async function fetchSessions() {
     try {
         if (document.hidden) return; // Skip heavy DOM operations when tab is backgrounded
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const seq = ++sessionsRequestSeq;
         const res = await fetch('/api/sessions', { headers });
         if (!res.ok) return;
         const sessions = await res.json();
+        if (seq < sessionsAppliedSeq) return; // a newer response was already applied
+        sessionsAppliedSeq = seq;
         sessions.sort((a, b) => {
             const tA = new Date(a.createdAt || 0).getTime();
             const tB = new Date(b.createdAt || 0).getTime();
@@ -70,15 +80,26 @@ async function fetchSessions() {
         // Compute fingerprint to avoid destroying and recreating DOM every 3.5s when unchanged
         const snapshot = sessions.map(s => `${s.id}:${s.isRunning}:${s.role}:${s.name || ''}:${s.bubbleId || ''}`).join('|');
         allSessions = sessions;
+        let namesChanged = false;
         allSessions.forEach(s => {
-            if (s.name && !sessionCustomNames[s.id]) {
-                sessionCustomNames[s.id] = s.name;
+            if (!s.name) return;
+            if (serverSessionNames[s.id] !== s.name) {
+                serverSessionNames[s.id] = s.name;
+                if (sessionCustomNames[s.id] !== s.name) {
+                    sessionCustomNames[s.id] = s.name;
+                    namesChanged = true;
+                }
             }
         });
+        if (namesChanged) {
+            try { localStorage.setItem('term_custom_names', JSON.stringify(sessionCustomNames)); } catch (e) {}
+        }
 
         if (snapshot !== lastSessionsSnapshot) {
             lastSessionsSnapshot = snapshot;
-            renderBubblesList();
+            // Re-rendering the sidebar would cancel a drag-reorder in progress: do it when the drag ends
+            if (draggedBubbleId) sidebarRenderDeferred = true;
+            else renderBubblesList();
             if (currentBubble) {
                 updateBubbleSessionsUI();
             }
@@ -208,6 +229,7 @@ let eventsReconnectAttempts = 0;
 const eventRefreshState = {
     bubbles: { running: false, again: false },
     sessions: { running: false, again: false },
+    workspaces: { running: false, again: false },
 };
 
 function isEventsChannelLive() {
@@ -227,13 +249,14 @@ function connectEventsChannel() {
     ws.onopen = () => {
         eventsReconnectAttempts = 0;
         // Catch up on anything that changed while the channel was down (e.g. a daemon restart).
+        refreshFromEvent('workspaces');
         refreshFromEvent('bubbles');
         refreshFromEvent('sessions');
     };
     ws.onmessage = (ev) => {
         let msg;
         try { msg = JSON.parse(ev.data); } catch (e) { return; }
-        if (msg && (msg.type === 'bubbles' || msg.type === 'sessions')) refreshFromEvent(msg.type);
+        if (msg && Object.prototype.hasOwnProperty.call(eventRefreshState, msg.type)) refreshFromEvent(msg.type);
     };
     ws.onclose = () => {
         if (eventsWs !== ws) return;
@@ -254,6 +277,7 @@ async function refreshFromEvent(kind) {
         do {
             st.again = false;
             if (kind === 'bubbles') await fetchBubbles({ onlyIfChanged: true });
+            else if (kind === 'workspaces') await fetchWorkspaces({ onlyIfChanged: true });
             else await fetchSessions();
         } while (st.again);
     } finally {

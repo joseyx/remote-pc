@@ -65,6 +65,7 @@ func NewServer(cfg *config.Config, manager *session.Manager, version string) *Se
 	events := newEventHub(eventCoalesceWindow)
 	bubbleMgr := bubble.NewManager(dataDir)
 	bubbleMgr.SetOnChange(func() { events.publish(eventKindBubbles) })
+	bubbleMgr.SetOnWorkspacesChange(func() { events.publish(eventKindWorkspaces) })
 	manager.SetOnChange(func() { events.publish(eventKindSessions) })
 
 	return &Server{
