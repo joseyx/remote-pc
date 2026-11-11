@@ -185,5 +185,8 @@ async function refreshAll() {
 async function fetchServerAndSessions() {
     if (document.hidden) return; // Do not poll when tab is hidden
     await fetchServerInfo();
+    // Bubbles can be created or changed outside this page (MCP agents, other tabs, the Android app).
+    // Fetched before sessions so a new bubble's terminal is listed under it in the same pass.
+    await fetchBubbles({ onlyIfChanged: true });
     await fetchSessions();
 }

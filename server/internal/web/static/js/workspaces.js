@@ -57,8 +57,14 @@ function renderWorkspaceTabs() {
     container.innerHTML = html;
 }
 
+// Raw body of the last /api/bubbles response. The periodic poll compares against it so the sidebar
+// is only re-rendered when bubbles actually changed (the server returns them in a stable order).
+let lastBubblesJson = '';
+
 // Fetch Bubbles
-async function fetchBubbles() {
+// onlyIfChanged: used by the periodic poll to pick up bubbles created or updated outside this page
+// (MCP agents, other browser tabs, the Android app) without re-rendering the sidebar every few seconds.
+async function fetchBubbles({ onlyIfChanged = false } = {}) {
     try {
         if (!allWorkspaces || allWorkspaces.length === 0) {
             await fetchWorkspaces();
@@ -67,7 +73,14 @@ async function fetchBubbles() {
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
         const res = await fetch('/api/bubbles', { headers });
         if (!res.ok) return;
-        allBubbles = await res.json();
+        const json = await res.text();
+        if (onlyIfChanged && (json === lastBubblesJson || draggedBubbleId)) {
+            // Unchanged, or a drag-reorder is in progress: re-rendering would cancel it, so the
+            // change is applied on the next poll instead (lastBubblesJson stays as it was).
+            return;
+        }
+        lastBubblesJson = json;
+        allBubbles = JSON.parse(json);
         allBubbles.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
         renderBubblesList();
         // If a bubble was active, update its status
