@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,6 +34,12 @@ type Manager struct {
 	devCmds        map[string]*exec.Cmd
 	metaPath       string
 	metadata       map[string]BubbleMeta
+
+	// onChange is notified after anything that changes the bubble list or a bubble's state, so the
+	// Cockpit can refresh at once instead of waiting for its next poll. It must not block.
+	onChange atomic.Pointer[func()]
+	// onWorkspacesChange is notified after the workspace list changes. It must not block.
+	onWorkspacesChange atomic.Pointer[func()]
 }
 
 func NewManager(dataDir ...string) *Manager {
@@ -184,6 +191,8 @@ func resolveWorkspaceRepo(ws *WorkspaceInfo) {
 }
 
 func (m *Manager) AddWorkspace(ws WorkspaceInfo) error {
+	defer m.notifyWorkspacesChange()
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -216,6 +225,8 @@ func (m *Manager) AddWorkspace(ws WorkspaceInfo) error {
 }
 
 func (m *Manager) UpdateWorkspace(id string, ws WorkspaceInfo) error {
+	defer m.notifyWorkspacesChange()
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -270,6 +281,8 @@ func (m *Manager) UpdateWorkspace(id string, ws WorkspaceInfo) error {
 }
 
 func (m *Manager) LinkRepo(workspaceID, repoURL string) error {
+	defer m.notifyWorkspacesChange()
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -321,6 +334,8 @@ func (m *Manager) LinkRepo(workspaceID, repoURL string) error {
 }
 
 func (m *Manager) DeleteWorkspace(id string) error {
+	defer m.notifyWorkspacesChange()
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -577,6 +592,28 @@ func (m *Manager) ListBubbles() []*Bubble {
 	return res
 }
 
+// SetOnChange registers the callback notified after bubbles or workspaces change.
+func (m *Manager) SetOnChange(fn func()) {
+	m.onChange.Store(&fn)
+}
+
+func (m *Manager) notifyChange() {
+	if fn := m.onChange.Load(); fn != nil {
+		(*fn)()
+	}
+}
+
+// SetOnWorkspacesChange registers the callback notified after workspaces are added, edited or removed.
+func (m *Manager) SetOnWorkspacesChange(fn func()) {
+	m.onWorkspacesChange.Store(&fn)
+}
+
+func (m *Manager) notifyWorkspacesChange() {
+	if fn := m.onWorkspacesChange.Load(); fn != nil {
+		(*fn)()
+	}
+}
+
 func (m *Manager) GetBubble(id string) (*Bubble, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -630,6 +667,7 @@ func (m *Manager) applyMetadata(b *Bubble) {
 }
 
 func (m *Manager) UpdateBubbleMetadata(id string, priority *string, customRank *int, taskStatus *string) error {
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -655,6 +693,7 @@ func (m *Manager) UpdateBubbleMetadata(id string, priority *string, customRank *
 }
 
 func (m *Manager) ReorderBubbles(orderedIDs []string) error {
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -671,6 +710,7 @@ func (m *Manager) ReorderBubbles(orderedIDs []string) error {
 }
 
 func (m *Manager) ScanExistingBubbles() {
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -905,6 +945,7 @@ func (m *Manager) registerDiscoveredWorktree(wsType WorkspaceType, repoPath, wtP
 }
 
 func (m *Manager) CreateBubble(req CreateBubbleRequest) (*Bubble, error) {
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1300,6 +1341,8 @@ func (m *Manager) DeleteBubble(id string) error {
 	delete(m.metadata, id)
 	_ = m.saveMetadataLocked()
 	m.mu.Unlock()
+	// Notify now: the worktree cleanup below can take up to 20 s and the bubble is already gone.
+	m.notifyChange()
 
 	bashPath := `C:\Program Files\Git\bin\bash.exe`
 	if _, err := os.Stat(bashPath); err != nil {
@@ -1347,6 +1390,7 @@ func (m *Manager) DeleteBubble(id string) error {
 }
 
 func (m *Manager) StartDevServer(id string) (int, error) {
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1423,12 +1467,14 @@ func (m *Manager) StartDevServer(id string) (int, error) {
 		b.DevPid = 0
 		delete(m.devCmds, id)
 		m.mu.Unlock()
+		m.notifyChange()
 	}()
 
 	return b.DevPid, nil
 }
 
 func (m *Manager) StopDevServer(id string) error {
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1456,6 +1502,7 @@ func (m *Manager) StopDevServer(id string) error {
 }
 
 func (m *Manager) SetDevRunning(id string, running bool, pid int) {
+	defer m.notifyChange() // deferred first, so it runs after the unlock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if b, ok := m.bubbles[id]; ok && b != nil {

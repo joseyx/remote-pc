@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -362,4 +363,62 @@ func TestSubscribe_ReplayIsCappedToTail(t *testing.T) {
 	if cap(ch) != subscriberChanSize {
 		t.Fatalf("expected subscriber channel size %d, got %d", subscriberChanSize, cap(ch))
 	}
+}
+
+func TestManager_NotifiesLifecycleChangesButNotOutput(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr := NewManager(512, filepath.Join(tempDir, "sessions_state.json"))
+	mgr.SetDataDir(tempDir)
+	defer mgr.CloseAllPTYs()
+
+	var changes atomic.Int32
+	mgr.SetOnChange(func() { changes.Add(1) })
+	waitFor := func(want int32, what string) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for changes.Load() < want && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if got := changes.Load(); got != want {
+			t.Fatalf("%s: want %d change notifications, got %d", what, want, got)
+		}
+	}
+
+	shellCmd, echo, exit := "powershell.exe -NoLogo -NoProfile", "Write-Output NOTIFY_OUTPUT\r\n", "exit\r\n"
+	if runtime.GOOS != "windows" {
+		shellCmd, echo, exit = "/bin/sh", "echo NOTIFY_OUTPUT\n", "exit\n"
+	}
+
+	s, err := mgr.CreateBubbleSession("Notify", tempDir, shellCmd, "bubble-n", "shell", 100, 30)
+	if err != nil {
+		t.Fatalf("CreateBubbleSession failed: %v", err)
+	}
+	waitFor(1, "create")
+
+	// Terminal output must never publish a change.
+	if err := s.WriteInput([]byte(echo)); err != nil {
+		t.Fatalf("WriteInput failed: %v", err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for !bytes.Contains(s.GetHistory(), []byte("NOTIFY_OUTPUT")) {
+		if time.Now().After(deadline) {
+			t.Fatal("terminal output never arrived")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	time.Sleep(200 * time.Millisecond)
+	waitFor(1, "output")
+
+	if err := mgr.RenameSession(s.ID, "Renamed"); err != nil {
+		t.Fatalf("RenameSession failed: %v", err)
+	}
+	waitFor(2, "rename")
+
+	_ = s.WriteInput([]byte(exit))
+	waitFor(3, "process exit")
+
+	if err := mgr.DeleteSession(s.ID); err != nil {
+		t.Fatalf("DeleteSession failed: %v", err)
+	}
+	waitFor(4, "delete")
 }
