@@ -60,6 +60,10 @@ function renderWorkspaceTabs() {
 // Raw body of the last /api/bubbles response. The periodic poll compares against it so the sidebar
 // is only re-rendered when bubbles actually changed (the server returns them in a stable order).
 let lastBubblesJson = '';
+// When /api/bubbles last answered; the fallback poll uses it while live hints are flowing.
+let lastBubblesFetchAt = 0;
+// Set when a change was held back because a drag was in progress; applied when the drag ends.
+let bubblesRefreshDeferred = false;
 
 // Fetch Bubbles
 // onlyIfChanged: used by the periodic poll to pick up bubbles created or updated outside this page
@@ -74,9 +78,11 @@ async function fetchBubbles({ onlyIfChanged = false } = {}) {
         const res = await fetch('/api/bubbles', { headers });
         if (!res.ok) return;
         const json = await res.text();
+        lastBubblesFetchAt = Date.now();
         if (onlyIfChanged && (json === lastBubblesJson || draggedBubbleId)) {
             // Unchanged, or a drag-reorder is in progress: re-rendering would cancel it, so the
-            // change is applied on the next poll instead (lastBubblesJson stays as it was).
+            // change is applied when the drag ends (lastBubblesJson stays as it was).
+            if (draggedBubbleId && json !== lastBubblesJson) bubblesRefreshDeferred = true;
             return;
         }
         lastBubblesJson = json;
@@ -507,6 +513,10 @@ function onBubbleDragEnd(e) {
         el.classList.remove('dragging', 'drag-over');
     });
     draggedBubbleId = null;
+    if (bubblesRefreshDeferred) {
+        bubblesRefreshDeferred = false;
+        fetchBubbles({ onlyIfChanged: true });
+    }
 }
 
 async function onBubbleDrop(e, targetBubbleId) {

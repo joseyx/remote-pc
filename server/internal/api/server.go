@@ -49,6 +49,7 @@ type Server struct {
 	obsidianMgr *obsidian.Manager
 	calendarMgr *calendar.Manager
 	pluginMgr   *plugin.Manager
+	events      *eventHub
 	startedAt   time.Time
 	version     string
 }
@@ -61,14 +62,20 @@ func NewServer(cfg *config.Config, manager *session.Manager, version string) *Se
 	pluginMgr := plugin.NewManager(dataDir)
 	plugin.SetGlobalManager(pluginMgr)
 
+	events := newEventHub(eventCoalesceWindow)
+	bubbleMgr := bubble.NewManager(dataDir)
+	bubbleMgr.SetOnChange(func() { events.publish(eventKindBubbles) })
+	manager.SetOnChange(func() { events.publish(eventKindSessions) })
+
 	return &Server{
 		cfg:         cfg,
 		manager:     manager,
 		vpnMgr:      vpn.NewManager(),
-		bubbleMgr:   bubble.NewManager(dataDir),
+		bubbleMgr:   bubbleMgr,
 		obsidianMgr: obsidian.NewManager(),
 		calendarMgr: calendar.NewManager(filepath.Join(dataDir, "calendar_notes")),
 		pluginMgr:   pluginMgr,
+		events:      events,
 		startedAt:   time.Now(),
 		version:     version,
 	}
@@ -102,6 +109,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /api/sessions/{id}", s.withAuth(s.handleRenameSession))
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.withAuth(s.handleDeleteSession))
 	mux.HandleFunc("/ws/session/{id}", s.handleWebSocket)
+	mux.HandleFunc("GET /ws/events", s.withAuth(s.handleEventsWebSocket))
 
 	// VPN Controls
 	mux.HandleFunc("GET /api/vpn/status", s.withAuth(s.handleVPNStatus))

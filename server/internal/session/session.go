@@ -72,6 +72,7 @@ type Session struct {
 	buffer    *ringBuffer
 	listeners map[chan []byte]struct{}
 	onWrite   func()
+	onExit    func() // notified once the process exits
 }
 
 // ringBuffer stores recent terminal history up to maxSize, plus the terminal modes set by all
@@ -206,6 +207,10 @@ type Manager struct {
 	dataDir      string
 	stopTicker   chan struct{}
 	dirty        atomic.Bool
+
+	// onChange is notified after a session is created, renamed, deleted or exits (never on output),
+	// so the Cockpit can refresh its terminal list at once. It must not block.
+	onChange atomic.Pointer[func()]
 }
 
 func NewManager(maxHistoryKB int, statePath ...string) *Manager {
@@ -363,6 +368,7 @@ func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string,
 		buffer:     newRingBuffer(m.maxHistoryKB * 1024),
 		listeners:  make(map[chan []byte]struct{}),
 		onWrite:    func() { m.dirty.Store(true) },
+		onExit:     m.notifyChange,
 	}
 
 	m.mu.Lock()
@@ -370,6 +376,7 @@ func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string,
 	m.dirty.Store(true)
 	m.mu.Unlock()
 	go func() { _ = m.SaveState() }()
+	m.notifyChange()
 
 	// Start asynchronous output pump
 	go s.readLoop()
@@ -377,6 +384,17 @@ func (m *Manager) CreateBubbleSession(name, cwd, command, bubbleID, role string,
 	go s.waitLoop()
 
 	return s, nil
+}
+
+// SetOnChange registers the callback notified when the session list changes.
+func (m *Manager) SetOnChange(fn func()) {
+	m.onChange.Store(&fn)
+}
+
+func (m *Manager) notifyChange() {
+	if fn := m.onChange.Load(); fn != nil {
+		(*fn)()
+	}
 }
 
 func (m *Manager) RenameSession(id, newName string) error {
@@ -392,6 +410,7 @@ func (m *Manager) RenameSession(id, newName string) error {
 	m.dirty.Store(true)
 	m.mu.Unlock()
 	go func() { _ = m.SaveState() }()
+	m.notifyChange()
 	return nil
 }
 
@@ -419,6 +438,7 @@ func (m *Manager) DeleteBubbleSessions(bubbleID string, bubblePath string) {
 	m.dirty.Store(true)
 	m.mu.Unlock()
 	go func() { _ = m.SaveState() }()
+	m.notifyChange()
 }
 
 func (m *Manager) CloseAllPTYs() {
@@ -588,6 +608,7 @@ func (m *Manager) RestoreSessions() error {
 						buffer:     ring,
 						listeners:  make(map[chan []byte]struct{}),
 						onWrite:    func() { m.dirty.Store(true) },
+						onExit:     m.notifyChange,
 					}
 
 					m.sessions[s.ID] = s
@@ -649,6 +670,7 @@ func (m *Manager) RestoreSessions() error {
 			buffer:     ring,
 			listeners:  make(map[chan []byte]struct{}),
 			onWrite:    func() { m.dirty.Store(true) },
+			onExit:     m.notifyChange,
 		}
 
 		m.sessions[s.ID] = s
@@ -705,6 +727,9 @@ func (s *Session) waitLoop() {
 	s.IsRunning = false
 	s.ExitCode = code
 	s.mu.Unlock()
+	if s.onExit != nil {
+		s.onExit()
+	}
 
 	if err != nil {
 		log.Printf("[Session %s] process exited with error: %v", s.ID, err)
@@ -854,6 +879,7 @@ func (m *Manager) DeleteSession(id string) error {
 	m.dirty.Store(true)
 	m.mu.Unlock()
 	go func() { _ = m.SaveState() }()
+	m.notifyChange()
 
 	return s.Close()
 }
