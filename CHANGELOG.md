@@ -3,6 +3,30 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.8.2] - 2026-11-10
+
+### ⚡ Optimización y Rendimiento (Performance)
+- **Lag intermitente de la UI y del tecleo en terminales** (#52, #53):
+  - Los overlays de modales cerrados (`.modal-overlay`) pasan a `visibility: hidden` después del fade-out. Antes quedaban con `opacity: 0` y `backdrop-filter: blur(4px)`, y Chromium seguía recomponiendo 16 capas a pantalla completa en cada repintado de la terminal.
+  - El pulso del indicador de terminal activa (`pulseGlow`) se repite 3 veces en vez de `infinite`.
+  - La terminal Quake ya no se pinta mientras está cerrada y se desliza con `transform` en lugar de `top`. Se eliminaron los desenfoques invisibles del panel de stats y de los selectores, y el `translateZ(0)` de cada `.bubble-card`.
+  - El historial que se reenvía a un cliente WebSocket nuevo queda limitado a **512 KB**. Antes se reenviaban los 2 MB del ring buffer en cada cambio de terminal, y el eco del tecleo quedaba en cola detrás de ese parseo.
+  - Un único mecanismo de reconexión de terminales (`scheduleTerminalReconnect`) con backoff exponencial de 1 s a 10 s. El polling de sesiones ya no reconstruye xterm ni cambia al usuario a la pestaña Terminal.
+  - El divisor del split actualiza el layout una vez por frame, y `fit()` y el resize del PTY solo se ejecutan al detenerse o al soltar.
+  - `WriteInput` y `Resize` ya no retienen el lock de la sesión durante I/O bloqueante del PTY. `SaveState` serializa y escribe el archivo de estado después de liberar el lock del manager.
+  - El iframe de Preview se descarga al salir de su pestaña y el polling de stats se pausa con la página oculta.
+- **Worker PTY y transporte** (#49):
+  - Recorte por bloques del ring buffer del worker, retransmisión de la salida antes de actualizar el backlog, escritura atómica de frames IPC y lectura sin locks en `RemotePTY.Read`.
+  - Las pulsaciones de teclado se envían como frames binarios por WebSocket, sin `JSON.stringify` ni `json.Unmarshal`.
+
+### 🐛 Correcciones (Bug Fixes)
+- **Modos de terminal preservados al reproducir historial** (#52): el ring buffer rastrea los modos DEC privados y `Tail()` antepone las secuencias que los restauran. El pegado delimitado (`?2004h`), el cursor oculto, la pantalla alternativa y el mouse se conservan al volver a una sesión larga o tras reiniciar el daemon. Antes, pegar varias líneas en Claude Code podía enviar cada salto de línea como un Enter.
+- **Terminal Quake con F12 / Ctrl+`** desde dentro de una terminal: xterm consumía la tecla y el atajo global nunca se ejecutaba (#52).
+- **Paleta Ctrl+K** visible otra vez: se abría con opacidad 0 y capturaba el foco (#52).
+- **Borrado de worktrees en workspaces multi-repo**: se resuelve el repo git real del worktree y la UI ya no se cuelga (#50).
+
+---
+
 ## [1.8.1] - 2026-11-09
 
 ### 🐛 Correcciones (Bug Fixes)
