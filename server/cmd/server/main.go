@@ -28,7 +28,7 @@ import (
 	"orbit/internal/web"
 )
 
-var Version = "1.8.2"
+var Version = "1.8.3"
 
 func main() {
 	exePath, err := os.Executable()

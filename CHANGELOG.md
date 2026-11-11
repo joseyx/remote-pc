@@ -3,6 +3,21 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.8.3] - 2026-11-11
+
+### 🐛 Correcciones (Bug Fixes)
+- **Bubbles y terminales cambiadas fuera de la página aparecen al instante** (#58, #57): antes, una bubble creada o modificada por un agente vía MCP (`create_workspace_bubble`, `update_workspace_bubble`), por otra pestaña o por la app Android no aparecía en el Cockpit hasta recargar.
+  - Nuevo canal `/ws/events` (autenticado con el token): el daemon avisa `bubbles`, `sessions` o `workspaces` cuando cambia esa lista (creación, borrado, renombrado, status, prioridad, servidor dev, salida de una terminal). Los avisos no llevan datos y nunca se envían por la salida de las terminales.
+  - Los avisos de una ráfaga se agrupan en una ventana de 100 ms. Sin páginas conectadas el daemon no hace ningún trabajo extra.
+  - La página vuelve a pedir solo la lista afectada y solo redibuja si cambió. Los cambios se ven en ~110 ms (~200 ms para workspaces). Con la página inactiva no hay redibujados.
+  - Si el canal se cae, la página se reconecta con backoff de 1 s a 10 s, se pone al día al reconectar y, mientras tanto, el polling consulta las bubbles. Con el canal activo, el polling solo las vuelve a consultar cada 15 s como respaldo.
+  - Un aviso durante el arrastre de una bubble ya no cancela el reordenamiento: el sidebar se actualiza al soltar.
+  - Las respuestas viejas que llegan tarde se descartan para no pisar una lista más nueva.
+  - Los renombrados de terminal hechos desde otra pestaña, dispositivo o agente se muestran, y un renombrado local que el servidor aún no aplicó se conserva.
+  - Si se borra desde fuera la bubble abierta, su panel se cierra y se muestra la vista vacía. Al borrar una bubble, el aviso sale sin esperar la limpieza del worktree.
+
+---
+
 ## [1.8.2] - 2026-11-10
 
 ### ⚡ Optimización y Rendimiento (Performance)
