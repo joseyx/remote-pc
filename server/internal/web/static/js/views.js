@@ -15,6 +15,9 @@ let selectedDiffFile = null;
 
 // Live Preview Controls
 function reloadPreviewFrame() {
+    // Deferred callers (e.g. dev server start) may fire after the user left the tab;
+    // the iframe is unloaded while hidden and reloaded on entering Preview.
+    if (activeTab !== 'preview') return;
     const iframe = document.getElementById('preview-iframe');
     const url = document.getElementById('preview-url-input').value;
     iframe.src = url;

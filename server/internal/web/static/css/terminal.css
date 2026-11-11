@@ -61,7 +61,7 @@
     color: var(--accent);
     font-size: 8px;
     margin-right: -2px;
-    animation: pulseGlow 2s infinite ease-in-out;
+    animation: pulseGlow 2s 3 ease-in-out;
 }
 
 @keyframes pulseGlow {
@@ -292,23 +292,27 @@
 /* Quake Terminal Dropdown (F12) */
 #quake-terminal-container {
     position: fixed;
-    top: -55vh;
+    top: 0;
     left: 0;
     right: 0;
     height: 46vh;
-    background: rgba(10, 15, 29, 0.96);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(10, 15, 29, 0.98);
     border-bottom: 2px solid var(--accent);
     box-shadow: 0 16px 45px rgba(0, 0, 0, 0.92);
     z-index: 2500;
     display: flex;
     flex-direction: column;
-    transition: top 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Slide with transform (compositor only) instead of animating top (layout every frame),
+       and skip painting entirely while closed. */
+    transform: translateY(-120%);
+    visibility: hidden;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.28s;
 }
 
 #quake-terminal-container.open {
-    top: 0;
+    transform: none;
+    visibility: visible;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0s;
 }
 
 .quake-header {

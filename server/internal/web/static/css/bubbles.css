@@ -361,7 +361,6 @@
     flex-direction: column;
     gap: 3px;
     min-width: 175px;
-    backdrop-filter: blur(12px);
     animation: fadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -449,13 +448,12 @@
     gap: 6px;
     position: relative;
     contain: layout style;
-    transform: translateZ(0);
 }
 
 .bubble-card:hover {
     border-color: var(--border-muted);
     background-color: var(--bg-elevated);
-    transform: translateY(-1px) translateZ(0);
+    transform: translateY(-1px);
 }
 
 .bubble-card.active {

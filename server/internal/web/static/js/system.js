@@ -340,6 +340,7 @@ let ramHistory = [];
 const MAX_RAM_HISTORY = 30;
 
 async function fetchSystemStats(force = false) {
+    if (document.hidden && !force) return; // Do not poll when tab is hidden
     try {
         const modal = document.getElementById('modal-sys-stats');
         const isModalOpen = modal && modal.classList.contains('open') && modal.style.display !== 'none';
@@ -371,7 +372,11 @@ function updateSystemStatsUI(stats) {
 
         const redis = stats.services.find(s => s.id === 'redis');
         if (redis && redis.running) srvs.push('<span style="color: var(--green);" title="Redis activo (:6379)">● Redis</span>');
-        srvEl.innerHTML = srvs.join(' · ');
+        const srvHtml = srvs.join(' · ');
+        if (srvEl.dataset.lastHtml !== srvHtml) {
+            srvEl.dataset.lastHtml = srvHtml;
+            srvEl.innerHTML = srvHtml;
+        }
     }
 
     // Record history point
