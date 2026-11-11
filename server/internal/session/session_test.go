@@ -370,6 +370,14 @@ func TestManager_NotifiesLifecycleChangesButNotOutput(t *testing.T) {
 	mgr := NewManager(512, filepath.Join(tempDir, "sessions_state.json"))
 	mgr.SetDataDir(tempDir)
 	defer mgr.CloseAllPTYs()
+	// RenameSession, DeleteSession and the process exit save the state file from background
+	// goroutines. Turn saving off (after any save in flight finishes) before t.TempDir is removed,
+	// or a late write makes the removal fail with "directory not empty".
+	t.Cleanup(func() {
+		mgr.saveMu.Lock()
+		mgr.statePath = ""
+		mgr.saveMu.Unlock()
+	})
 
 	var changes atomic.Int32
 	mgr.SetOnChange(func() { changes.Add(1) })
