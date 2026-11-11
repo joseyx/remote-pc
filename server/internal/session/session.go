@@ -74,11 +74,13 @@ type Session struct {
 	onWrite   func()
 }
 
-// ringBuffer stores recent terminal history up to maxSize
+// ringBuffer stores recent terminal history up to maxSize, plus the terminal modes set by all
+// the output it ever received (see modes.go), so a replay of its tail can restore them.
 type ringBuffer struct {
 	buf     *bytes.Buffer
 	maxSize int
 	mu      sync.Mutex
+	modes   modeTracker
 }
 
 func newRingBuffer(maxSize int) *ringBuffer {
@@ -91,6 +93,9 @@ func newRingBuffer(maxSize int) *ringBuffer {
 func (rb *ringBuffer) Write(p []byte) (int, error) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
+
+	// Track modes on the full chunk, before any of it is trimmed away.
+	rb.modes.feed(p)
 
 	origLen := len(p)
 	if len(p) > rb.maxSize {
@@ -148,27 +153,38 @@ func (rb *ringBuffer) Bytes() []byte {
 	return res
 }
 
+// Tail returns the last maxBytes of history (cut at a line boundary, with an attribute reset
+// when cut) prefixed with the sequences that restore the terminal modes active right before
+// it. Feeding the result to a fresh terminal leaves it in the session's current modes even
+// when the sequences that set them were trimmed away; the prefix is a few dozen bytes at most.
 func (rb *ringBuffer) Tail(maxBytes int) []byte {
 	rb.mu.Lock()
-	defer rb.mu.Unlock()
-
 	b := rb.buf.Bytes()
-	if len(b) <= maxBytes {
-		res := make([]byte, len(b))
-		copy(res, b)
-		return res
+	start := 0
+	if len(b) > maxBytes {
+		start = len(b) - maxBytes
+		idx := bytes.IndexByte(b[start:], '\n')
+		if idx != -1 && (start+idx+1) < len(b) {
+			start = start + idx + 1
+		}
+	}
+	body := make([]byte, len(b)-start)
+	copy(body, b[start:])
+	current := rb.modes.snapshot()
+	rb.mu.Unlock()
+
+	// Scanning the copy outside the lock keeps readLoop's writes from waiting on it.
+	prefix := modeReplayPrefix(current, body)
+	if start == 0 && len(prefix) == 0 {
+		return body
 	}
 
-	start := len(b) - maxBytes
-	idx := bytes.IndexByte(b[start:], '\n')
-	if idx != -1 && (start+idx+1) < len(b) {
-		start = start + idx + 1
+	res := make([]byte, 0, 4+len(prefix)+len(body))
+	if start > 0 {
+		res = append(res, "\x1b[0m"...)
 	}
-
-	res := make([]byte, len(b)-start+4)
-	copy(res[:4], []byte("\x1b[0m"))
-	copy(res[4:], b[start:])
-	return res
+	res = append(res, prefix...)
+	return append(res, body...)
 }
 
 type ClientConnection struct {
@@ -431,6 +447,7 @@ func (m *Manager) closeAllPTYsInternal(killWorkers bool) {
 	}
 }
 
+// SaveState persists every session's metadata and a bounded history tail to the state file.
 func (m *Manager) SaveState() error {
 	m.saveMu.Lock()
 	defer m.saveMu.Unlock()
@@ -478,6 +495,8 @@ func (m *Manager) snapshotLocked() ([]StoredSession, [][]byte) {
 	return list, buffers
 }
 
+// writeState encodes a snapshot and atomically replaces the state file (temp file + rename).
+// It touches no shared state, so it runs without holding m.mu.
 func (m *Manager) writeState(list []StoredSession, buffers [][]byte) error {
 	for i := range list {
 		list[i].BufferB64 = base64.StdEncoding.EncodeToString(buffers[i])
@@ -710,6 +729,8 @@ func (s *Session) WriteInput(data []byte) error {
 	return err
 }
 
+// Resize records the new terminal size and applies it to the PTY, without holding the session
+// lock across the PTY call (see WriteInput).
 func (s *Session) Resize(cols, rows uint16) error {
 	s.mu.Lock()
 	s.Cols = cols
@@ -737,6 +758,8 @@ const subscribeReplayMaxBytes = 512 * 1024
 // subscriberChanSize is the number of output chunks buffered per client before chunks are dropped.
 const subscriberChanSize = 256
 
+// Subscribe registers a new output listener and returns it with the history to replay first:
+// the last subscribeReplayMaxBytes of output, prefixed with the active terminal modes.
 func (s *Session) Subscribe() (chan []byte, []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -353,7 +353,7 @@ func TestSubscribe_ReplayIsCappedToTail(t *testing.T) {
 	ch, history := s.Subscribe()
 	defer s.Unsubscribe(ch)
 
-	if len(history) > subscribeReplayMaxBytes+4 {
+	if len(history) > subscribeReplayMaxBytes+4 { // +4 for the attribute reset; no modes are set here
 		t.Fatalf("replay should be capped to %d bytes, got %d", subscribeReplayMaxBytes, len(history))
 	}
 	if !bytes.HasSuffix(history, []byte("LAST-LINE\n")) {
