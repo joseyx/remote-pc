@@ -30,24 +30,49 @@ func (rb *WorkerRingBuffer) Write(p []byte) (int, error) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
+	origLen := len(p)
+	if len(p) > rb.maxSize {
+		p = p[len(p)-rb.maxSize:]
+	}
+
+	// Headroom batch trimming: when full, trim at least 1/8th of buffer (min 64KB, max 256KB)
+	// to avoid re-allocating and copying 2MB on every subsequent keystroke/echo chunk.
 	if rb.buf.Len()+len(p) > rb.maxSize {
-		excess := (rb.buf.Len() + len(p)) - rb.maxSize
+		excess := (rb.buf.Len() + len(p)) - rb.maxSize + 4 // Account for ANSI reset
+		minTrim := rb.maxSize / 8
+		if minTrim < 64*1024 {
+			minTrim = 64 * 1024
+		}
+		if minTrim > 256*1024 {
+			minTrim = 256 * 1024
+		}
+		if minTrim > rb.maxSize/2 {
+			minTrim = rb.maxSize / 2
+		}
+
+		trimTarget := excess
+		if trimTarget < minTrim {
+			trimTarget = minTrim
+		}
+
 		b := rb.buf.Bytes()
-		if excess >= len(b) {
+		if trimTarget >= len(b) {
 			rb.buf.Reset()
 		} else {
-			idx := bytes.IndexByte(b[excess:], '\n')
+			idx := bytes.IndexByte(b[trimTarget:], '\n')
 			var remaining []byte
-			if idx != -1 && (excess+idx+1) < len(b) {
-				remaining = b[excess+idx+1:]
+			if idx != -1 && (trimTarget+idx+1) < len(b) {
+				remaining = b[trimTarget+idx+1:]
 			} else {
-				remaining = b[excess:]
+				remaining = b[trimTarget:]
 			}
 			rb.buf.Reset()
+			rb.buf.WriteString("\x1b[0m")
 			rb.buf.Write(remaining)
 		}
 	}
-	return rb.buf.Write(p)
+	rb.buf.Write(p)
+	return origLen, nil
 }
 
 func (rb *WorkerRingBuffer) Bytes() []byte {
@@ -162,8 +187,8 @@ func RunWorker(sessionID, socketPath, cmdStr, cwd string, cols, rows uint16) err
 			if n > 0 {
 				data := make([]byte, n)
 				copy(data, buf[:n])
-				w.ring.Write(data)
 
+				// Forward immediately to active client connection for minimum input-to-echo latency
 				w.connMu.Lock()
 				conn := w.activeConn
 				w.connMu.Unlock()
@@ -179,6 +204,9 @@ func RunWorker(sessionID, socketPath, cmdStr, cwd string, cols, rows uint16) err
 						w.connMu.Unlock()
 					}
 				}
+
+				// Append to local backlog ring buffer after forwarding
+				w.ring.Write(data)
 			}
 			if err != nil {
 				if !errors.Is(err, io.EOF) {

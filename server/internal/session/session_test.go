@@ -338,3 +338,28 @@ func TestSessionRestoreWithRemotePTY(t *testing.T) {
 		_ = rp.Close()
 	}
 }
+
+func TestSubscribe_ReplayIsCappedToTail(t *testing.T) {
+	s := &Session{
+		buffer:    newRingBuffer(2 * 1024 * 1024),
+		listeners: make(map[chan []byte]struct{}),
+	}
+	line := []byte(strings.Repeat("x", 99) + "\n")
+	for i := 0; i < 15000; i++ { // ~1.5 MB of history
+		_, _ = s.buffer.Write(line)
+	}
+	_, _ = s.buffer.Write([]byte("LAST-LINE\n"))
+
+	ch, history := s.Subscribe()
+	defer s.Unsubscribe(ch)
+
+	if len(history) > subscribeReplayMaxBytes+4 { // +4 for the attribute reset; no modes are set here
+		t.Fatalf("replay should be capped to %d bytes, got %d", subscribeReplayMaxBytes, len(history))
+	}
+	if !bytes.HasSuffix(history, []byte("LAST-LINE\n")) {
+		t.Fatalf("replay must contain the most recent output")
+	}
+	if cap(ch) != subscriberChanSize {
+		t.Fatalf("expected subscriber channel size %d, got %d", subscriberChanSize, cap(ch))
+	}
+}

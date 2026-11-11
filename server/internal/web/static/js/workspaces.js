@@ -662,7 +662,15 @@ function updateBubbleHeaderUI() {
 // Switch Workspace Tabs
 function switchWorkspaceTab(tab) {
     if (tab === 'term') tab = 'terminal';
+    const prevTab = activeTab;
     activeTab = tab;
+
+    // A hidden Preview iframe (same-site localhost dev app) keeps running its HMR/timers on Orbit's
+    // renderer thread. Entering the tab reloads it from the URL input anyway, so unload it on leave.
+    if (prevTab === 'preview' && tab !== 'preview') {
+        const frame = document.getElementById('preview-iframe');
+        if (frame && frame.getAttribute('src') !== 'about:blank') frame.src = 'about:blank';
+    }
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
 
@@ -673,7 +681,11 @@ function switchWorkspaceTab(tab) {
     if (pane) pane.classList.add('active');
 
     if (tab === 'terminal') {
-        setTimeout(fitActiveTerminal, 100);
+        setTimeout(() => {
+            // Picks up a background reconnect that was deferred while another tab was shown.
+            if (typeof ensureActiveTerminalConnected === 'function') ensureActiveTerminalConnected();
+            fitActiveTerminal();
+        }, 100);
     } else if (tab === 'preview') {
         reloadPreviewFrame();
     } else if (tab === 'git') {
@@ -727,36 +739,59 @@ async function confirmDeleteBubble() {
     // 3. Immediate toast notification
     showToast(`⏳ Eliminando "${deletingBubbleName}" y limpiando recursos...`);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
     try {
         const token = serverInfo ? serverInfo.authToken : '';
         const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-        const res = await fetch(`/api/bubbles/${deletingBubbleId}`, { method: 'DELETE', headers });
+        const res = await fetch(`/api/bubbles/${deletingBubbleId}`, {
+            method: 'DELETE',
+            headers,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         if (res.ok) {
             showToast(`✅ Worktree "${deletingBubbleName}" eliminado exitosamente.`);
-            currentBubble = null;
-            document.getElementById('active-bubble-container').style.display = 'none';
-            document.getElementById('workspace-empty-view').style.display = 'flex';
+            
+            // Immediately remove from in-memory bubbles array
+            allBubbles = allBubbles.filter(b => b.id !== deletingBubbleId);
+            
+            // If current bubble is the one being deleted, switch back to empty view
+            if (currentBubble && currentBubble.id === deletingBubbleId) {
+                currentBubble = null;
+                const activeCont = document.getElementById('active-bubble-container');
+                if (activeCont) activeCont.style.display = 'none';
+                const emptyView = document.getElementById('workspace-empty-view');
+                if (emptyView) emptyView.style.display = 'flex';
+            }
+
+            // Immediately re-render sidebar so card disappears cleanly
+            renderBubblesList();
+
+            // Background sync with backend
             await fetchBubbles();
         } else {
             const errText = await res.text();
-            if (delBtn) {
-                delBtn.disabled = false;
-                delBtn.innerHTML = originalBtnHtml;
-            }
-            if (devBtn) devBtn.disabled = false;
-            if (previewBtn) previewBtn.disabled = false;
             if (cardEl) cardEl.classList.remove('is-deleting');
             appAlert("Error al eliminar worktree: " + errText, "Error", "❌");
         }
     } catch (e) {
+        clearTimeout(timeoutId);
+        if (cardEl) cardEl.classList.remove('is-deleting');
+        if (e.name === 'AbortError') {
+            appAlert("La eliminación de la bubble tardó demasiado tiempo en el servidor.", "Tiempo agotado", "⚠️");
+        } else {
+            appAlert("Error de red: " + e, "Error de Red", "❌");
+        }
+    } finally {
         if (delBtn) {
             delBtn.disabled = false;
             delBtn.innerHTML = originalBtnHtml;
         }
         if (devBtn) devBtn.disabled = false;
         if (previewBtn) previewBtn.disabled = false;
-        if (cardEl) cardEl.classList.remove('is-deleting');
-        appAlert("Error de red: " + e, "Error de Red", "❌");
     }
 }
 

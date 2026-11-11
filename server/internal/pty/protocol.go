@@ -34,18 +34,15 @@ func WriteFrame(w io.Writer, frameType byte, payload []byte) error {
 		return fmt.Errorf("payload size %d exceeds max frame size %d", payloadLen, MaxPayloadSize)
 	}
 
-	header := make([]byte, 5)
-	header[0] = frameType
-	binary.BigEndian.PutUint32(header[1:5], uint32(payloadLen))
-
-	if _, err := w.Write(header); err != nil {
-		return err
-	}
+	frame := make([]byte, 5+payloadLen)
+	frame[0] = frameType
+	binary.BigEndian.PutUint32(frame[1:5], uint32(payloadLen))
 	if payloadLen > 0 {
-		_, err := w.Write(payload)
-		return err
+		copy(frame[5:], payload)
 	}
-	return nil
+
+	_, err := w.Write(frame)
+	return err
 }
 
 // ReadFrame reads a single frame from the stream

@@ -139,3 +139,40 @@ func TestWorkerSpawnAndReconnect(t *testing.T) {
 		t.Errorf("socket file still exists after worker termination: %s", sockPath)
 	}
 }
+
+
+func TestWorkerRingBuffer_WriteAndTrim(t *testing.T) {
+	maxSize := 1024
+	rb := NewWorkerRingBuffer(maxSize)
+
+	data1 := []byte(strings.Repeat("Line of text data\n", 25))
+	n, err := rb.Write(data1)
+	if err != nil || n != len(data1) {
+		t.Fatalf("expected write %d bytes, got %d (err: %v)", len(data1), n, err)
+	}
+
+	data2 := []byte(strings.Repeat("Another line of long terminal output\n", 30))
+	_, err = rb.Write(data2)
+	if err != nil {
+		t.Fatalf("unexpected write error: %v", err)
+	}
+
+	buf := rb.Bytes()
+	if len(buf) > maxSize {
+		t.Fatalf("expected buffer size <= %d, got %d", maxSize, len(buf))
+	}
+}
+
+func BenchmarkWorkerRingBuffer_WriteWhenFull(b *testing.B) {
+	maxSize := 64 * 1024
+	rb := NewWorkerRingBuffer(maxSize)
+
+	seed := []byte(strings.Repeat("Echo command output 1234567890\n", 2000))
+	_, _ = rb.Write(seed)
+
+	b.ResetTimer()
+	chunk := []byte("keystroke\n")
+	for i := 0; i < b.N; i++ {
+		_, _ = rb.Write(chunk)
+	}
+}

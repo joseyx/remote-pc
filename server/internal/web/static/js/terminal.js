@@ -1,3 +1,14 @@
+const termTextEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+
+function sendTerminalInput(ws, data) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (termTextEncoder) {
+        ws.send(termTextEncoder.encode(data));
+    } else {
+        ws.send(data);
+    }
+}
+
 // ==========================================
 // Terminal Engine (XTerm, Split, Quake, Search)
 // ==========================================
@@ -23,6 +34,44 @@ let lastSentCols = 0;
 let lastSentRows = 0;
 let lastSentCols2 = 0;
 let lastSentRows2 = 0;
+
+// Single owner for primary-terminal reconnects (used by ws.onclose and the sessions poll).
+// Rebuilding the terminal replays history into xterm, so reconnects are deduplicated and backed off.
+let termReconnectTimer = null;
+let termReconnectAttempts = 0;
+const TERM_RECONNECT_BASE_MS = 1000;
+const TERM_RECONNECT_MAX_MS = 10000;
+
+function isTermWsAlive(ws) {
+    return !!ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
+}
+
+function isSessionRunning(sessionId) {
+    const sess = allSessions.find(s => s.id === sessionId);
+    return !sess || sess.isRunning !== false;
+}
+
+function scheduleTerminalReconnect(sessionId) {
+    if (termReconnectTimer || !sessionId) return;
+    const delay = Math.min(TERM_RECONNECT_BASE_MS * Math.pow(2, termReconnectAttempts), TERM_RECONNECT_MAX_MS);
+    termReconnectTimer = setTimeout(() => {
+        termReconnectTimer = null;
+        if (!activeBubbleSession || activeBubbleSession.id !== sessionId) return;
+        if (isTermWsAlive(termWs) || !isSessionRunning(sessionId)) return;
+        // Never yank the user out of Git/Preview/Calendar for a background reconnect:
+        // ensureActiveTerminalConnected() picks it up when the terminal tab is shown again.
+        if (activeTab !== 'terminal') return;
+        termReconnectAttempts++; // only attempts that actually run count towards the backoff
+        connectToSession(sessionId);
+    }, delay);
+}
+
+function ensureActiveTerminalConnected() {
+    if (!activeBubbleSession) return;
+    if (termObj && isTermWsAlive(termWs)) return;
+    if (!isSessionRunning(activeBubbleSession.id)) return;
+    connectToSession(activeBubbleSession.id);
+}
 
 
 
@@ -139,6 +188,13 @@ function copyTextFallback(text) {
 function setupTerminalKeyHandlers(term, getWs) {
     if (!term) return;
     term.attachCustomKeyEventHandler((e) => {
+        // Quake toggle (F12 / Ctrl+`): let it bubble to the global window shortcut. Otherwise xterm
+        // consumes F12 (sends \x1b[24~ to the shell and stops propagation), so the shortcut did
+        // nothing while focus was inside any terminal, including the Quake terminal itself.
+        if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.key === '`')) {
+            return false;
+        }
+
         // Zoom shortcuts: Ctrl + =, Ctrl + -, Ctrl + 0
         if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
             if (e.type === 'keydown') changeTerminalFontSize(1);
@@ -363,7 +419,8 @@ async function updateBubbleSessionsUI() {
         activeBubbleSession = targetSess;
         connectToSession(activeBubbleSession.id);
     } else {
-        if (currentConnectedSessionId !== activeBubbleSession.id || !termObj || !termWs || termWs.readyState !== WebSocket.OPEN) {
+        // Don't tear down a socket that is still CONNECTING: that rebuilt xterm and replayed history twice.
+        if (currentConnectedSessionId !== activeBubbleSession.id || !termObj || !isTermWsAlive(termWs)) {
             connectToSession(activeBubbleSession.id);
         }
     }
@@ -428,9 +485,14 @@ function connectToSession(sessionId) {
     if (currentConnectedSessionId === sessionId && termObj && termWs && termWs.readyState === WebSocket.OPEN) {
         return;
     }
+    if (currentConnectedSessionId !== sessionId) termReconnectAttempts = 0;
     currentConnectedSessionId = sessionId;
     lastSentCols = 0;
     lastSentRows = 0;
+    if (termReconnectTimer) {
+        clearTimeout(termReconnectTimer);
+        termReconnectTimer = null;
+    }
 
     if (termWs) {
         termWs.onopen = null;
@@ -508,11 +570,7 @@ function connectToSession(sessionId) {
         setTimeout(fitActiveTerminal, 250);
     });
 
-    termObj.onData(data => {
-        if (termWs && termWs.readyState === WebSocket.OPEN) {
-            termWs.send(JSON.stringify({ type: "input", data }));
-        }
-    });
+    termObj.onData(data => sendTerminalInput(termWs, data));
 
     const token = serverInfo ? serverInfo.authToken : '';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -522,6 +580,7 @@ function connectToSession(sessionId) {
     termWs.binaryType = 'arraybuffer';
 
     termWs.onopen = () => {
+        termReconnectAttempts = 0;
         fitActiveTerminal();
     };
 
@@ -551,11 +610,7 @@ function connectToSession(sessionId) {
                 try { termObj.writeln("\r\n\x1b[33m[Sesión cerrada]\x1b[0m"); } catch (e) {}
             } else {
                 try { termObj.writeln("\r\n\x1b[33m[Conexión perdida. Reconectando automáticamente...]\x1b[0m"); } catch (e) {}
-                setTimeout(() => {
-                    if (activeBubbleSession && activeBubbleSession.id === sessionId && (!termWs || termWs.readyState !== WebSocket.OPEN)) {
-                        connectToSession(sessionId);
-                    }
-                }, 2000);
+                scheduleTerminalReconnect(sessionId);
             }
         }
     };
@@ -688,23 +743,45 @@ function initSplitResizer() {
         showToast("Split restablecido al 50% / 50%");
     });
 
-    const onMoveDrag = (clientX, clientY) => {
-        if (!isDraggingSplit || !isSplitActive) return;
+    let dragRaf = 0;
+    let dragFitTimer = null;
+    let pendingX = 0;
+    let pendingY = 0;
+
+    const fitBothPanes = () => {
+        fitActiveTerminal();
+        fitSplitTerminal();
+    };
+
+    const applyPendingDrag = () => {
+        if (!isSplitActive) return;
         const rect = wrapper.getBoundingClientRect();
         let ratio;
         if (splitDirection === 'horizontal') {
-            const offset = clientX - rect.left;
-            ratio = offset / rect.width;
+            ratio = (pendingX - rect.left) / rect.width;
         } else {
-            const offset = clientY - rect.top;
-            ratio = offset / rect.height;
+            ratio = (pendingY - rect.top) / rect.height;
         }
 
         if (ratio < 0.15) ratio = 0.15;
         if (ratio > 0.85) ratio = 0.85;
 
         primaryRatio = ratio;
-        updateSplitDimensions();
+        updateSplitDimensions(true);
+    };
+
+    const onMoveDrag = (clientX, clientY) => {
+        if (!isDraggingSplit || !isSplitActive) return;
+        pendingX = clientX;
+        pendingY = clientY;
+        if (dragRaf) return;
+        dragRaf = requestAnimationFrame(() => {
+            dragRaf = 0;
+            if (!isDraggingSplit) return;
+            applyPendingDrag();
+            clearTimeout(dragFitTimer);
+            dragFitTimer = setTimeout(fitBothPanes, 150);
+        });
     };
 
     window.addEventListener('mousemove', (e) => {
@@ -720,12 +797,18 @@ function initSplitResizer() {
     const onEndDrag = () => {
         if (isDraggingSplit) {
             isDraggingSplit = false;
+            if (dragRaf) {
+                // Apply the last pointer position that was still waiting for a frame
+                cancelAnimationFrame(dragRaf);
+                dragRaf = 0;
+                applyPendingDrag();
+            }
+            clearTimeout(dragFitTimer);
             resizer.classList.remove('dragging');
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
             document.querySelectorAll('.xterm').forEach(el => el.style.pointerEvents = '');
-            fitActiveTerminal();
-            fitSplitTerminal();
+            fitBothPanes();
         }
     };
 
@@ -733,7 +816,7 @@ function initSplitResizer() {
     window.addEventListener('touchend', onEndDrag);
 }
 
-function updateSplitDimensions() {
+function updateSplitDimensions(skipFit = false) {
     if (!isSplitActive) return;
     const primaryPane = document.getElementById('term-pane-primary');
     const secondaryPane = document.getElementById('term-pane-secondary');
@@ -758,6 +841,7 @@ function updateSplitDimensions() {
         secondaryPane.style.width = '100%';
     }
 
+    if (skipFit) return;
     fitActiveTerminal();
     fitSplitTerminal();
 }
@@ -892,11 +976,7 @@ function connectToSplitSession(sessionId) {
         setTimeout(fitSplitTerminal, 250);
     });
 
-    termObj2.onData(data => {
-        if (termWs2 && termWs2.readyState === WebSocket.OPEN) {
-            termWs2.send(JSON.stringify({ type: "input", data }));
-        }
-    });
+    termObj2.onData(data => sendTerminalInput(termWs2, data));
 
     const token = serverInfo ? serverInfo.authToken : '';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1074,9 +1154,7 @@ function clearActiveTerminal() {
 }
 
 function sendTerminalKey(keyStr) {
-    if (termWs && termWs.readyState === WebSocket.OPEN) {
-        termWs.send(JSON.stringify({ type: "input", data: keyStr }));
-    }
+    sendTerminalInput(termWs, keyStr);
 }
 
 function handleMobileInputKey(e) {
@@ -1301,11 +1379,7 @@ async function initQuakeTerminal() {
         setupTerminalKeyHandlers(quakeTermObj, () => quakeTermWs);
         setupTerminalSelection(quakeTermObj, () => quakeTermWs);
 
-        quakeTermObj.onData(data => {
-            if (quakeTermWs && quakeTermWs.readyState === WebSocket.OPEN) {
-                quakeTermWs.send(JSON.stringify({ type: "input", data }));
-            }
-        });
+        quakeTermObj.onData(data => sendTerminalInput(quakeTermWs, data));
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/session/${quakeSessionId}?token=${encodeURIComponent(token)}`;
