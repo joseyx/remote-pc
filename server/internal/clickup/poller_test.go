@@ -146,7 +146,13 @@ func (n *fakeNotes) AddDailyTodoUnique(date, text, marker string) (bool, error) 
 	return true, nil
 }
 
+// newTestPoller builds a poller that also writes the daily note (most tests check the to-dos).
 func newTestPoller(t *testing.T, baseURL string, notes NoteSink, notified *int) (*Poller, *Store) {
+	t.Helper()
+	return newTestPollerWith(t, baseURL, notes, notified, true)
+}
+
+func newTestPollerWith(t *testing.T, baseURL string, notes NoteSink, notified *int, dailyNote bool) (*Poller, *Store) {
 	t.Helper()
 	oldGap := requestGap
 	requestGap = 0
@@ -160,7 +166,7 @@ func newTestPoller(t *testing.T, baseURL string, notes NoteSink, notified *int) 
 		Store: store,
 		Notes: notes,
 		Config: func() Config {
-			return Config{Enabled: true, Token: "pk_test", BaseURL: baseURL, Interval: DefaultInterval}
+			return Config{Enabled: true, Token: "pk_test", BaseURL: baseURL, Interval: DefaultInterval, DailyNote: dailyNote}
 		},
 		Notify:   func() { *notified++ },
 		NoteDate: func(time.Time) string { return "2026-11-26" },
@@ -216,7 +222,7 @@ func TestPollFindsMentionsOnceAndCachesThreads(t *testing.T) {
 		t.Errorf("to-dos must be written oldest first, got %s then %s", notes.calls[0].marker, notes.calls[1].marker)
 	}
 
-	all := store.Mentions(MentionFilter{IncludeAnswered: true})
+	all := store.Mentions(MentionFilter{IncludeResolved: true})
 	if len(all) != 3 {
 		t.Fatalf("stored %d mentions, want 3", len(all))
 	}

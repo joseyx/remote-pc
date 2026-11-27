@@ -3,6 +3,7 @@ package mcp
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,19 +17,21 @@ const clickupPluginID = "clickup"
 var ClickUpTools = []Tool{
 	{
 		Name: "get_clickup_mentions",
-		Description: "Devuelve lo que Orbit encontró en ClickUp dirigido al usuario: menciones, respuestas en hilos donde participó " +
-			"y comentarios en sus tickets, con autor, hora, tarea y enlace. Orbit revisa ClickUp solo cada cierto tiempo; " +
-			"con refresh=true fuerza una revisión antes de responder. Úsala para el standup o al pedir «pon mi daily en curso».",
+		Description: "Devuelve la bandeja de ClickUp de Orbit: lo dirigido al usuario (menciones, respuestas en hilos donde " +
+			"participó y comentarios en sus tickets) que sigue pendiente, con autor, hora, tarea, enlace e ID. Una mención deja " +
+			"de estar pendiente cuando el usuario responde en ese hilo o la marca atendida. Orbit revisa ClickUp solo cada " +
+			"cierto tiempo; con refresh=true fuerza una revisión antes de responder. Úsala para el standup o al pedir " +
+			"«pon mi daily en curso».",
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"since_hours": map[string]interface{}{
 					"type":        "integer",
-					"description": "Opcional. Ventana en horas según la hora del comentario: entero de 1 a 720 (por defecto 24).",
+					"description": "Opcional. Solo comentarios de las últimas N horas: entero de 1 a 720. Sin él, toda la bandeja.",
 				},
 				"include_answered": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Opcional. Si es true, incluye también las que el usuario ya respondió.",
+					"description": "Opcional. Si es true, incluye también las ya respondidas o marcadas atendidas (últimos 30 días).",
 				},
 				"refresh": map[string]interface{}{
 					"type":        "boolean",
@@ -37,25 +40,45 @@ var ClickUpTools = []Tool{
 			},
 		},
 	},
+	{
+		Name: "mark_clickup_mention_done",
+		Description: "Marca una mención de la bandeja de ClickUp de Orbit como atendida, o la devuelve a pendiente con " +
+			"done=false. Úsala solo cuando el usuario lo pida. El ID es el que muestra get_clickup_mentions.",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"comment_id": map[string]interface{}{
+					"type":        "string",
+					"description": "ID del comentario de ClickUp (el que muestra get_clickup_mentions).",
+				},
+				"done": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Opcional. true (por defecto) la marca atendida; false la devuelve a pendiente.",
+				},
+			},
+			"required": []string{"comment_id"},
+		},
+	},
 }
 
 type clickupMentionsResponse struct {
-	Enabled  bool              `json:"enabled"`
-	Status   clickup.Status    `json:"status"`
-	Mentions []clickup.Mention `json:"mentions"`
+	Enabled      bool              `json:"enabled"`
+	Status       clickup.Status    `json:"status"`
+	PendingCount int               `json:"pendingCount"`
+	Mentions     []clickup.Mention `json:"mentions"`
 }
 
-const (
-	clickupDefaultHours = 24
-	clickupMaxHours     = 720
-)
+const clickupMaxHours = 720
+
+// clickupCommentID matches the comment IDs accepted by mark_clickup_mention_done.
+var clickupCommentID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // clickupSinceHours validates the optional since_hours argument: an integer from 1 to 720. Omitting
-// it means 24; any other value, null included, is rejected (the schema declares an integer).
+// it means no window (0); any other value, null included, is rejected (the schema declares an integer).
 func clickupSinceHours(args map[string]interface{}) (int, error) {
 	raw, present := args["since_hours"]
 	if !present {
-		return clickupDefaultHours, nil
+		return 0, nil
 	}
 	v, ok := raw.(float64)
 	if !ok || v != float64(int(v)) || v < 1 || v > clickupMaxHours {
@@ -86,15 +109,53 @@ func handleGetClickUpMentions(args map[string]interface{}) (string, error) {
 	}
 
 	q := url.Values{}
-	q.Set("since_hours", strconv.Itoa(hours))
+	if hours > 0 {
+		q.Set("since_hours", strconv.Itoa(hours))
+	}
 	if includeAnswered {
 		q.Set("include_answered", "1")
 	}
+	path := "/api/clickup/mentions"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
 	var res clickupMentionsResponse
-	if err := apiRequest("/api/clickup/mentions?"+q.Encode(), "GET", nil, &res, false); err != nil {
+	if err := apiRequest(path, "GET", nil, &res, false); err != nil {
 		return "", fmt.Errorf("error al consultar las menciones de ClickUp en Orbit: %w", err)
 	}
 	return refreshNote + formatClickUpMentions(res, hours, includeAnswered), nil
+}
+
+func handleMarkClickUpMentionDone(args map[string]interface{}) (string, error) {
+	id, _ := args["comment_id"].(string)
+	id = strings.TrimSpace(id)
+	if !clickupCommentID.MatchString(id) {
+		return "", fmt.Errorf("'comment_id' es obligatorio: el ID que muestra get_clickup_mentions")
+	}
+	done := true
+	if raw, present := args["done"]; present {
+		b, ok := raw.(bool)
+		if !ok {
+			return "", fmt.Errorf("'done' debe ser true o false")
+		}
+		done = b
+	}
+
+	var res struct {
+		Mention      clickup.Mention `json:"mention"`
+		PendingCount int             `json:"pendingCount"`
+	}
+	path := "/api/clickup/mentions/" + url.PathEscape(id) + "/done"
+	if err := apiRequest(path, "POST", map[string]bool{"done": done}, &res, false); err != nil {
+		return "", fmt.Errorf("no se pudo actualizar la mención en Orbit: %w", err)
+	}
+	state := "✓ Marcada como atendida"
+	if !done {
+		state = "↩️ Devuelta a pendiente"
+	}
+	m := res.Mention
+	return fmt.Sprintf("%s: **%s** en [%s](%s). Quedan %d pendiente(s) en la bandeja.", state,
+		clickup.EscapeInline(m.Author), clickup.EscapeInline(m.TaskName), clickup.TaskURL(m.TaskID), res.PendingCount), nil
 }
 
 func formatClickUpMentions(res clickupMentionsResponse, hours int, includeAnswered bool) string {
@@ -105,11 +166,15 @@ func formatClickUpMentions(res clickupMentionsResponse, hours int, includeAnswer
 
 	pending := 0
 	for _, m := range res.Mentions {
-		if !m.Answered {
+		if m.Pending() {
 			pending++
 		}
 	}
-	fmt.Fprintf(&b, "📬 **ClickUp — últimas %d h:** %d sin responder", hours, pending)
+	if hours > 0 {
+		fmt.Fprintf(&b, "📬 **ClickUp — últimas %d h:** %d pendiente(s)", hours, pending)
+	} else {
+		fmt.Fprintf(&b, "📬 **Bandeja de ClickUp:** %d pendiente(s)", pending)
+	}
 	if includeAnswered {
 		fmt.Fprintf(&b, " de %d", len(res.Mentions))
 	}
@@ -131,8 +196,14 @@ func formatClickUpMentions(res clickupMentionsResponse, hours int, includeAnswer
 		if m.Text != "" {
 			line += ": «" + clickup.EscapeInline(m.Text) + "»"
 		}
-		if m.Answered {
+		switch {
+		case m.Answered:
 			line += " _(ya respondida)_"
+		case m.DoneAt != nil:
+			line += " _(atendida)_"
+		}
+		if clickupCommentID.MatchString(m.CommentID) {
+			line += " · id `" + m.CommentID + "`"
 		}
 		b.WriteString(line + "\n")
 	}

@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="css/views.css">
     <link rel="stylesheet" href="css/calendar.css">
     <link rel="stylesheet" href="css/modals.css?v=2.5.0">
+    <link rel="stylesheet" href="css/clickup.css?v=1.0.0">
     <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
@@ -67,6 +68,11 @@
                 <!-- Quake Dropdown Terminal Shortcut (F12) -->
                 <button class="btn btn-sm" onclick="toggleQuakeTerminal()" title="Terminal rápida desplegable (F12 o Ctrl+\`)">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg> Quake
+                </button>
+
+                <!-- ClickUp inbox (visible while the ClickUp plugin is on) -->
+                <button class="btn btn-sm clickup-inbox-btn" id="header-clickup-btn" onclick="toggleClickUpInbox()" title="Bandeja de ClickUp" style="display: none;">
+                    💬 ClickUp <span class="clickup-badge" id="header-clickup-badge" hidden>0</span>
                 </button>
 
                 <!-- Plugins & Extensions -->
@@ -2066,6 +2072,26 @@
         </button>
     </div>
 
+    <!-- ClickUp inbox (side panel opened from the header button) -->
+    <aside class="clickup-inbox" id="clickup-inbox" aria-label="Bandeja de ClickUp" hidden>
+        <div class="clickup-inbox-header">
+            <strong>💬 ClickUp</strong>
+            <button class="btn btn-sm" onclick="closeClickUpInbox()" title="Cerrar (Esc)">✕</button>
+        </div>
+        <div class="clickup-inbox-toolbar">
+            <div class="clickup-inbox-tabs">
+                <button class="clickup-tab active" id="clickup-tab-pending" onclick="setClickUpInboxView('pending')">Pendientes <span id="clickup-tab-pending-count"></span></button>
+                <button class="clickup-tab" id="clickup-tab-all" onclick="setClickUpInboxView('all')">Todas</button>
+            </div>
+            <div class="clickup-inbox-actions">
+                <button class="btn btn-sm" id="clickup-btn-poll" onclick="pollClickUpNow(0)" title="Revisar ClickUp ahora">🔄 Revisar</button>
+                <button class="btn btn-sm" id="clickup-btn-lookback" onclick="pollClickUpNow(CLICKUP_LOOKBACK_HOURS)" title="Volver a revisar los últimos 3 días, para recuperar lo que haya quedado fuera">⏪ 3 días</button>
+            </div>
+        </div>
+        <div class="clickup-inbox-status" id="clickup-inbox-status"></div>
+        <div class="clickup-inbox-list" id="clickup-inbox-list"></div>
+    </aside>
+
     <!-- Toast Notification -->
     <div id="toast">Notificación</div>
 
@@ -2085,10 +2111,10 @@
     <script src="js/actions.js?v=2.4.0"></script>
     <script src="js/views.js?v=2.5.0"></script>
     <script src="js/calendar.js?v=2.6.0"></script>
-    <script src="js/clickup.js?v=1.0.0"></script>
+    <script src="js/clickup.js?v=1.1.0"></script>
     <script src="js/palette.js?v=2.4.0"></script>
     <script src="js/system.js?v=2.5.0"></script>
-    <script src="js/plugins.js?v=2.4.0"></script>
-    <script src="js/app.js?v=2.6.0"></script>
+    <script src="js/plugins.js?v=2.6.1"></script>
+    <script src="js/app.js?v=2.6.1"></script>
 </body>
 </html>
