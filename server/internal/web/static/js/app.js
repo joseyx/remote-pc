@@ -125,6 +125,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await refreshAll();
     connectEventsChannel();
     loadPlugins();
+    initClickUpInbox();
     checkForUpdates(true);
     setInterval(fetchServerAndSessions, 3500);
     setInterval(fetchSystemStats, 5000);

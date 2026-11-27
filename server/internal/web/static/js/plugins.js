@@ -233,6 +233,7 @@ async function togglePluginState(pluginId, isChecked) {
         if (p) p.enabled = isChecked;
 
         renderPluginsList();
+        if (pluginId === 'clickup' && typeof refreshClickUpInbox === 'function') refreshClickUpInbox();
 
         if (typeof showToast === 'function') {
             showToast(isChecked ? `Plugin "${p ? p.name : pluginId}" activado` : `Plugin desactivado`, "info");
@@ -291,6 +292,7 @@ async function savePluginConfig(pluginId) {
         // Close panel and refresh
         togglePluginConfigPanel(pluginId);
         await loadPlugins();
+        if (pluginId === 'clickup' && typeof refreshClickUpInbox === 'function') refreshClickUpInbox();
 
         if (typeof showToast === 'function') {
             showToast("Configuración guardada exitosamente", "success");

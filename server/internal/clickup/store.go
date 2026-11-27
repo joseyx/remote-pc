@@ -2,6 +2,7 @@ package clickup
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,10 +19,15 @@ const (
 	watchRetention = 14 * 24 * time.Hour
 	// seenRetention keeps processed comment IDs long enough to never re-announce one.
 	seenRetention = 45 * 24 * time.Hour
-	// mentionRetention and maxMentions bound the history served to the UI and MCP.
+	// mentionRetention and maxMentions bound the history of resolved mentions (answered or marked
+	// attended) served to the UI and MCP. Pending ones stay until resolved, up to maxPending.
 	mentionRetention = 30 * 24 * time.Hour
 	maxMentions      = 300
+	maxPending       = 1000
 )
+
+// ErrMentionNotFound is returned for a mention the store does not have (never detected or pruned).
+var ErrMentionNotFound = errors.New("esa mención no está en la bandeja de ClickUp")
 
 // WatchedTask is a task the user wrote in recently; it is re-scanned every poll because replies in
 // its threads do not change the task's update date.
@@ -142,10 +148,12 @@ func (s *Store) Status() Status {
 
 // MentionFilter narrows Mentions.
 type MentionFilter struct {
-	DetectedAfter   time.Time // cursor: only mentions after (DetectedAfter, AfterID)
-	AfterID         string    // tie-breaker for mentions detected in the same instant
-	Since           time.Time // only comments written after this instant
-	IncludeAnswered bool
+	DetectedAfter time.Time // cursor: only mentions after (DetectedAfter, AfterID)
+	AfterID       string    // tie-breaker for mentions detected in the same instant
+	Since         time.Time // only comments written after this instant
+	// IncludeResolved also returns mentions already answered or marked attended; by default only
+	// pending ones are returned.
+	IncludeResolved bool
 	Limit           int
 }
 
@@ -159,7 +167,7 @@ func (s *Store) Mentions(f MentionFilter) []Mention {
 	useCursor := !f.DetectedAfter.IsZero()
 	out := make([]Mention, 0)
 	for _, m := range s.st.Mentions {
-		if !f.IncludeAnswered && m.Answered {
+		if !f.IncludeResolved && !m.Pending() {
 			continue
 		}
 		if useCursor && !mentionAfter(m, f.DetectedAfter, f.AfterID) {
@@ -187,6 +195,58 @@ func (s *Store) Mentions(f MentionFilter) []Mention {
 // mentionAfter orders mentions by (DetectedAt, CommentID) for cursor pagination.
 func mentionAfter(m Mention, t time.Time, id string) bool {
 	return m.DetectedAt.After(t) || (m.DetectedAt.Equal(t) && m.CommentID > id)
+}
+
+// PendingCount is how many mentions still wait for the user (the inbox badge).
+func (s *Store) PendingCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	n := 0
+	for _, m := range s.st.Mentions {
+		if m.Pending() {
+			n++
+		}
+	}
+	return n
+}
+
+// SetDone marks a mention attended (done) or pending again, and saves the store. A poll running at
+// the same time keeps the change: replace carries the user's DoneAt over to the state it saves.
+func (s *Store) SetDone(commentID string, done bool, now time.Time) (Mention, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx := -1
+	for i := range s.st.Mentions {
+		if s.st.Mentions[i].CommentID == commentID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return Mention{}, ErrMentionNotFound
+	}
+
+	next := s.st
+	next.Mentions = append([]Mention(nil), s.st.Mentions...)
+	m := next.Mentions[idx]
+	switch {
+	case done && m.DoneAt == nil:
+		t := now
+		m.DoneAt = &t
+	case !done:
+		m.DoneAt = nil
+	}
+	next.Mentions[idx] = m
+
+	data, err := json.MarshalIndent(next, "", "  ")
+	if err != nil {
+		return Mention{}, err
+	}
+	if err := writeFileAtomic(s.path, data); err != nil {
+		return Mention{}, err
+	}
+	s.st = next
+	return m, nil
 }
 
 // snapshot returns a deep copy the poller can work on without holding the lock.
@@ -218,21 +278,44 @@ func (s *Store) snapshot() storeState {
 	return cp
 }
 
-// replace prunes st, makes it the current state and writes it to disk atomically.
+// replace prunes st, makes it the current state and writes it to disk atomically. st comes from a
+// snapshot taken before the poll, so the attended marks (DoneAt, owned by the user) are taken from
+// the current state: one set while the poll ran is not lost.
 func (s *Store) replace(st storeState, now time.Time) error {
-	st = prune(normalize(st), now)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	st = normalize(st)
+	st.Mentions = withUserMarks(st.Mentions, s.st.Mentions)
+	st = prune(st, now)
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if err := writeFileAtomic(s.path, data); err != nil {
 		return err
 	}
 	s.st = st
 	return nil
+}
+
+// withUserMarks returns mentions with each DoneAt taken from current (same comment ID).
+func withUserMarks(mentions, current []Mention) []Mention {
+	if len(current) == 0 {
+		return mentions
+	}
+	marks := make(map[string]*time.Time, len(current))
+	for _, m := range current {
+		marks[m.CommentID] = m.DoneAt
+	}
+	out := make([]Mention, len(mentions))
+	for i, m := range mentions {
+		if d, ok := marks[m.CommentID]; ok {
+			m.DoneAt = d
+		}
+		out[i] = m
+	}
+	return out
 }
 
 func prune(st storeState, now time.Time) storeState {
@@ -261,19 +344,37 @@ func prune(st storeState, now time.Time) storeState {
 	}
 	// PendingNotes are never pruned: their comments are already marked seen and would not come back,
 	// so they stay queued until the note accepts them (deliver removes them once written).
-	sort.SliceStable(st.Mentions, func(i, j int) bool { return st.Mentions[i].Date.After(st.Mentions[j].Date) })
-	kept := st.Mentions[:0]
-	for _, m := range st.Mentions {
-		if now.Sub(m.DetectedAt) > mentionRetention {
-			continue
+	st.Mentions = pruneMentions(st.Mentions, now)
+	return st
+}
+
+// pruneMentions keeps every pending mention (up to maxPending, newest first) and the resolved ones
+// from the last mentionRetention (counted from when they were detected or marked attended, the
+// later), up to maxMentions. The result is ordered newest comment first.
+func pruneMentions(mentions []Mention, now time.Time) []Mention {
+	sorted := append([]Mention(nil), mentions...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Date.After(sorted[j].Date) })
+	kept := make([]Mention, 0, len(sorted))
+	pending, resolved := 0, 0
+	for _, m := range sorted {
+		if m.Pending() {
+			if pending >= maxPending {
+				continue
+			}
+			pending++
+		} else {
+			ref := m.DetectedAt
+			if m.DoneAt != nil && m.DoneAt.After(ref) {
+				ref = *m.DoneAt
+			}
+			if now.Sub(ref) > mentionRetention || resolved >= maxMentions {
+				continue
+			}
+			resolved++
 		}
 		kept = append(kept, m)
-		if len(kept) >= maxMentions {
-			break
-		}
 	}
-	st.Mentions = kept
-	return st
+	return kept
 }
 
 func writeFileAtomic(path string, data []byte) error {

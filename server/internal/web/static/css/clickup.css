@@ -1,0 +1,184 @@
+/* ==========================================
+   ClickUp inbox: header button + side panel
+   ========================================== */
+
+.clickup-inbox-btn {
+    align-items: center;
+    gap: 5px;
+}
+
+.clickup-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--red);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+.clickup-badge[hidden] {
+    display: none;
+}
+
+.clickup-inbox {
+    position: fixed;
+    top: 54px; /* below the header */
+    right: 0;
+    bottom: 0;
+    width: min(420px, 100vw);
+    z-index: 150; /* above the workspace; below modals (200), the toast (300) and menus (1000) */
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border-muted);
+    box-shadow: -12px 0 32px rgba(0, 0, 0, 0.35);
+}
+
+.clickup-inbox[hidden] {
+    display: none;
+}
+
+.clickup-inbox-header,
+.clickup-inbox-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.clickup-inbox-header strong {
+    font-size: 14px;
+    color: var(--text-main);
+}
+
+.clickup-inbox-tabs,
+.clickup-inbox-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.clickup-tab {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+.clickup-tab.active {
+    border-color: var(--border-active);
+    color: var(--text-main);
+    background: var(--bg-elevated);
+}
+
+.clickup-inbox-status {
+    padding: 6px 14px;
+    font-size: 11px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.clickup-inbox-status.is-error {
+    color: var(--amber);
+}
+
+.clickup-inbox-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0 14px;
+}
+
+.clickup-day {
+    padding: 10px 14px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.clickup-item {
+    margin: 4px 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+}
+
+.clickup-item.is-resolved {
+    opacity: 0.6;
+}
+
+.clickup-item-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.clickup-item-head strong {
+    color: var(--text-main);
+}
+
+.clickup-item-time {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+.clickup-item-task {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.clickup-item-task:hover {
+    text-decoration: underline;
+}
+
+.clickup-item-text {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.clickup-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.clickup-item-actions a.btn {
+    text-decoration: none;
+}
+
+.clickup-chip {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--green-glow);
+    color: var(--green);
+}
+
+.clickup-empty {
+    padding: 32px 18px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+}

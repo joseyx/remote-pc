@@ -176,6 +176,7 @@ func (s *Server) Routes() http.Handler {
 
 	// ClickUp mentions (plugin "clickup")
 	mux.HandleFunc("GET /api/clickup/mentions", s.withAuth(s.handleClickUpMentions))
+	mux.HandleFunc("POST /api/clickup/mentions/{id}/done", s.withAuth(s.handleClickUpMentionDone))
 	mux.HandleFunc("POST /api/clickup/poll", s.withAuth(s.handleClickUpPoll))
 
 	// Embedded Desktop Web Dashboard (with hot-reload support if static assets exist on disk)

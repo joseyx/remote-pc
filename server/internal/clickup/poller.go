@@ -24,8 +24,10 @@ const (
 	// pollOverlap re-scans a few minutes before the last successful poll so comments posted while it
 	// ran are not missed; already-seen comments are skipped.
 	pollOverlap = 5 * time.Minute
-	// initialLookback is the window of the very first poll.
-	initialLookback = 24 * time.Hour
+	// initialLookback is the window of the very first poll (it covers a weekend).
+	initialLookback = 72 * time.Hour
+	// MaxLookback bounds the window a manual "check the last N hours" poll can ask for.
+	MaxLookback = 7 * 24 * time.Hour
 	// assignedWindow limits the "my tickets" scan to tickets touched recently.
 	assignedWindow = 14 * 24 * time.Hour
 
@@ -49,7 +51,17 @@ type Config struct {
 	Token    string
 	TeamID   string
 	Interval time.Duration
-	BaseURL  string // empty = public API; tests point it at a fake server
+	// DailyNote also writes each new mention as a to-do in the daily note. Off by default: the
+	// mentions live in the Cockpit's ClickUp inbox.
+	DailyNote bool
+	BaseURL   string // empty = public API; tests point it at a fake server
+}
+
+// PollOptions tunes a manual poll.
+type PollOptions struct {
+	// Lookback re-reads at least this far back (capped at MaxLookback), to recover comments older
+	// than the regular window. Already-seen comments are skipped as usual.
+	Lookback time.Duration
 }
 
 // NoteSink receives the to-dos; calendar.Manager implements it.
@@ -62,7 +74,7 @@ type Options struct {
 	Store  *Store
 	Notes  NoteSink
 	Config func() Config
-	// Notify is called after a poll that added new unanswered items to the note.
+	// Notify is called after a poll that found new pending items or resolved some.
 	Notify func()
 	// NoteDate maps an instant to the daily note it belongs to (the daemon uses the effective
 	// business day, so 00:00-05:00 still counts for the previous day).
@@ -72,8 +84,9 @@ type Options struct {
 
 // PollResult summarises one poll.
 type PollResult struct {
-	New       int      `json:"new"`       // unanswered items written to the note
+	New       int      `json:"new"`       // new pending items (in the inbox, and in the note when enabled)
 	Answered  int      `json:"answered"`  // items found already answered (stored, not announced)
+	Resolved  int      `json:"resolved"`  // pending items marked answered because the user replied
 	Checked   int      `json:"checked"`   // tasks scanned
 	Truncated bool     `json:"truncated"` // some tasks, pages or threads were left for the next poll
 	Errors    []string `json:"errors,omitempty"`
@@ -179,6 +192,14 @@ func (p *Poller) pollIfDue() {
 
 // Poll runs one scan now, whatever the interval says. Stop cancels it.
 func (p *Poller) Poll(ctx context.Context) (PollResult, error) {
+	return p.PollWith(ctx, PollOptions{})
+}
+
+// PollWith is Poll with options (e.g. a longer window to recover older comments).
+func (p *Poller) PollWith(ctx context.Context, opts PollOptions) (PollResult, error) {
+	if opts.Lookback > MaxLookback {
+		opts.Lookback = MaxLookback
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
@@ -209,9 +230,9 @@ func (p *Poller) Poll(ctx context.Context) (PollResult, error) {
 	st.Status.LastPollStart = start
 
 	var fresh []Mention
-	res, cut, err := p.scan(ctx, cfg, &st, start, &fresh)
+	res, cut, err := p.scan(ctx, cfg, &st, start, opts.Lookback, &fresh)
 	// Deliver what was found even if the scan stopped half-way: those comments are already marked seen.
-	p.deliver(&st, fresh, &res)
+	p.deliver(cfg, &st, fresh, &res)
 
 	st.Status.LastPollEnd = p.opts.Now()
 	st.Status.LastChecked = res.Checked
@@ -238,7 +259,7 @@ func (p *Poller) Poll(ctx context.Context) (PollResult, error) {
 			err = saveErr
 		}
 	}
-	if res.New > 0 {
+	if res.New > 0 || res.Resolved > 0 {
 		p.opts.Notify()
 	}
 	return res, err
@@ -254,10 +275,21 @@ func summarize(res PollResult) string {
 	return ""
 }
 
-// deliver writes new unanswered mentions, plus those whose to-do failed before, to the daily note.
-// It goes oldest first so the note (which inserts each line at the top of its section) reads
-// newest-first. A failed write keeps the mention queued for the next poll.
-func (p *Poller) deliver(st *storeState, fresh []Mention, res *PollResult) {
+// deliver stores new unanswered mentions in the inbox. With the daily note enabled it also writes
+// them, plus those whose to-do failed before, to the note: oldest first so the note (which inserts
+// each line at the top of its section) reads newest-first. A failed write keeps the mention queued
+// for the next poll.
+func (p *Poller) deliver(cfg Config, st *storeState, fresh []Mention, res *PollResult) {
+	if !cfg.DailyNote {
+		// Queued note writes are dropped: those mentions are already in the inbox (upserted when
+		// their write failed).
+		st.PendingNotes = nil
+		for _, m := range fresh {
+			res.New++
+			upsertMention(st, m)
+		}
+		return
+	}
 	queue := append(append([]Mention(nil), st.PendingNotes...), fresh...)
 	st.PendingNotes = nil
 	if len(queue) == 0 {
@@ -278,6 +310,26 @@ func (p *Poller) deliver(st *storeState, fresh []Mention, res *PollResult) {
 	}
 }
 
+// resolveAnswered marks answered the pending mentions of task taskID that the user replied to later
+// in the same thread, and returns how many.
+func resolveAnswered(st *storeState, taskID string, myLastReply map[string]time.Time) int {
+	if len(myLastReply) == 0 {
+		return 0
+	}
+	n := 0
+	for i := range st.Mentions {
+		m := &st.Mentions[i]
+		if m.TaskID != taskID || !m.Pending() {
+			continue
+		}
+		if t, ok := myLastReply[m.threadKey()]; ok && t.After(m.Date) {
+			m.Answered = true
+			n++
+		}
+	}
+	return n
+}
+
 func upsertMention(st *storeState, m Mention) {
 	for i := range st.Mentions {
 		if st.Mentions[i].CommentID == m.CommentID {
@@ -291,8 +343,8 @@ func upsertMention(st *storeState, m Mention) {
 type candidate struct {
 	task     Task
 	assigned bool
-	watched  bool
-	rank     int       // 0 updated, 1 my ticket, 2 watched, 3 backlog: tie-breaker after since
+	followed bool      // watched (I wrote in it) or holding a pending mention: re-scanned every poll
+	rank     int       // 0 updated, 1 my ticket, 2 followed, 3 backlog: tie-breaker after since
 	since    time.Time // window start for this task
 }
 
@@ -305,7 +357,8 @@ type listCut struct {
 
 // scan does the ClickUp work of one poll and records what it finds in st. New unanswered mentions
 // are appended to fresh for deliver. cut is non-nil when the updated-tasks listing was cut.
-func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start time.Time, fresh *[]Mention) (res PollResult, cut *listCut, err error) {
+// lookback > 0 widens the window to at least that far back (a manual "check the last N hours").
+func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start time.Time, lookback time.Duration, fresh *[]Mention) (res PollResult, cut *listCut, err error) {
 	client := NewClient(cfg.BaseURL, cfg.Token)
 
 	me, err := client.Me(ctx)
@@ -345,6 +398,16 @@ func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start tim
 		list = listCut{after: st.Status.NextWindow, page: st.Status.NextPage}
 		if !st.Status.WindowStart.IsZero() && st.Status.WindowStart.Before(since) {
 			since = st.Status.WindowStart
+		}
+	}
+	if lookback > 0 {
+		// Both detection and listing go back that far (the listing restarts from there, so a
+		// catch-up in progress is covered too).
+		if from := start.Add(-lookback); from.Before(since) {
+			since = from
+		}
+		if since.Before(list.after) {
+			list = listCut{after: since}
 		}
 	}
 	list.windowStart = since
@@ -387,7 +450,7 @@ func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start tim
 		case !complete:
 			res.Truncated = true
 			keepCursor(st, c)
-		case c.assigned || c.watched:
+		case c.assigned || c.followed:
 			st.NextSince[c.task.ID] = TaskCursor{Since: start.Add(-pollOverlap), Name: c.task.Name}
 		default:
 			delete(st.NextSince, c.task.ID) // a later update will list it again
@@ -465,13 +528,23 @@ func (p *Poller) candidates(ctx context.Context, client *Client, teamID string, 
 	for id, w := range st.Watched {
 		add(Task{ID: id, Name: w.Name}, 2, false)
 	}
+	// Tasks with a recent pending mention are followed too: replying in its thread does not move the
+	// task's update date, and that reply is what marks the mention answered.
+	pendingIn := map[string]bool{}
+	for _, m := range st.Mentions {
+		if m.Pending() && start.Sub(m.DetectedAt) <= watchRetention {
+			pendingIn[m.TaskID] = true
+			add(Task{ID: m.TaskID, Name: m.TaskName}, 2, false)
+		}
+	}
 	for id, cur := range st.NextSince {
 		add(Task{ID: id, Name: cur.Name}, 3, false)
 	}
 
 	for i := range list {
 		c := &list[i]
-		_, c.watched = st.Watched[c.task.ID]
+		_, watched := st.Watched[c.task.ID]
+		c.followed = watched || pendingIn[c.task.ID]
 		c.since = since
 		if cur, ok := st.NextSince[c.task.ID]; ok && cur.Since.Before(c.since) {
 			c.since = cur.Since
@@ -629,6 +702,7 @@ func (p *Poller) scanTask(ctx context.Context, client *Client, me int64, c candi
 	}
 
 	dr := Detect(me, act, c.since)
+	res.Resolved += resolveAnswered(st, c.task.ID, dr.MyLastReply)
 
 	participated := map[string]bool{}
 	for _, id := range dr.ParticipatedThreads {
