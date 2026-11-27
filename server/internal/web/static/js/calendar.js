@@ -706,6 +706,12 @@ async function saveCalendarNote() {
     const rawEl = document.getElementById('cal-raw-editor');
     if (!rawEl) return;
     const content = rawEl.value;
+    // The editor must hold the note of the selected day. If loading it failed (e.g. after switching
+    // days), the editor still shows another day's note: saving would overwrite this one with it.
+    if (!calActiveNote || calActiveNote.date !== calSelectedDate) {
+        appAlert("La nota de este día no terminó de cargar. Recárgala antes de guardar para no sobrescribirla.", "Nota sin cargar", "⚠️");
+        return;
+    }
 
     try {
         const token = serverInfo ? serverInfo.authToken : '';
@@ -713,14 +719,22 @@ async function saveCalendarNote() {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': 'Bearer ' + token } : {})
         };
+        // baseContent = the note as the editor loaded it: the server keeps, atomically, the tagged
+        // lines that background jobs (e.g. ClickUp mentions) added while it was being edited.
+        const payload = { date: calSelectedDate, content, baseContent: calActiveNote.content || '' };
+
         const res = await fetch('/api/calendar/note', {
             method: 'PUT',
             headers,
-            body: JSON.stringify({ date: calSelectedDate, content })
+            body: JSON.stringify(payload)
         });
         if (res.ok) {
-            showToast("Nota diaria guardada con éxito.");
+            const saved = await res.json().catch(() => ({}));
+            showToast(saved.merged > 0
+                ? `Nota guardada; se conservaron ${saved.merged} pendiente(s) que llegaron mientras editabas.`
+                : "Nota diaria guardada con éxito.");
             toggleCalendarEditMode();
+            if (saved.merged > 0) reloadCalendarNote();
             await fetchCalendarMonth(calCurrentYear, calCurrentMonth);
         } else {
             appAlert("Error al guardar nota: " + (await res.text()), "Error", "❌");

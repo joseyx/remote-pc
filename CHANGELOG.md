@@ -3,6 +3,22 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.9.0] - 2026-11-27
+
+### ✨ Nuevas Funcionalidades (Features)
+- **Menciones de ClickUp en la nota diaria y el Cockpit** (#63, #62): nuevo plugin `clickup` (token personal de ClickUp, workspace opcional e intervalo en minutos). Con el plugin activo, el daemon revisa ClickUp cada 20 min (mínimo 5) y convierte en pendientes de la nota del día los comentarios dirigidos al usuario.
+  - Cuentan las etiquetas al usuario (incluidos los comentarios asignados a él), las respuestas en hilos donde participó y los comentarios en sus tickets. Los suyos y los de automatizaciones no cuentan.
+  - Cada pendiente enlaza a la tarea, cita el comentario y lleva un marcador oculto (`<!-- clickup:ID -->`), así que ninguno se repite. Los que el usuario ya respondió en el mismo hilo se guardan pero no se anuncian.
+  - El Cockpit avisa con un toast, un sonido y una notificación del navegador, y recarga la nota del día. Si la nota se está editando, guardar conserva los pendientes que llegaron mientras tanto.
+  - `GET /api/clickup/mentions` y `POST /api/clickup/poll` para consultar o forzar una revisión. La tool MCP `get_clickup_mentions` está disponible mientras el plugin esté activo y acepta `refresh` para revisar en el momento.
+  - Respeta el límite de la API de ClickUp (una petición cada 700 ms), solo vuelve a leer un hilo si cambió su número de respuestas y retoma en la siguiente revisión lo que una deja a medias (tareas, páginas de comentarios o pendientes que no se pudieron escribir).
+
+### 🐛 Correcciones (Bug Fixes)
+- **Nota diaria:** la casilla vacía de la plantilla (`- [ ] `) ahora se reemplaza al agregar el primer pendiente. Agregar o anexar a la nota se hace bajo un solo lock, y una nota que existe pero no se puede leer ya no se sobrescribe.
+- **Calendario:** no deja guardar si la nota del día seleccionado no terminó de cargar, para no sobrescribirla con la de otro día.
+
+---
+
 ## [1.8.3] - 2026-11-11
 
 ### 🐛 Correcciones (Bug Fixes)
