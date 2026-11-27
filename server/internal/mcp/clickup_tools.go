@@ -23,8 +23,8 @@ var ClickUpTools = []Tool{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"since_hours": map[string]interface{}{
-					"type":        "number",
-					"description": "Opcional. Ventana en horas según la hora del comentario (por defecto 24, máximo 720).",
+					"type":        "integer",
+					"description": "Opcional. Ventana en horas según la hora del comentario: entero de 1 a 720 (por defecto 24).",
 				},
 				"include_answered": map[string]interface{}{
 					"type":        "boolean",
@@ -45,10 +45,28 @@ type clickupMentionsResponse struct {
 	Mentions []clickup.Mention `json:"mentions"`
 }
 
+const (
+	clickupDefaultHours = 24
+	clickupMaxHours     = 720
+)
+
+// clickupSinceHours validates the optional since_hours argument: an integer from 1 to 720.
+func clickupSinceHours(args map[string]interface{}) (int, error) {
+	raw, present := args["since_hours"]
+	if !present || raw == nil {
+		return clickupDefaultHours, nil
+	}
+	v, ok := raw.(float64)
+	if !ok || v != float64(int(v)) || v < 1 || v > clickupMaxHours {
+		return 0, fmt.Errorf("'since_hours' debe ser un entero entre 1 y %d", clickupMaxHours)
+	}
+	return int(v), nil
+}
+
 func handleGetClickUpMentions(args map[string]interface{}) (string, error) {
-	hours := 24
-	if v, ok := args["since_hours"].(float64); ok && v > 0 {
-		hours = int(v)
+	hours, err := clickupSinceHours(args)
+	if err != nil {
+		return "", err
 	}
 	includeAnswered, _ := args["include_answered"].(bool)
 	refresh, _ := args["refresh"].(bool)
@@ -107,9 +125,10 @@ func formatClickUpMentions(res clickupMentionsResponse, hours int, includeAnswer
 		case clickup.ReasonTicket:
 			verb = "comentó en tu ticket"
 		}
-		line := fmt.Sprintf("- %s · **%s** %s [%s](%s)", m.Date.Local().Format("02/01 15:04"), m.Author, verb, m.TaskName, m.TaskURL)
+		line := fmt.Sprintf("- %s · **%s** %s [%s](%s)", m.Date.Local().Format("02/01 15:04"),
+			clickup.EscapeInline(m.Author), verb, clickup.EscapeInline(m.TaskName), clickup.TaskURL(m.TaskID))
 		if m.Text != "" {
-			line += ": «" + m.Text + "»"
+			line += ": «" + clickup.EscapeInline(m.Text) + "»"
 		}
 		if m.Answered {
 			line += " _(ya respondida)_"

@@ -2,6 +2,8 @@ package calendar
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -32,6 +34,31 @@ func TestAddDailyTodoUniqueAddsOnce(t *testing.T) {
 	}
 	if strings.Contains(note.Content, "- [ ] \n") {
 		t.Errorf("empty placeholder should have been replaced:\n%s", note.Content)
+	}
+}
+
+// A note that exists but cannot be read must not be replaced by the empty template.
+func TestUnreadableNoteIsNotOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewManager(dir)
+	const date = "2026-11-26"
+	// A directory where the note file should be: reading it fails with an error other than "not exist".
+	blocker := filepath.Join(dir, date+".md")
+	if err := os.Mkdir(blocker, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := mgr.AddDailyTodoUnique(date, "x", "clickup:1"); err == nil {
+		t.Error("AddDailyTodoUnique should fail on an unreadable note")
+	}
+	if _, err := mgr.AddDailyTodo(date, "x", false); err == nil {
+		t.Error("AddDailyTodo should fail on an unreadable note")
+	}
+	if _, err := mgr.AppendDailyNote(date, "x"); err == nil {
+		t.Error("AppendDailyNote should fail on an unreadable note")
+	}
+	if fi, err := os.Stat(blocker); err != nil || !fi.IsDir() {
+		t.Errorf("the unreadable entry was replaced: %v", err)
 	}
 }
 

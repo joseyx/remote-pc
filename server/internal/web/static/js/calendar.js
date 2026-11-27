@@ -705,7 +705,7 @@ function updateCalEditorVisibility() {
 async function saveCalendarNote() {
     const rawEl = document.getElementById('cal-raw-editor');
     if (!rawEl) return;
-    const content = rawEl.value;
+    let content = rawEl.value;
 
     try {
         const token = serverInfo ? serverInfo.authToken : '';
@@ -713,6 +713,22 @@ async function saveCalendarNote() {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': 'Bearer ' + token } : {})
         };
+
+        // Lines added in the background while editing (e.g. ClickUp mentions) must survive the save.
+        if (typeof mergeConcurrentTodoLines === 'function' && calActiveNote) {
+            try {
+                const latestRes = await fetch(`/api/calendar/note?date=${calSelectedDate}`, { headers });
+                if (latestRes.ok) {
+                    const latest = await latestRes.json();
+                    const merged = mergeConcurrentTodoLines(calActiveNote.content || '', latest.content || '', content);
+                    if (merged.added > 0) {
+                        content = merged.content;
+                        rawEl.value = content;
+                    }
+                }
+            } catch (e) { /* save what the editor has; the poller keeps its own copy of each mention */ }
+        }
+
         const res = await fetch('/api/calendar/note', {
             method: 'PUT',
             headers,

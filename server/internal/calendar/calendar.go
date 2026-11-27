@@ -148,14 +148,19 @@ func (m *Manager) getNoteFilePath(date string) string {
 }
 
 // readNoteLocked returns the note markdown for date, or the default template when the day has no
-// file yet. The caller must hold m.mu (read or write).
-func (m *Manager) readNoteLocked(date string) (content string, exists bool, filePath string) {
+// file yet. Any other read error is returned, so callers never overwrite a note they could not
+// read (e.g. locked by another program). The caller must hold m.mu (read or write).
+func (m *Manager) readNoteLocked(date string) (content string, exists bool, filePath string, err error) {
 	filePath = m.getNoteFilePath(date)
-	if data, err := os.ReadFile(filePath); err == nil {
-		return string(data), true, filePath
+	data, err := os.ReadFile(filePath)
+	if err == nil {
+		return string(data), true, filePath, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", false, filePath, fmt.Errorf("no se pudo leer la nota del %s: %w", date, err)
 	}
 	// Provide default template for new day
-	return fmt.Sprintf("# 📅 Diario de Trabajo - %s\n\n## 📌 Notas Generales\n- [ ] \n\n## 🌙 Handoffs de Tareas & Agentes\n", date), false, filePath
+	return fmt.Sprintf("# 📅 Diario de Trabajo - %s\n\n## 📌 Notas Generales\n- [ ] \n\n## 🌙 Handoffs de Tareas & Agentes\n", date), false, filePath, nil
 }
 
 // writeNoteLocked persists the note markdown for date. The caller must hold m.mu for writing.
@@ -171,7 +176,10 @@ func (m *Manager) GetDayNote(date string) (*DayNote, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	content, exists, filePath := m.readNoteLocked(date)
+	content, exists, filePath, err := m.readNoteLocked(date)
+	if err != nil {
+		return nil, err
+	}
 
 	handoffs := m.handoffs[date]
 	if handoffs == nil {
@@ -230,8 +238,10 @@ func (m *Manager) AddDailyTodo(date string, text string, checked bool) (*DayNote
 	todoLine := checkbox + strings.TrimSpace(text)
 
 	m.mu.Lock()
-	content, _, _ := m.readNoteLocked(date)
-	err := m.writeNoteLocked(date, insertTodoLine(content, todoLine))
+	content, _, _, err := m.readNoteLocked(date)
+	if err == nil {
+		err = m.writeNoteLocked(date, insertTodoLine(content, todoLine))
+	}
 	m.mu.Unlock()
 	if err != nil {
 		return nil, err
@@ -256,7 +266,10 @@ func (m *Manager) AddDailyTodoUnique(date string, text string, marker string) (b
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	content, _, _ := m.readNoteLocked(date)
+	content, _, _, err := m.readNoteLocked(date)
+	if err != nil {
+		return false, err
+	}
 	if strings.Contains(content, tag) {
 		return false, nil
 	}
@@ -279,14 +292,16 @@ func (m *Manager) AppendDailyNote(date string, text string) (*DayNote, error) {
 	}
 
 	m.mu.Lock()
-	content, _, _ := m.readNoteLocked(date)
-	if idx := strings.Index(content, notesGeneralHeader); idx != -1 {
-		rest := content[idx+len(notesGeneralHeader):]
-		content = content[:idx+len(notesGeneralHeader)] + "\n" + trimmedText + rest
-	} else {
-		content = content + "\n\n" + notesGeneralHeader + "\n" + trimmedText + "\n"
+	content, _, _, err := m.readNoteLocked(date)
+	if err == nil {
+		if idx := strings.Index(content, notesGeneralHeader); idx != -1 {
+			rest := content[idx+len(notesGeneralHeader):]
+			content = content[:idx+len(notesGeneralHeader)] + "\n" + trimmedText + rest
+		} else {
+			content = content + "\n\n" + notesGeneralHeader + "\n" + trimmedText + "\n"
+		}
+		err = m.writeNoteLocked(date, content)
 	}
-	err := m.writeNoteLocked(date, content)
 	m.mu.Unlock()
 	if err != nil {
 		return nil, err

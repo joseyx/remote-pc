@@ -32,6 +32,12 @@ var requestGap = 700 * time.Millisecond
 // ErrUnauthorized means ClickUp rejected the token.
 var ErrUnauthorized = errors.New("ClickUp rechazó el token (401): revísalo en Orbit > Plugins > ClickUp")
 
+// ErrNotFound means the task or comment no longer exists (or the token lost access to it).
+var ErrNotFound = errors.New("ClickUp no encontró el recurso (404)")
+
+// CommentPageSize is how many comments ClickUp returns per page of a task.
+const CommentPageSize = 25
+
 // RateLimitError means ClickUp answered 429; RetryAt is when the window resets (zero if unknown).
 type RateLimitError struct{ RetryAt time.Time }
 
@@ -198,10 +204,22 @@ func (c *Client) Tasks(ctx context.Context, teamID string, q TaskQuery) (tasks [
 
 // TaskComments returns the newest top-level comments of a task (ClickUp sends up to 25).
 func (c *Client) TaskComments(ctx context.Context, taskID string) ([]Comment, error) {
+	return c.TaskCommentsBefore(ctx, taskID, nil)
+}
+
+// TaskCommentsBefore returns the page of top-level comments older than before (newest first); a
+// nil before means the newest page. ClickUp pages with the date and ID of the oldest comment seen.
+func (c *Client) TaskCommentsBefore(ctx context.Context, taskID string, before *Comment) ([]Comment, error) {
+	var q url.Values
+	if before != nil {
+		q = url.Values{}
+		q.Set("start", strings.TrimSpace(before.Date))
+		q.Set("start_id", before.ID)
+	}
 	var out struct {
 		Comments []Comment `json:"comments"`
 	}
-	if err := c.get(ctx, "/task/"+url.PathEscape(taskID)+"/comment", nil, &out); err != nil {
+	if err := c.get(ctx, "/task/"+url.PathEscape(taskID)+"/comment", q, &out); err != nil {
 		return nil, err
 	}
 	return out.Comments, nil
@@ -270,6 +288,8 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
 		return ErrUnauthorized
+	case resp.StatusCode == http.StatusNotFound:
+		return fmt.Errorf("%w: %s", ErrNotFound, path)
 	case resp.StatusCode == http.StatusTooManyRequests:
 		rl := &RateLimitError{}
 		if reset, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && reset > 0 {

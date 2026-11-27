@@ -21,6 +21,7 @@ const (
 	// mentionRetention and maxMentions bound the history served to the UI and MCP.
 	mentionRetention = 30 * 24 * time.Hour
 	maxMentions      = 300
+	maxPendingNotes  = 100
 )
 
 // WatchedTask is a task the user wrote in recently; it is re-scanned every poll because replies in
@@ -28,6 +29,12 @@ const (
 type WatchedTask struct {
 	Name     string    `json:"name"`
 	LastSeen time.Time `json:"lastSeen"`
+}
+
+// TaskCursor says from when a task's comments must be read on its next scan.
+type TaskCursor struct {
+	Since time.Time `json:"since"`
+	Name  string    `json:"name,omitempty"` // kept so a task resumed from the backlog keeps its title
 }
 
 // ThreadState caches what the poller knows about a comment thread.
@@ -57,6 +64,12 @@ type storeState struct {
 	Threads  map[string]ThreadState `json:"threads"`
 	Seen     map[string]time.Time   `json:"seen"`
 	Mentions []Mention              `json:"mentions"` // newest first
+	// NextSince is the per-task cursor: the instant from which a task's comments must be read next
+	// time. Tasks left out of a poll (budget, error, unread pages or threads) keep an old cursor, so
+	// they are scanned first and from where they were left, even after the global window moved on.
+	NextSince map[string]TaskCursor `json:"nextSince"`
+	// PendingNotes are mentions whose to-do could not be written; they are retried every poll.
+	PendingNotes []Mention `json:"pendingNotes,omitempty"`
 }
 
 // Store persists the poller state in a JSON file. It is safe for concurrent use.
@@ -86,10 +99,11 @@ func OpenStore(path string) (*Store, error) {
 
 func emptyState() storeState {
 	return storeState{
-		Version: storeVersion,
-		Watched: map[string]WatchedTask{},
-		Threads: map[string]ThreadState{},
-		Seen:    map[string]time.Time{},
+		Version:   storeVersion,
+		Watched:   map[string]WatchedTask{},
+		Threads:   map[string]ThreadState{},
+		Seen:      map[string]time.Time{},
+		NextSince: map[string]TaskCursor{},
 	}
 }
 
@@ -103,6 +117,9 @@ func normalize(st storeState) storeState {
 	}
 	if st.Seen == nil {
 		st.Seen = map[string]time.Time{}
+	}
+	if st.NextSince == nil {
+		st.NextSince = map[string]TaskCursor{}
 	}
 	return st
 }
@@ -122,7 +139,9 @@ type MentionFilter struct {
 	Limit           int
 }
 
-// Mentions returns stored mentions, newest first.
+// Mentions returns stored mentions, newest comment first. With DetectedAfter (a cursor of what a
+// client already announced) they come oldest-detected first instead, so a client that advances its
+// cursor to the last item returned never skips items beyond Limit.
 func (s *Store) Mentions(f MentionFilter) []Mention {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -138,9 +157,17 @@ func (s *Store) Mentions(f MentionFilter) []Mention {
 			continue
 		}
 		out = append(out, m)
-		if f.Limit > 0 && len(out) >= f.Limit {
-			break
-		}
+	}
+	if !f.DetectedAfter.IsZero() {
+		sort.SliceStable(out, func(i, j int) bool {
+			if !out[i].DetectedAt.Equal(out[j].DetectedAt) {
+				return out[i].DetectedAt.Before(out[j].DetectedAt)
+			}
+			return out[i].Date.Before(out[j].Date)
+		})
+	}
+	if f.Limit > 0 && len(out) > f.Limit {
+		out = out[:f.Limit]
 	}
 	return out
 }
@@ -150,12 +177,17 @@ func (s *Store) snapshot() storeState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	cp := storeState{
-		Version:  s.st.Version,
-		Status:   s.st.Status,
-		Watched:  make(map[string]WatchedTask, len(s.st.Watched)),
-		Threads:  make(map[string]ThreadState, len(s.st.Threads)),
-		Seen:     make(map[string]time.Time, len(s.st.Seen)),
-		Mentions: append([]Mention(nil), s.st.Mentions...),
+		Version:      s.st.Version,
+		Status:       s.st.Status,
+		Watched:      make(map[string]WatchedTask, len(s.st.Watched)),
+		Threads:      make(map[string]ThreadState, len(s.st.Threads)),
+		Seen:         make(map[string]time.Time, len(s.st.Seen)),
+		Mentions:     append([]Mention(nil), s.st.Mentions...),
+		NextSince:    make(map[string]TaskCursor, len(s.st.NextSince)),
+		PendingNotes: append([]Mention(nil), s.st.PendingNotes...),
+	}
+	for k, v := range s.st.NextSince {
+		cp.NextSince[k] = v
 	}
 	for k, v := range s.st.Watched {
 		cp.Watched[k] = v
@@ -203,6 +235,15 @@ func prune(st storeState, now time.Time) storeState {
 		if now.Sub(t) > seenRetention {
 			delete(st.Seen, id)
 		}
+	}
+	for id, c := range st.NextSince {
+		// A task starved for longer than this is given up (it would otherwise replay weeks of comments).
+		if now.Sub(c.Since) > watchRetention {
+			delete(st.NextSince, id)
+		}
+	}
+	if len(st.PendingNotes) > maxPendingNotes {
+		st.PendingNotes = st.PendingNotes[len(st.PendingNotes)-maxPendingNotes:]
 	}
 	sort.SliceStable(st.Mentions, func(i, j int) bool { return st.Mentions[i].Date.After(st.Mentions[j].Date) })
 	kept := st.Mentions[:0]

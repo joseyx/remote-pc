@@ -3,6 +3,7 @@ package clickup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -54,8 +55,21 @@ func (f *fakeClickUp) handler(t *testing.T) http.Handler {
 			}
 			_ = enc.Encode(map[string]any{"tasks": list, "last_page": true})
 		case strings.HasPrefix(r.URL.Path, "/task/") && strings.HasSuffix(r.URL.Path, "/comment"):
+			// Like ClickUp: newest first, pages of 25, older pages via start/start_id of the oldest seen.
 			id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/task/"), "/comment")
-			_ = enc.Encode(map[string]any{"comments": f.comments[id]})
+			list := f.comments[id]
+			if sid := r.URL.Query().Get("start_id"); sid != "" {
+				for i, c := range list {
+					if c.ID == sid {
+						list = list[i+1:]
+						break
+					}
+				}
+			}
+			if len(list) > CommentPageSize {
+				list = list[:CommentPageSize]
+			}
+			_ = enc.Encode(map[string]any{"comments": list})
 		case strings.HasPrefix(r.URL.Path, "/comment/") && strings.HasSuffix(r.URL.Path, "/reply"):
 			id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/comment/"), "/reply")
 			_ = enc.Encode(map[string]any{"comments": f.replies[id]})
@@ -79,11 +93,16 @@ type noteCall struct{ date, text, marker string }
 type fakeNotes struct {
 	mu    sync.Mutex
 	calls []noteCall
+	fail  int // number of upcoming writes that fail
 }
 
 func (n *fakeNotes) AddDailyTodoUnique(date, text, marker string) (bool, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.fail > 0 {
+		n.fail--
+		return false, errors.New("nota bloqueada")
+	}
 	n.calls = append(n.calls, noteCall{date, text, marker})
 	return true, nil
 }

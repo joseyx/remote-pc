@@ -33,7 +33,7 @@ type Mention struct {
 	Text       string    `json:"text"`
 	Date       time.Time `json:"date"`
 	Reason     Reason    `json:"reason"`
-	Answered   bool      `json:"answered"` // the user already wrote after it in the same thread
+	Answered   bool      `json:"answered"` // the user replied after it in the same thread (top-level comment: in its own thread)
 	DetectedAt time.Time `json:"detectedAt"`
 	NoteDate   string    `json:"noteDate,omitempty"` // daily note that got the to-do
 }
@@ -44,6 +44,9 @@ type TaskActivity struct {
 	AssignedToMe bool
 	Comments     []Comment            // top-level comments
 	Replies      map[string][]Comment // root comment ID -> replies (only threads that were fetched)
+	// ReplySince overrides, per thread, the window for its replies: a thread read last at an older
+	// instant is checked from then, so replies are not lost when the global window has moved on.
+	ReplySince map[string]time.Time
 }
 
 // DetectResult is the outcome of scanning one task.
@@ -70,16 +73,13 @@ func Detect(me int64, act TaskActivity, since time.Time) DetectResult {
 		TaskURL:  TaskURL(act.Task.ID),
 	}
 
-	// The user's latest top-level comment answers earlier top-level comments in the task.
-	var myLastTop time.Time
 	for _, c := range act.Comments {
 		if c.User.ID == me {
-			if t := c.Time(); t.After(myLastTop) {
-				myLastTop = t
+			if t := c.Time(); t.After(res.MyLastActivity) {
+				res.MyLastActivity = t
 			}
 		}
 	}
-	res.MyLastActivity = myLastTop
 
 	for _, c := range act.Comments {
 		replies := act.Replies[c.ID]
@@ -103,13 +103,18 @@ func Detect(me int64, act TaskActivity, since time.Time) DetectResult {
 
 		if reason, ok := classify(me, c, act.AssignedToMe, false); ok && c.Time().After(since) {
 			m := fill(base, c, reason)
-			// A reply of the user in this thread, or a later top-level comment, answers it.
-			m.Answered = myLastReply.After(m.Date) || myLastTop.After(m.Date)
+			// Only a reply of the user in this same thread answers it: a comment elsewhere in the
+			// task may be about something else, and a wrongly "answered" item is never announced.
+			m.Answered = myLastReply.After(m.Date)
 			res.Mentions = append(res.Mentions, m)
 		}
 
+		replySince := since
+		if t, ok := act.ReplySince[c.ID]; ok && t.Before(replySince) {
+			replySince = t
+		}
 		for _, r := range replies {
-			if !r.Time().After(since) {
+			if !r.Time().After(replySince) {
 				continue
 			}
 			reason, ok := classify(me, r, act.AssignedToMe, participated)
