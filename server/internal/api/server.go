@@ -1404,6 +1404,9 @@ func (s *Server) handleCalendarSaveNote(w http.ResponseWriter, r *http.Request) 
 	var body struct {
 		Date    string `json:"date"`
 		Content string `json:"content"`
+		// BaseContent is the note as the editor loaded it. When present, tagged lines added since
+		// then by background jobs are kept (merged atomically) instead of being overwritten.
+		BaseContent *string `json:"baseContent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -1413,12 +1416,19 @@ func (s *Server) handleCalendarSaveNote(w http.ResponseWriter, r *http.Request) 
 		body.Date = time.Now().Format("2006-01-02")
 	}
 
-	if err := s.calendarMgr.SaveDayNote(body.Date, body.Content); err != nil {
+	merged := 0
+	var err error
+	if body.BaseContent != nil {
+		merged, err = s.calendarMgr.SaveDayNoteMerging(body.Date, body.Content, *body.BaseContent)
+	} else {
+		err = s.calendarMgr.SaveDayNote(body.Date, body.Content)
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved", "date": body.Date})
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": "saved", "date": body.Date, "merged": merged})
 }
 
 func (s *Server) handleCalendarAddTodo(w http.ResponseWriter, r *http.Request) {

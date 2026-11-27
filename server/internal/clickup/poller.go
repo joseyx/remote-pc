@@ -33,7 +33,11 @@ const (
 	maxAssignedPages  = 3
 	maxTasksPerPoll   = 80
 	maxThreadsPerTask = 10
-	maxCommentPages   = 4 // pages of 25 top-level comments read per task and poll
+	// Pages of 25 top-level comments read per task and poll: while the pages still hold comments
+	// inside the window there is new activity to read (up to 1,000 comments); only to find a thread
+	// of mine among old comments, 4 pages (older roots are then checked directly).
+	maxCommentPagesNew     = 40
+	maxCommentPagesThreads = 4
 )
 
 // ErrDisabled means the ClickUp plugin is off.
@@ -205,7 +209,7 @@ func (p *Poller) Poll(ctx context.Context) (PollResult, error) {
 	st.Status.LastPollStart = start
 
 	var fresh []Mention
-	res, listedAll, err := p.scan(ctx, cfg, &st, start, &fresh)
+	res, resume, err := p.scan(ctx, cfg, &st, start, &fresh)
 	// Deliver what was found even if the scan stopped half-way: those comments are already marked seen.
 	p.deliver(&st, fresh, &res)
 
@@ -214,13 +218,17 @@ func (p *Poller) Poll(ctx context.Context) (PollResult, error) {
 	switch {
 	case err != nil:
 		st.Status.LastError = err.Error()
-	case !listedAll:
-		// Tasks beyond the listing pages were never seen and have no cursor: keep the window.
-		st.Status.LastError = "hubo más tareas actualizadas de las que caben en una vuelta; se repite la ventana"
+	case !resume.IsZero():
+		// The updated-tasks listing was cut: everything up to resume was listed (oldest first), so
+		// the next poll continues from there instead of re-reading the same pages.
+		st.Status.NextWindow = resume
+		st.Status.LastError = "hubo más tareas actualizadas de las que caben en una vuelta; la siguiente sigue desde " +
+			resume.Local().Format("02/01 15:04:05")
 	default:
 		// Every task left out (budget, error, unread pages or threads) kept its own cursor, so the
 		// global window can move on without losing them.
 		st.Status.LastSuccess = start
+		st.Status.NextWindow = time.Time{}
 		st.Status.LastError = summarize(res)
 	}
 
@@ -289,14 +297,14 @@ type candidate struct {
 }
 
 // scan does the ClickUp work of one poll and records what it finds in st. New unanswered mentions
-// are appended to fresh for deliver. listedAll is false when the updated-tasks listing was cut.
-func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start time.Time, fresh *[]Mention) (PollResult, bool, error) {
-	var res PollResult
+// are appended to fresh for deliver. resume is non-zero when the updated-tasks listing was cut: it
+// is where the next poll's window must start.
+func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start time.Time, fresh *[]Mention) (res PollResult, resume time.Time, err error) {
 	client := NewClient(cfg.BaseURL, cfg.Token)
 
 	me, err := client.Me(ctx)
 	if err != nil {
-		return res, true, err
+		return res, resume, err
 	}
 	if st.Status.MeID != 0 && st.Status.MeID != me.ID {
 		// The token now belongs to someone else: what we knew does not apply.
@@ -311,10 +319,10 @@ func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start tim
 	if teamID == "" {
 		teams, err := client.Teams(ctx)
 		if err != nil {
-			return res, true, err
+			return res, resume, err
 		}
 		if len(teams) == 0 {
-			return res, true, errors.New("el token de ClickUp no tiene acceso a ningún workspace")
+			return res, resume, errors.New("el token de ClickUp no tiene acceso a ningún workspace")
 		}
 		teamID = teams[0].ID
 	}
@@ -324,10 +332,13 @@ func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start tim
 	if !st.Status.LastSuccess.IsZero() {
 		since = st.Status.LastSuccess.Add(-pollOverlap)
 	}
+	if st.Status.NextWindow.After(since) {
+		since = st.Status.NextWindow // a previous listing was cut: continue where it stopped
+	}
 
-	cands, listedAll, partial, err := p.candidates(ctx, client, teamID, me.ID, st, since, start)
+	cands, resume, partial, err := p.candidates(ctx, client, teamID, me.ID, st, since, start)
 	if err != nil {
-		return res, true, err
+		return res, time.Time{}, err
 	}
 	res.Truncated = partial
 	if len(cands) > maxTasksPerPoll {
@@ -344,7 +355,7 @@ func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start tim
 			for _, rest := range cands[i:] {
 				keepCursor(st, rest)
 			}
-			return res, listedAll, err
+			return res, resume, err
 		}
 		complete, err := p.scanTask(ctx, client, me.ID, c, st, start, &res, fresh)
 		switch {
@@ -356,7 +367,7 @@ func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start tim
 			for _, rest := range cands[i:] {
 				keepCursor(st, rest)
 			}
-			return res, listedAll, err
+			return res, resume, err
 		case err != nil:
 			res.Errors = append(res.Errors, fmt.Sprintf("%s: %v", c.task.ID, err))
 			keepCursor(st, c)
@@ -369,7 +380,7 @@ func (p *Poller) scan(ctx context.Context, cfg Config, st *storeState, start tim
 			delete(st.NextSince, c.task.ID) // a later update will list it again
 		}
 	}
-	return res, listedAll, nil
+	return res, resume, nil
 }
 
 // keepCursor makes sure a task that was not (fully) scanned is resumed from its own window.
@@ -387,7 +398,7 @@ func keepCursor(st *storeState, c candidate) {
 // candidates lists the tasks to scan: updated since the last poll, my recent tickets, tasks I wrote
 // in recently (their threads get replies without the task's update date moving) and the backlog of
 // tasks left out before. They are ordered by how far behind they are, so nobody starves.
-func (p *Poller) candidates(ctx context.Context, client *Client, teamID string, me int64, st *storeState, since, start time.Time) (list []candidate, listedAll, partial bool, err error) {
+func (p *Poller) candidates(ctx context.Context, client *Client, teamID string, me int64, st *storeState, since, start time.Time) (list []candidate, resume time.Time, partial bool, err error) {
 	byID := map[string]int{}
 	add := func(t Task, rank int, assigned bool) {
 		if !validTaskID(t.ID) {
@@ -408,17 +419,26 @@ func (p *Poller) candidates(ctx context.Context, client *Client, teamID string, 
 		list = append(list, candidate{task: t, rank: rank, assigned: assigned})
 	}
 
-	updated, truncU, err := client.Tasks(ctx, teamID, TaskQuery{UpdatedAfter: since, IncludeClosed: true, MaxPages: maxUpdatedPages})
+	// Oldest first: if the listing is cut, everything up to the last task returned was listed.
+	updated, truncU, err := client.Tasks(ctx, teamID, TaskQuery{UpdatedAfter: since, IncludeClosed: true, MaxPages: maxUpdatedPages, OldestFirst: true})
 	if err != nil {
-		return nil, false, false, err
+		return nil, time.Time{}, false, err
 	}
 	for _, t := range updated {
 		add(t, 0, t.IsAssignedTo(me))
 	}
+	if truncU && len(updated) > 0 {
+		// 1 ms before the last listed task, so tasks sharing its update date are listed again
+		// (already-seen comments are skipped); never at or before since, so the window always moves.
+		resume = parseMillis(updated[len(updated)-1].DateUpdated).Add(-time.Millisecond)
+		if !resume.After(since) {
+			resume = since.Add(time.Millisecond)
+		}
+	}
 
 	mine, truncA, err := client.Tasks(ctx, teamID, TaskQuery{UpdatedAfter: start.Add(-assignedWindow), AssigneeID: me, MaxPages: maxAssignedPages})
 	if err != nil {
-		return nil, false, false, err
+		return nil, time.Time{}, false, err
 	}
 	for _, t := range mine {
 		add(t, 1, true)
@@ -449,7 +469,7 @@ func (p *Poller) candidates(ctx context.Context, client *Client, teamID string, 
 		}
 		return a.task.ID < b.task.ID
 	})
-	return list, !truncU, truncA, nil
+	return list, resume, truncA, nil
 }
 
 type threadUpdate struct {
@@ -493,7 +513,11 @@ func (p *Poller) scanTask(ctx context.Context, client *Client, me int64, c candi
 		if !olderMayBeNew && len(want) == 0 {
 			break
 		}
-		if pages >= maxCommentPages {
+		limit := maxCommentPagesThreads
+		if olderMayBeNew {
+			limit = maxCommentPagesNew
+		}
+		if pages >= limit {
 			if olderMayBeNew {
 				complete = false // new comments beyond what we read: resume from this task's cursor
 			}
@@ -548,6 +572,36 @@ func (p *Poller) scanTask(ctx context.Context, client *Client, me int64, c candi
 		}})
 	}
 
+	// Threads I am in whose root fell beyond the pages read (very long tasks): read their replies
+	// directly, so they keep being checked. The root is not needed: the thread is known to be mine.
+	for _, id := range sortedKeys(want) {
+		if fetched >= maxThreadsPerTask {
+			complete = false
+			break
+		}
+		known := st.Threads[id]
+		replies, err := client.Replies(ctx, id)
+		if errors.Is(err, ErrNotFound) {
+			delete(st.Threads, id)
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		fetched++
+		if len(replies) == known.ReplyCount {
+			st.Threads[id] = ThreadState{TaskID: c.task.ID, ReplyCount: known.ReplyCount, Participated: true, CheckedAt: start}
+			continue
+		}
+		// A stand-in root authored by me: Detect then treats the replies as replies in my thread.
+		act.Comments = append(act.Comments, Comment{ID: id, User: User{ID: me}, ReplyCount: len(replies)})
+		act.Replies[id] = replies
+		act.ReplySince[id] = known.CheckedAt.Add(-pollOverlap)
+		updates = append(updates, threadUpdate{id: id, state: ThreadState{
+			TaskID: c.task.ID, ReplyCount: len(replies), Participated: true, CheckedAt: start,
+		}})
+	}
+
 	dr := Detect(me, act, c.since)
 
 	participated := map[string]bool{}
@@ -586,6 +640,15 @@ func (p *Poller) scanTask(ctx context.Context, client *Client, me int64, c candi
 	}
 	res.Checked++
 	return complete, nil
+}
+
+func sortedKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // isFatal reports errors that make the rest of the poll pointless.

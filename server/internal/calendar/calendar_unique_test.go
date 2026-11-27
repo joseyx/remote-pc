@@ -62,6 +62,45 @@ func TestUnreadableNoteIsNotOverwritten(t *testing.T) {
 	}
 }
 
+// Saving an edit keeps tagged lines added by background jobs after the editor loaded the note,
+// atomically with the write, while lines the user deleted stay deleted.
+func TestSaveDayNoteMergingKeepsConcurrentLines(t *testing.T) {
+	mgr := NewManager(t.TempDir())
+	const date = "2026-11-26"
+	if _, err := mgr.AddDailyTodoUnique(date, "viejo", "clickup:1"); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := mgr.GetDayNote(date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// While the user edits, the poller adds two more lines.
+	for _, id := range []string{"2", "3"} {
+		if _, err := mgr.AddDailyTodoUnique(date, "nuevo "+id, "clickup:"+id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The user deleted "viejo" and wrote a manual item.
+	edited := strings.Replace(loaded.Content, "- [ ] viejo <!-- clickup:1 -->", "- [ ] mi tarea", 1)
+
+	merged, err := mgr.SaveDayNoteMerging(date, edited, loaded.Content)
+	if err != nil || merged != 2 {
+		t.Fatalf("merged=%d err=%v", merged, err)
+	}
+	note, _ := mgr.GetDayNote(date)
+	for _, want := range []string{"nuevo 3 <!-- clickup:3 -->", "nuevo 2 <!-- clickup:2 -->", "- [ ] mi tarea"} {
+		if !strings.Contains(note.Content, want) {
+			t.Errorf("missing %q:\n%s", want, note.Content)
+		}
+	}
+	if strings.Contains(note.Content, "clickup:1") {
+		t.Errorf("a line deleted by the user came back:\n%s", note.Content)
+	}
+	if strings.Index(note.Content, "clickup:3") > strings.Index(note.Content, "clickup:2") {
+		t.Errorf("carried lines should keep their order (newest first):\n%s", note.Content)
+	}
+}
+
 func TestAddDailyTodoUniqueRejectsUnsafeMarkers(t *testing.T) {
 	mgr := NewManager(t.TempDir())
 	for _, bad := range []string{"", "clickup", "clickup:1 -->", "<x>:1", "clickup:a b"} {

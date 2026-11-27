@@ -98,7 +98,8 @@ func writeJSONStatus(w http.ResponseWriter, code int, v any) {
 
 // handleClickUpMentions lists stored mentions.
 //
-//	detected_after  ms epoch: only items detected after it (what the dashboard has not shown yet)
+//	detected_after  ms epoch + after_id (comment ID): cursor of what the dashboard already showed;
+//	                returns items strictly after it, ordered by detection time then comment ID
 //	since_hours     only comments written in the last N hours
 //	include_answered=1 also items the user already answered
 func (s *Server) handleClickUpMentions(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +111,7 @@ func (s *Server) handleClickUpMentions(w http.ResponseWriter, r *http.Request) {
 	f := clickup.MentionFilter{Limit: clickupListLimit, IncludeAnswered: q.Get("include_answered") == "1" || q.Get("include_answered") == "true"}
 	if ms, err := strconv.ParseInt(q.Get("detected_after"), 10, 64); err == nil && ms > 0 {
 		f.DetectedAfter = time.UnixMilli(ms)
+		f.AfterID = q.Get("after_id")
 	}
 	if h, err := strconv.Atoi(q.Get("since_hours")); err == nil && h > 0 {
 		if h > clickupMaxSinceHr {

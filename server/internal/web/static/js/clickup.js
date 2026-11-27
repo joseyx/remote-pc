@@ -2,68 +2,83 @@
 // ClickUp mentions: live toast + daily note refresh
 // ==========================================
 // The daemon's ClickUp poller publishes a {"type":"clickup"} hint on /ws/events when it adds new
-// mentions to the daily note. This page then asks for the ones it has not announced yet (a cursor
-// kept per browser in localStorage, or in memory when storage is unavailable), shows a toast /
-// desktop notification and refreshes the note on screen.
+// mentions to the daily note. This page then asks for the ones it has not announced yet and shows a
+// toast / desktop notification, and refreshes the note on screen.
+//
+// "Not announced yet" is a cursor (detectedAt ms + commentId, so mentions detected in the same
+// instant are told apart) kept per browser in localStorage, or in memory when storage fails.
 
-const CLICKUP_LAST_SEEN_KEY = 'orbit.clickup.lastDetected';
+const CLICKUP_CURSOR_KEY = 'orbit.clickup.cursor';
 const CLICKUP_PAGE_LIMIT = 100; // the API returns at most this many per call
 const CLICKUP_MAX_PAGES = 5;
 
-let clickupLastSeenMemory = 0;
+let clickupCursorMemory = null;
 
-function clickupReadLastSeen() {
-    let stored = 0;
-    try {
-        const v = parseInt(localStorage.getItem(CLICKUP_LAST_SEEN_KEY) || '', 10);
-        if (Number.isFinite(v)) stored = v;
-    } catch (e) { /* private mode or blocked storage: the in-memory cursor is used */ }
-    return Math.max(stored, clickupLastSeenMemory);
+function clickupParseCursor(raw) {
+    if (!raw) return null;
+    const sep = raw.indexOf('|');
+    const t = parseInt(sep === -1 ? raw : raw.slice(0, sep), 10);
+    if (!Number.isFinite(t) || t <= 0) return null;
+    return { t, id: sep === -1 ? '' : raw.slice(sep + 1) };
 }
 
-function clickupWriteLastSeen(ms) {
-    clickupLastSeenMemory = ms;
+function clickupCursorAfter(a, b) { // is a later than b?
+    if (!b) return !!a;
+    if (!a) return false;
+    return a.t > b.t || (a.t === b.t && a.id > b.id);
+}
+
+function clickupReadCursor() {
+    let stored = null;
     try {
-        localStorage.setItem(CLICKUP_LAST_SEEN_KEY, String(ms));
+        stored = clickupParseCursor(localStorage.getItem(CLICKUP_CURSOR_KEY));
+    } catch (e) { /* private mode or blocked storage: the in-memory cursor is used */ }
+    return clickupCursorAfter(clickupCursorMemory, stored) ? clickupCursorMemory : stored;
+}
+
+function clickupWriteCursor(c) {
+    clickupCursorMemory = c;
+    try {
+        localStorage.setItem(CLICKUP_CURSOR_KEY, `${c.t}|${c.id}`);
     } catch (e) { /* kept in memory for this page */ }
 }
 
 async function fetchClickUpMentionsAfter(cursor) {
     const token = serverInfo ? serverInfo.authToken : '';
     const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-    const res = await fetch(`/api/clickup/mentions?detected_after=${cursor}`, { headers });
+    const q = `detected_after=${cursor.t}&after_id=${encodeURIComponent(cursor.id)}`;
+    const res = await fetch(`/api/clickup/mentions?${q}`, { headers });
     if (!res.ok) return null;
     const data = await res.json();
     return (data && Array.isArray(data.mentions)) ? data.mentions : [];
 }
 
 async function refreshClickUpMentions() {
-    let cursor = clickupReadLastSeen();
+    let cursor = clickupReadCursor();
     if (!cursor) {
         // First time on this browser: start from now instead of announcing the whole backlog.
-        clickupWriteLastSeen(Date.now());
+        clickupWriteCursor({ t: Date.now(), id: '' });
         return;
     }
 
-    // The API returns items oldest-detected first when given a cursor, so advancing the cursor to
-    // the last item of each batch never skips any.
+    // With a cursor the API returns items ordered by (detectedAt, commentId), so moving the cursor
+    // to the last item of each batch never skips any, even when several share the same instant.
     const mentions = [];
     try {
         for (let page = 0; page < CLICKUP_MAX_PAGES; page++) {
             const batch = await fetchClickUpMentionsAfter(cursor);
             if (!batch || !batch.length) break;
             mentions.push(...batch);
-            for (const m of batch) {
-                const t = Date.parse(m.detectedAt);
-                if (Number.isFinite(t) && t > cursor) cursor = t;
-            }
+            const last = batch[batch.length - 1];
+            const t = Date.parse(last.detectedAt);
+            if (Number.isFinite(t)) cursor = { t, id: last.commentId || '' };
             if (batch.length < CLICKUP_PAGE_LIMIT) break;
         }
     } catch (e) {
         return;
     }
     if (!mentions.length) return;
-    clickupWriteLastSeen(cursor);
+    clickupWriteCursor(cursor);
 
     const latest = mentions[mentions.length - 1];
     let msg = mentions.length === 1
@@ -74,7 +89,7 @@ async function refreshClickUpMentions() {
     const touchesOpenNote = typeof calSelectedDate !== 'undefined' && mentions.some(m => m.noteDate === calSelectedDate);
     if (touchesOpenNote) {
         if (typeof isCalEditing !== 'undefined' && isCalEditing) {
-            // saveCalendarNote merges these lines into the edit instead of overwriting them.
+            // Saving sends the loaded note as base and the server keeps these lines (atomic merge).
             msg += ' · se agregará a tu nota al guardar';
         } else if (typeof reloadCalendarNote === 'function') {
             reloadCalendarNote();
@@ -91,43 +106,4 @@ async function refreshClickUpMentions() {
             new Notification('Orbit · ClickUp', { body });
         } catch (e) { /* notifications unavailable */ }
     }
-}
-
-// --- Keeping concurrent to-dos when a note edited in the browser is saved ---
-// Background jobs (the ClickUp poller) can add lines tagged <!-- source:id --> while the note is
-// open in the editor. Saving the editor's text as-is would silently drop them, so before saving we
-// re-read the note and carry over every tagged line that appeared after the editor was loaded.
-const TODO_MARKER_RE = /<!--\s*([a-z][a-z0-9_]*:[A-Za-z0-9_-]+)\s*-->/;
-const NOTES_GENERAL_HEADER = '## 📌 Notas Generales';
-
-function taggedLines(text) {
-    const out = new Map();
-    for (const line of String(text || '').split('\n')) {
-        const m = line.match(TODO_MARKER_RE);
-        if (m && !out.has(m[1])) out.set(m[1], line);
-    }
-    return out;
-}
-
-// mergeConcurrentTodoLines returns editedContent plus the tagged lines that exist in latestContent
-// but were neither in loadedContent (what the editor started from) nor in the edit itself. Lines the
-// user deleted while editing were in loadedContent, so they stay deleted.
-function mergeConcurrentTodoLines(loadedContent, latestContent, editedContent) {
-    const loaded = taggedLines(loadedContent);
-    const edited = taggedLines(editedContent);
-    const added = [];
-    for (const [marker, line] of taggedLines(latestContent)) {
-        if (!loaded.has(marker) && !edited.has(marker)) added.push(line);
-    }
-    if (!added.length) return { content: editedContent, added: 0 };
-
-    const idx = editedContent.indexOf(NOTES_GENERAL_HEADER);
-    let content;
-    if (idx === -1) {
-        content = editedContent.replace(/\s*$/, '') + '\n\n' + NOTES_GENERAL_HEADER + '\n' + added.join('\n') + '\n';
-    } else {
-        const at = idx + NOTES_GENERAL_HEADER.length;
-        content = editedContent.slice(0, at) + '\n' + added.join('\n') + editedContent.slice(at);
-    }
-    return { content, added: added.length };
 }

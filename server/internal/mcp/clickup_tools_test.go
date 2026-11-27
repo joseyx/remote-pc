@@ -56,6 +56,7 @@ func TestClickUpSinceHoursValidation(t *testing.T) {
 		{map[string]interface{}{"since_hours": float64(721)}, 0, false},
 		{map[string]interface{}{"since_hours": 1.5}, 0, false},
 		{map[string]interface{}{"since_hours": "24"}, 0, false},
+		{map[string]interface{}{"since_hours": nil}, 0, false},
 	}
 	for _, c := range cases {
 		got, err := clickupSinceHours(c.args)

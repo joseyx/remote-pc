@@ -203,6 +203,56 @@ func (m *Manager) SaveDayNote(date string, content string) error {
 	return m.writeNoteLocked(date, content)
 }
 
+// taggedLineRegex finds the hidden marker of lines added by AddDailyTodoUnique.
+var taggedLineRegex = regexp.MustCompile(`<!--\s*([a-z][a-z0-9_]*:[A-Za-z0-9_-]+)\s*-->`)
+
+func taggedLines(content string) (markers map[string]bool, lines map[string]string, order []string) {
+	markers, lines = map[string]bool{}, map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		if mm := taggedLineRegex.FindStringSubmatch(line); mm != nil && !markers[mm[1]] {
+			markers[mm[1]] = true
+			lines[mm[1]] = strings.TrimRight(line, "\r")
+			order = append(order, mm[1])
+		}
+	}
+	return markers, lines, order
+}
+
+// SaveDayNoteMerging saves content edited from base (the note as the editor loaded it) without
+// losing tagged lines that background writers (e.g. the ClickUp poller) added to the file in the
+// meantime: under the same lock, every tagged line present now but neither in base nor in content
+// is carried over. Lines the user deleted were in base, so they stay deleted. It returns how many
+// lines it carried over.
+func (m *Manager) SaveDayNoteMerging(date string, content string, base string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	current, exists, _, err := m.readNoteLocked(date)
+	if err != nil {
+		return 0, err
+	}
+	if exists {
+		inBase, _, _ := taggedLines(base)
+		inEdit, _, _ := taggedLines(content)
+		_, lines, order := taggedLines(current)
+		// Insert in reverse so the carried lines keep their relative order under the header.
+		added := 0
+		for i := len(order) - 1; i >= 0; i-- {
+			marker := order[i]
+			if inBase[marker] || inEdit[marker] {
+				continue
+			}
+			content = insertTodoLine(content, lines[marker])
+			added++
+		}
+		if err := m.writeNoteLocked(date, content); err != nil {
+			return 0, err
+		}
+		return added, nil
+	}
+	return 0, m.writeNoteLocked(date, content)
+}
+
 const notesGeneralHeader = "## 📌 Notas Generales"
 
 // insertTodoLine places todoLine right under the "Notas Generales" header, replacing the empty

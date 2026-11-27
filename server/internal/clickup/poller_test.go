@@ -6,7 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +25,9 @@ type fakeClickUp struct {
 	comments map[string][]Comment
 	replies  map[string][]Comment
 	status   int // forced status for every request (0 = normal)
+	// pagedTasks makes the task listing behave like ClickUp: date_updated_gt filter, order by
+	// update date (ascending with reverse=true), pages of 100 and last_page.
+	pagedTasks bool
 }
 
 func newFake() *fakeClickUp {
@@ -53,6 +59,10 @@ func (f *fakeClickUp) handler(t *testing.T) http.Handler {
 			if r.URL.Query().Get("assignees[]") != "" {
 				list = f.mine
 			}
+			if f.pagedTasks {
+				_ = enc.Encode(pageTasks(list, r.URL.Query()))
+				return
+			}
 			_ = enc.Encode(map[string]any{"tasks": list, "last_page": true})
 		case strings.HasPrefix(r.URL.Path, "/task/") && strings.HasSuffix(r.URL.Path, "/comment"):
 			// Like ClickUp: newest first, pages of 25, older pages via start/start_id of the oldest seen.
@@ -78,6 +88,35 @@ func (f *fakeClickUp) handler(t *testing.T) http.Handler {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	})
+}
+
+const fakeTaskPage = 100
+
+func pageTasks(all []map[string]any, q url.Values) map[string]any {
+	gt, _ := strconv.ParseInt(q.Get("date_updated_gt"), 10, 64)
+	upd := func(t map[string]any) int64 { v, _ := strconv.ParseInt(t["date_updated"].(string), 10, 64); return v }
+	var list []map[string]any
+	for _, t := range all {
+		if upd(t) > gt {
+			list = append(list, t)
+		}
+	}
+	asc := q.Get("reverse") == "true"
+	sort.SliceStable(list, func(i, j int) bool {
+		if asc {
+			return upd(list[i]) < upd(list[j])
+		}
+		return upd(list[i]) > upd(list[j])
+	})
+	page, _ := strconv.Atoi(q.Get("page"))
+	from, to := page*fakeTaskPage, (page+1)*fakeTaskPage
+	if from > len(list) {
+		from = len(list)
+	}
+	if to > len(list) {
+		to = len(list)
+	}
+	return map[string]any{"tasks": list[from:to], "last_page": to >= len(list)}
 }
 
 func task(id, name string, assignees ...int64) map[string]any {
@@ -313,7 +352,7 @@ func TestStorePersistsAcrossOpen(t *testing.T) {
 	if got := s2.Mentions(MentionFilter{}); len(got) != 1 || got[0].CommentID != "c1" {
 		t.Errorf("reloaded mentions = %+v", got)
 	}
-	if got := s2.Mentions(MentionFilter{DetectedAfter: now}); len(got) != 0 {
-		t.Errorf("DetectedAfter filter should exclude it: %+v", got)
+	if got := s2.Mentions(MentionFilter{DetectedAfter: now, AfterID: "c1"}); len(got) != 0 {
+		t.Errorf("a cursor at the item itself should exclude it: %+v", got)
 	}
 }

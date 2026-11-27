@@ -164,6 +164,9 @@ type TaskQuery struct {
 	AssigneeID    int64 // 0 = any
 	IncludeClosed bool
 	MaxPages      int
+	// OldestFirst lists by update date ascending, so a listing cut by MaxPages has covered
+	// everything up to the last task returned (that task's date is a safe resume point).
+	OldestFirst bool
 }
 
 // Tasks lists workspace tasks updated after q.UpdatedAfter, following pagination up to q.MaxPages.
@@ -176,6 +179,9 @@ func (c *Client) Tasks(ctx context.Context, teamID string, q TaskQuery) (tasks [
 	for page := 0; page < maxPages; page++ {
 		v := url.Values{}
 		v.Set("order_by", "updated")
+		if q.OldestFirst {
+			v.Set("reverse", "true") // ClickUp: ascending by update date
+		}
 		v.Set("subtasks", "true")
 		v.Set("page", strconv.Itoa(page))
 		if q.IncludeClosed {

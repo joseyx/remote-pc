@@ -88,6 +88,57 @@ func TestPollBudgetKeepsCutTasks(t *testing.T) {
 	}
 }
 
+// More updated tasks than the listing pages hold: the next poll continues from the last task listed
+// (no page is re-read, none is skipped, the first window does not slide) and every task is reached.
+func TestPollContinuesAfterACutListing(t *testing.T) {
+	const total = maxUpdatedPages*fakeTaskPage + 100
+	f := newFake()
+	f.pagedTasks = true
+	base := time.Now().Add(-20 * time.Hour)
+	for i := 0; i < total; i++ {
+		id := fmt.Sprintf("U%03d", i)
+		at := base.Add(time.Duration(i) * time.Second)
+		tk := task(id, "Ticket "+id, peerID)
+		tk["date_updated"] = ms(at)
+		f.tasks = append(f.tasks, tk)
+		f.comments[id] = []Comment{comment("c"+id, peerID, at, "revisa", 0, meID)}
+	}
+	srv := httptest.NewServer(f.handler(t))
+	defer srv.Close()
+
+	notes := &fakeNotes{}
+	notified := 0
+	p, store := newTestPoller(t, srv.URL, notes, &notified)
+
+	if _, err := p.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	st := store.Status()
+	wantResume := time.UnixMilli(base.Add(time.Duration(maxUpdatedPages*fakeTaskPage-1) * time.Second).UnixMilli()).Add(-time.Millisecond)
+	if !st.NextWindow.Equal(wantResume) || !st.LastSuccess.IsZero() {
+		t.Fatalf("after a cut listing: NextWindow=%v (want %v), LastSuccess=%v", st.NextWindow, wantResume, st.LastSuccess)
+	}
+
+	for i := 0; i < 15 && len(notes.calls) < total; i++ {
+		if _, err := p.Poll(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(notes.calls) != total {
+		t.Fatalf("reached %d of %d tasks", len(notes.calls), total)
+	}
+	seen := map[string]bool{}
+	for _, c := range notes.calls {
+		if seen[c.marker] {
+			t.Fatalf("duplicate to-do %s", c.marker)
+		}
+		seen[c.marker] = true
+	}
+	if st := store.Status(); !st.NextWindow.IsZero() || st.LastSuccess.IsZero() {
+		t.Errorf("once everything is listed the window should be normal again: %+v", st)
+	}
+}
+
 // More than one page of new comments: the older pages are read too.
 func TestPollPaginatesLongTasks(t *testing.T) {
 	f := newFake()
@@ -111,6 +162,33 @@ func TestPollPaginatesLongTasks(t *testing.T) {
 	}
 	if f.calls["/task/L1/comment"] != 2 {
 		t.Errorf("expected 2 comment pages, got %d", f.calls["/task/L1/comment"])
+	}
+}
+
+// New activity is read past the 4 pages used to look for old threads: 130 new comments, 6 pages.
+func TestPollReadsEveryPageOfNewComments(t *testing.T) {
+	const n = 130
+	f := newFake()
+	f.mine = []map[string]any{task("L2", "Ticket muy activo", meID)}
+	now := time.Now()
+	for i := n - 1; i >= 0; i-- { // newest first
+		f.comments["L2"] = append(f.comments["L2"], comment(fmt.Sprintf("c%03d", i), peerID, now.Add(-time.Duration(n-i)*time.Minute), "x", 0))
+	}
+	srv := httptest.NewServer(f.handler(t))
+	defer srv.Close()
+
+	notes := &fakeNotes{}
+	notified := 0
+	p, _ := newTestPoller(t, srv.URL, notes, &notified)
+	res, err := p.Poll(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.New != n || res.Truncated {
+		t.Fatalf("expected %d comments and a complete scan, got %+v", n, res)
+	}
+	if got := f.calls["/task/L2/comment"]; got != 6 {
+		t.Errorf("expected 6 comment pages, got %d", got)
 	}
 }
 
@@ -175,6 +253,95 @@ func TestStopCancelsAManualPoll(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("Stop did not cancel the manual poll")
+	}
+}
+
+// A thread of mine whose root fell beyond the pages read in a long task keeps being checked.
+func TestPollChecksMyThreadBeyondThePagesRead(t *testing.T) {
+	now := time.Now()
+	f := newFake()
+	f.tasks = []map[string]any{task("W1", "Ticket ajeno largo", peerID)}
+	f.comments["W1"] = []Comment{comment("root", meID, now.Add(-3*time.Hour), "MR con el fix", 1)}
+	f.replies["root"] = []Comment{comment("r1", peerID, now.Add(-2*time.Hour), "visto", 0)}
+	srv := httptest.NewServer(f.handler(t))
+	defer srv.Close()
+
+	notes := &fakeNotes{}
+	notified := 0
+	p, _ := newTestPoller(t, srv.URL, notes, &notified)
+	if _, err := p.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// The task is no longer listed as updated, 110 older comments push my root past page 4, and a
+	// new reply arrives in my thread.
+	f.mu.Lock()
+	f.tasks = nil
+	var filler []Comment
+	for i := 0; i < 110; i++ {
+		filler = append(filler, comment(fmt.Sprintf("f%03d", i), peerID, now.Add(-150*time.Minute-time.Duration(i)*time.Second), "relleno", 0))
+	}
+	root := f.comments["W1"][0]
+	root.ReplyCount = 2
+	f.comments["W1"] = append(filler, root)
+	f.replies["root"] = append(f.replies["root"], comment("r2", peerID, time.Now(), "mezclado", 0))
+	f.mu.Unlock()
+
+	res, err := p.Poll(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.New != 1 || notes.calls[len(notes.calls)-1].marker != "clickup:r2" {
+		t.Fatalf("reply in my old thread was missed: %+v %+v", res, notes.calls)
+	}
+}
+
+// Pending to-dos are not dropped by count: all of them survive a reopen of the store.
+func TestPendingNotesAreNotCapped(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.json")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := s.snapshot()
+	now := time.Now()
+	for i := 0; i < 150; i++ {
+		st.PendingNotes = append(st.PendingNotes, Mention{CommentID: fmt.Sprintf("p%03d", i), DetectedAt: now})
+	}
+	if err := s.replace(st, now); err != nil {
+		t.Fatal(err)
+	}
+	s2, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(s2.snapshot().PendingNotes); got != 150 {
+		t.Fatalf("pending after reopen = %d, want 150", got)
+	}
+}
+
+// Mentions detected in the same instant are told apart by comment ID, so a page limit that splits
+// them does not hide the rest.
+func TestMentionsCursorBreaksTiesByCommentID(t *testing.T) {
+	s, err := OpenStore(filepath.Join(t.TempDir(), "s.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := s.snapshot()
+	at := time.UnixMilli(time.Now().UnixMilli())
+	for _, id := range []string{"c", "a", "b"} {
+		st.Mentions = append(st.Mentions, Mention{CommentID: id, DetectedAt: at, Date: at})
+	}
+	if err := s.replace(st, at); err != nil {
+		t.Fatal(err)
+	}
+	page1 := s.Mentions(MentionFilter{DetectedAfter: at.Add(-time.Second), Limit: 2})
+	if len(page1) != 2 || page1[0].CommentID != "a" || page1[1].CommentID != "b" {
+		t.Fatalf("page 1 = %+v", page1)
+	}
+	page2 := s.Mentions(MentionFilter{DetectedAfter: at, AfterID: "b", Limit: 2})
+	if len(page2) != 1 || page2[0].CommentID != "c" {
+		t.Fatalf("page 2 = %+v, want only c", page2)
 	}
 }
 

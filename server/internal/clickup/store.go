@@ -21,7 +21,6 @@ const (
 	// mentionRetention and maxMentions bound the history served to the UI and MCP.
 	mentionRetention = 30 * 24 * time.Hour
 	maxMentions      = 300
-	maxPendingNotes  = 100
 )
 
 // WatchedTask is a task the user wrote in recently; it is re-scanned every poll because replies in
@@ -53,8 +52,12 @@ type Status struct {
 	LastPollStart time.Time `json:"lastPollStart,omitempty"`
 	LastPollEnd   time.Time `json:"lastPollEnd,omitempty"`
 	LastSuccess   time.Time `json:"lastSuccess,omitempty"`
-	LastError     string    `json:"lastError,omitempty"`
-	LastChecked   int       `json:"lastChecked"` // tasks scanned in the last poll
+	// NextWindow is where the next poll's window starts when the updated-tasks listing was cut:
+	// the update date of the last task listed (listing is oldest first), so it never re-reads the
+	// same pages nor skips the ones it did not reach. Zero once a poll lists everything.
+	NextWindow  time.Time `json:"nextWindow,omitempty"`
+	LastError   string    `json:"lastError,omitempty"`
+	LastChecked int       `json:"lastChecked"` // tasks scanned in the last poll
 }
 
 type storeState struct {
@@ -133,24 +136,27 @@ func (s *Store) Status() Status {
 
 // MentionFilter narrows Mentions.
 type MentionFilter struct {
-	DetectedAfter   time.Time // only mentions detected after this instant
+	DetectedAfter   time.Time // cursor: only mentions after (DetectedAfter, AfterID)
+	AfterID         string    // tie-breaker for mentions detected in the same instant
 	Since           time.Time // only comments written after this instant
 	IncludeAnswered bool
 	Limit           int
 }
 
-// Mentions returns stored mentions, newest comment first. With DetectedAfter (a cursor of what a
-// client already announced) they come oldest-detected first instead, so a client that advances its
-// cursor to the last item returned never skips items beyond Limit.
+// Mentions returns stored mentions, newest comment first. With a cursor (DetectedAfter + AfterID,
+// what a client already announced) they come ordered by (DetectedAt, CommentID) instead, and only
+// those strictly after the cursor: a client that moves its cursor to the last item returned never
+// skips any, even when a batch of mentions detected in the same instant crosses Limit.
 func (s *Store) Mentions(f MentionFilter) []Mention {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	useCursor := !f.DetectedAfter.IsZero()
 	out := make([]Mention, 0)
 	for _, m := range s.st.Mentions {
 		if !f.IncludeAnswered && m.Answered {
 			continue
 		}
-		if !f.DetectedAfter.IsZero() && !m.DetectedAt.After(f.DetectedAfter) {
+		if useCursor && !mentionAfter(m, f.DetectedAfter, f.AfterID) {
 			continue
 		}
 		if !f.Since.IsZero() && !m.Date.After(f.Since) {
@@ -158,18 +164,23 @@ func (s *Store) Mentions(f MentionFilter) []Mention {
 		}
 		out = append(out, m)
 	}
-	if !f.DetectedAfter.IsZero() {
+	if useCursor {
 		sort.SliceStable(out, func(i, j int) bool {
 			if !out[i].DetectedAt.Equal(out[j].DetectedAt) {
 				return out[i].DetectedAt.Before(out[j].DetectedAt)
 			}
-			return out[i].Date.Before(out[j].Date)
+			return out[i].CommentID < out[j].CommentID
 		})
 	}
 	if f.Limit > 0 && len(out) > f.Limit {
 		out = out[:f.Limit]
 	}
 	return out
+}
+
+// mentionAfter orders mentions by (DetectedAt, CommentID) for cursor pagination.
+func mentionAfter(m Mention, t time.Time, id string) bool {
+	return m.DetectedAt.After(t) || (m.DetectedAt.Equal(t) && m.CommentID > id)
 }
 
 // snapshot returns a deep copy the poller can work on without holding the lock.
@@ -242,9 +253,15 @@ func prune(st storeState, now time.Time) storeState {
 			delete(st.NextSince, id)
 		}
 	}
-	if len(st.PendingNotes) > maxPendingNotes {
-		st.PendingNotes = st.PendingNotes[len(st.PendingNotes)-maxPendingNotes:]
+	// Pending to-dos are never dropped by count (their comments are already marked seen and would
+	// not come back); only once they are as old as the history itself.
+	keptPending := st.PendingNotes[:0]
+	for _, m := range st.PendingNotes {
+		if now.Sub(m.DetectedAt) <= mentionRetention {
+			keptPending = append(keptPending, m)
+		}
 	}
+	st.PendingNotes = keptPending
 	sort.SliceStable(st.Mentions, func(i, j int) bool { return st.Mentions[i].Date.After(st.Mentions[j].Date) })
 	kept := st.Mentions[:0]
 	for _, m := range st.Mentions {

@@ -50,10 +50,11 @@ const (
 	clickupMaxHours     = 720
 )
 
-// clickupSinceHours validates the optional since_hours argument: an integer from 1 to 720.
+// clickupSinceHours validates the optional since_hours argument: an integer from 1 to 720. Omitting
+// it means 24; any other value, null included, is rejected (the schema declares an integer).
 func clickupSinceHours(args map[string]interface{}) (int, error) {
 	raw, present := args["since_hours"]
-	if !present || raw == nil {
+	if !present {
 		return clickupDefaultHours, nil
 	}
 	v, ok := raw.(float64)
