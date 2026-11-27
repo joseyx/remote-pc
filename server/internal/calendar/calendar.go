@@ -147,22 +147,31 @@ func (m *Manager) getNoteFilePath(date string) string {
 	return primary
 }
 
+// readNoteLocked returns the note markdown for date, or the default template when the day has no
+// file yet. The caller must hold m.mu (read or write).
+func (m *Manager) readNoteLocked(date string) (content string, exists bool, filePath string) {
+	filePath = m.getNoteFilePath(date)
+	if data, err := os.ReadFile(filePath); err == nil {
+		return string(data), true, filePath
+	}
+	// Provide default template for new day
+	return fmt.Sprintf("# 📅 Diario de Trabajo - %s\n\n## 📌 Notas Generales\n- [ ] \n\n## 🌙 Handoffs de Tareas & Agentes\n", date), false, filePath
+}
+
+// writeNoteLocked persists the note markdown for date. The caller must hold m.mu for writing.
+func (m *Manager) writeNoteLocked(date string, content string) error {
+	if err := os.WriteFile(m.getNoteFilePath(date), []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to save daily note: %w", err)
+	}
+	return nil
+}
+
 // GetDayNote loads the markdown note and associated structured handoffs for date (YYYY-MM-DD)
 func (m *Manager) GetDayNote(date string) (*DayNote, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	filePath := m.getNoteFilePath(date)
-	content := ""
-	exists := false
-
-	if data, err := os.ReadFile(filePath); err == nil {
-		content = string(data)
-		exists = true
-	} else {
-		// Provide default template for new day
-		content = fmt.Sprintf("# 📅 Diario de Trabajo - %s\n\n## 📌 Notas Generales\n- [ ] \n\n## 🌙 Handoffs de Tareas & Agentes\n", date)
-	}
+	content, exists, filePath := m.readNoteLocked(date)
 
 	handoffs := m.handoffs[date]
 	if handoffs == nil {
@@ -183,21 +192,35 @@ func (m *Manager) SaveDayNote(date string, content string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	filePath := m.getNoteFilePath(date)
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to save daily note: %w", err)
-	}
-	return nil
+	return m.writeNoteLocked(date, content)
 }
 
-// AddDailyTodo appends or inserts a checklist item into the "Notas Generales" section of the daily note
+const notesGeneralHeader = "## 📌 Notas Generales"
+
+// insertTodoLine places todoLine right under the "Notas Generales" header, replacing the empty
+// "- [ ]" placeholder of a fresh note, or appends the section when the note has none.
+func insertTodoLine(content, todoLine string) string {
+	if idx := strings.Index(content, notesGeneralHeader); idx != -1 {
+		rest := content[idx+len(notesGeneralHeader):]
+		trimmedRest := strings.TrimLeft(rest, "\r\n ")
+		if strings.HasPrefix(trimmedRest, "- [ ]") {
+			// The template's placeholder is "- [ ] " (trailing space): an empty item, replace it.
+			after := strings.TrimLeft(trimmedRest[5:], " \t")
+			if after == "" || after[0] == '\r' || after[0] == '\n' {
+				return content[:idx+len(notesGeneralHeader)] + "\n" + todoLine + after
+			}
+		}
+		return content[:idx+len(notesGeneralHeader)] + "\n" + todoLine + rest
+	}
+	return content + "\n\n" + notesGeneralHeader + "\n" + todoLine + "\n"
+}
+
+// AddDailyTodo appends or inserts a checklist item into the "Notas Generales" section of the daily note.
+// The read-modify-write runs under one lock so concurrent writers (MCP, the UI, background jobs)
+// cannot drop each other's lines.
 func (m *Manager) AddDailyTodo(date string, text string, checked bool) (*DayNote, error) {
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
-	}
-	note, err := m.GetDayNote(date)
-	if err != nil {
-		return nil, err
 	}
 
 	checkbox := "- [ ] "
@@ -206,25 +229,42 @@ func (m *Manager) AddDailyTodo(date string, text string, checked bool) (*DayNote
 	}
 	todoLine := checkbox + strings.TrimSpace(text)
 
-	content := note.Content
-	targetHeader := "## 📌 Notas Generales"
-
-	if idx := strings.Index(content, targetHeader); idx != -1 {
-		rest := content[idx+len(targetHeader):]
-		trimmedRest := strings.TrimLeft(rest, "\r\n ")
-		if strings.HasPrefix(trimmedRest, "- [ ]") && (len(trimmedRest) == 5 || trimmedRest[5] == '\r' || trimmedRest[5] == '\n') {
-			content = content[:idx+len(targetHeader)] + "\n" + todoLine + trimmedRest[5:]
-		} else {
-			content = content[:idx+len(targetHeader)] + "\n" + todoLine + rest
-		}
-	} else {
-		content = content + "\n\n" + targetHeader + "\n" + todoLine + "\n"
-	}
-
-	if err := m.SaveDayNote(date, content); err != nil {
+	m.mu.Lock()
+	content, _, _ := m.readNoteLocked(date)
+	err := m.writeNoteLocked(date, insertTodoLine(content, todoLine))
+	m.mu.Unlock()
+	if err != nil {
 		return nil, err
 	}
 	return m.GetDayNote(date)
+}
+
+// todoMarkerRegex restricts markers to a safe charset so they can live inside an HTML comment.
+var todoMarkerRegex = regexp.MustCompile(`^[a-z][a-z0-9_]*:[A-Za-z0-9_-]+$`)
+
+// AddDailyTodoUnique inserts an unchecked item tagged with a hidden marker (e.g. "clickup:123"),
+// unless a line carrying that marker is already in the note. It reports whether it added the line.
+func (m *Manager) AddDailyTodoUnique(date string, text string, marker string) (bool, error) {
+	if !todoMarkerRegex.MatchString(marker) {
+		return false, fmt.Errorf("marcador inválido: %q", marker)
+	}
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+	tag := "<!-- " + marker + " -->"
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	content, _, _ := m.readNoteLocked(date)
+	if strings.Contains(content, tag) {
+		return false, nil
+	}
+	todoLine := "- [ ] " + strings.TrimSpace(text) + " " + tag
+	if err := m.writeNoteLocked(date, insertTodoLine(content, todoLine)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // AppendDailyNote appends text/notes under the "Notas Generales" section
@@ -232,27 +272,23 @@ func (m *Manager) AppendDailyNote(date string, text string) (*DayNote, error) {
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
-	note, err := m.GetDayNote(date)
-	if err != nil {
-		return nil, err
-	}
 
 	trimmedText := strings.TrimSpace(text)
 	if trimmedText == "" {
-		return note, nil
+		return m.GetDayNote(date)
 	}
 
-	content := note.Content
-	targetHeader := "## 📌 Notas Generales"
-
-	if idx := strings.Index(content, targetHeader); idx != -1 {
-		rest := content[idx+len(targetHeader):]
-		content = content[:idx+len(targetHeader)] + "\n" + trimmedText + rest
+	m.mu.Lock()
+	content, _, _ := m.readNoteLocked(date)
+	if idx := strings.Index(content, notesGeneralHeader); idx != -1 {
+		rest := content[idx+len(notesGeneralHeader):]
+		content = content[:idx+len(notesGeneralHeader)] + "\n" + trimmedText + rest
 	} else {
-		content = content + "\n\n" + targetHeader + "\n" + trimmedText + "\n"
+		content = content + "\n\n" + notesGeneralHeader + "\n" + trimmedText + "\n"
 	}
-
-	if err := m.SaveDayNote(date, content); err != nil {
+	err := m.writeNoteLocked(date, content)
+	m.mu.Unlock()
+	if err != nil {
 		return nil, err
 	}
 	return m.GetDayNote(date)
@@ -765,4 +801,3 @@ func (m *Manager) GenerateDraft(bubbleID, bubbleName, workDir, agentRole, termin
 
 	return draft, nil
 }
-

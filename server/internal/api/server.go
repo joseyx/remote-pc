@@ -20,6 +20,7 @@ import (
 	"github.com/gorilla/websocket"
 	"orbit/internal/bubble"
 	"orbit/internal/calendar"
+	"orbit/internal/clickup"
 	"orbit/internal/config"
 	"orbit/internal/daemon"
 	"orbit/internal/doctor"
@@ -52,6 +53,9 @@ type Server struct {
 	events      *eventHub
 	startedAt   time.Time
 	version     string
+
+	clickupStore  *clickup.Store
+	clickupPoller *clickup.Poller
 }
 
 func NewServer(cfg *config.Config, manager *session.Manager, version string) *Server {
@@ -68,17 +72,22 @@ func NewServer(cfg *config.Config, manager *session.Manager, version string) *Se
 	bubbleMgr.SetOnWorkspacesChange(func() { events.publish(eventKindWorkspaces) })
 	manager.SetOnChange(func() { events.publish(eventKindSessions) })
 
+	calendarMgr := calendar.NewManager(filepath.Join(dataDir, "calendar_notes"))
+	clickupStore, clickupPoller := newClickUpPoller(dataDir, pluginMgr, calendarMgr, events)
+
 	return &Server{
-		cfg:         cfg,
-		manager:     manager,
-		vpnMgr:      vpn.NewManager(),
-		bubbleMgr:   bubbleMgr,
-		obsidianMgr: obsidian.NewManager(),
-		calendarMgr: calendar.NewManager(filepath.Join(dataDir, "calendar_notes")),
-		pluginMgr:   pluginMgr,
-		events:      events,
-		startedAt:   time.Now(),
-		version:     version,
+		cfg:           cfg,
+		manager:       manager,
+		vpnMgr:        vpn.NewManager(),
+		bubbleMgr:     bubbleMgr,
+		obsidianMgr:   obsidian.NewManager(),
+		calendarMgr:   calendarMgr,
+		pluginMgr:     pluginMgr,
+		events:        events,
+		startedAt:     time.Now(),
+		version:       version,
+		clickupStore:  clickupStore,
+		clickupPoller: clickupPoller,
 	}
 }
 
@@ -164,6 +173,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/plugins/{id}/toggle", s.withAuth(s.handleTogglePlugin))
 	mux.HandleFunc("POST /api/plugins/{id}/config", s.withAuth(s.handleUpdatePluginConfig))
 	mux.HandleFunc("POST /api/plugins/groq-whisper/transcribe", s.withAuth(s.handleGroqWhisperTranscribe))
+
+	// ClickUp mentions (plugin "clickup")
+	mux.HandleFunc("GET /api/clickup/mentions", s.withAuth(s.handleClickUpMentions))
+	mux.HandleFunc("POST /api/clickup/poll", s.withAuth(s.handleClickUpPoll))
 
 	// Embedded Desktop Web Dashboard (with hot-reload support if static assets exist on disk)
 	mux.Handle("/", web.Handler(s.cfg.DataDir))

@@ -184,6 +184,7 @@ func main() {
 		log.Printf("Warning: failed to restore previous sessions: %v", err)
 	}
 	server := api.NewServer(cfg, manager, Version)
+	server.StartBackgroundJobs()
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	dashUrl := fmt.Sprintf("http://localhost:%s/", cfg.Port)
@@ -228,6 +229,9 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// Stop periodic jobs (ClickUp poller) before tearing down the managers they write to
+	server.StopBackgroundJobs()
 
 	// Persist active terminal sessions state for the next run
 	if err := manager.SaveState(); err != nil {

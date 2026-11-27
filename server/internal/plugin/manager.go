@@ -74,6 +74,46 @@ var defaultRegistry = []PluginInfo{
 			},
 		},
 	},
+	{
+		ID:              "clickup",
+		Name:            "ClickUp: menciones y respuestas",
+		Description:     "Revisa ClickUp cada cierto tiempo y lleva a la nota diaria, como pendientes, las menciones, las respuestas en hilos donde participaste y los comentarios en tus tickets. Avisa en el dashboard y expone get_clickup_mentions a Claude Code.",
+		Icon:            "📬",
+		Category:        "Productividad",
+		Version:         "1.0.0",
+		Author:          "Orbit Core",
+		Enabled:         false,
+		RequiresRestart: false,
+		Config: map[string]any{
+			"api_key":          "",
+			"workspace_id":     "",
+			"interval_minutes": 20,
+		},
+		ConfigSchema: []ConfigField{
+			{
+				Key:         "api_key",
+				Label:       "Token personal de ClickUp",
+				Type:        "password",
+				Placeholder: "pk_...",
+				Help:        "En ClickUp: avatar > Settings > Apps > API Token. Se guarda solo en esta PC.",
+				Required:    true,
+			},
+			{
+				Key:         "workspace_id",
+				Label:       "ID del workspace (opcional)",
+				Type:        "text",
+				Placeholder: "1234567",
+				Help:        "Vacío = el primer workspace del token. Es el número que aparece en app.clickup.com/<ID>/...",
+			},
+			{
+				Key:     "interval_minutes",
+				Label:   "Revisar cada (minutos)",
+				Type:    "number",
+				Default: 20,
+				Help:    "Mínimo 5. Cada revisión hace unas decenas de peticiones a ClickUp.",
+			},
+		},
+	},
 }
 
 // Global default manager instance for MCP server access
