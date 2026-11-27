@@ -23,6 +23,8 @@ const (
 	eventKindBubbles    = "bubbles"
 	eventKindSessions   = "sessions"
 	eventKindWorkspaces = "workspaces"
+	// eventKindClickUp: the ClickUp poller found new mentions; the page fetches /api/clickup/mentions.
+	eventKindClickUp = "clickup"
 
 	// eventCoalesceWindow merges the bursts a single operation produces (creating a bubble rescans
 	// worktrees, then spawns its terminal) into one hint per kind.

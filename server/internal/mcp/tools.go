@@ -518,6 +518,11 @@ func ensureServerRunning(port string) bool {
 }
 
 func apiRequest(path, method string, body interface{}, target interface{}, retried bool) error {
+	return apiRequestWithTimeout(path, method, body, target, retried, 7*time.Second)
+}
+
+// apiRequestWithTimeout is apiRequest for calls that legitimately take longer (e.g. a ClickUp poll).
+func apiRequestWithTimeout(path, method string, body interface{}, target interface{}, retried bool, timeout time.Duration) error {
 	cfg := getClientConfig()
 	url := fmt.Sprintf("http://127.0.0.1:%s%s", cfg.Port, path)
 
@@ -540,12 +545,12 @@ func apiRequest(path, method string, body interface{}, target interface{}, retri
 		req.Header.Set("Authorization", "Bearer "+cfg.AuthToken)
 	}
 
-	client := &http.Client{Timeout: 7 * time.Second}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		if !retried && (strings.Contains(err.Error(), "refused") || strings.Contains(err.Error(), "10061") || strings.Contains(err.Error(), "dial tcp")) {
 			if ensureServerRunning(cfg.Port) {
-				return apiRequest(path, method, body, target, true)
+				return apiRequestWithTimeout(path, method, body, target, true, timeout)
 			}
 		}
 		return fmt.Errorf("error conectando con Orbit en %s: %w. Asegúrate de que 'orbit' esté en ejecución", url, err)
@@ -602,6 +607,8 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 		return handleTranscribeVideo(args)
 	case "extract_audio":
 		return handleExtractAudio(args)
+	case "get_clickup_mentions":
+		return handleGetClickUpMentions(args)
 	default:
 		return "", fmt.Errorf("herramienta desconocida: %s", name)
 	}
@@ -1904,6 +1911,9 @@ func GetTools() []Tool {
 	copy(base, Tools)
 	if mgr != nil && mgr.IsEnabled("groq_whisper") {
 		base = append(base, GroqWhisperTools...)
+	}
+	if mgr != nil && mgr.IsEnabled(clickupPluginID) {
+		base = append(base, ClickUpTools...)
 	}
 	return base
 }

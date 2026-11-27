@@ -230,6 +230,7 @@ const eventRefreshState = {
     bubbles: { running: false, again: false },
     sessions: { running: false, again: false },
     workspaces: { running: false, again: false },
+    clickup: { running: false, again: false },
 };
 
 function isEventsChannelLive() {
@@ -252,6 +253,7 @@ function connectEventsChannel() {
         refreshFromEvent('workspaces');
         refreshFromEvent('bubbles');
         refreshFromEvent('sessions');
+        refreshFromEvent('clickup');
     };
     ws.onmessage = (ev) => {
         let msg;
@@ -278,6 +280,7 @@ async function refreshFromEvent(kind) {
             st.again = false;
             if (kind === 'bubbles') await fetchBubbles({ onlyIfChanged: true });
             else if (kind === 'workspaces') await fetchWorkspaces({ onlyIfChanged: true });
+            else if (kind === 'clickup') await refreshClickUpMentions();
             else await fetchSessions();
         } while (st.again);
     } finally {
