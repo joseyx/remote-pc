@@ -139,6 +139,83 @@ func TestPollContinuesAfterACutListing(t *testing.T) {
 	}
 }
 
+// After a cut listing, a task listed later is still checked from the original window: a mention
+// older than the cut point, on a task updated after it, is not dropped.
+func TestPollKeepsTheDetectionWindowAfterACut(t *testing.T) {
+	const filler = maxUpdatedPages * fakeTaskPage
+	f := newFake()
+	f.pagedTasks = true
+	base := time.Now().Add(-20 * time.Hour)
+	for i := 0; i < filler; i++ {
+		id := fmt.Sprintf("F%03d", i)
+		tk := task(id, "Relleno "+id, peerID)
+		tk["date_updated"] = ms(base.Add(time.Duration(i) * time.Second))
+		f.tasks = append(f.tasks, tk)
+	}
+	// X: mentioned before the cut point (filler-1 s), updated after it.
+	x := task("X", "Ticket ajeno", peerID)
+	x["date_updated"] = ms(base.Add(time.Duration(filler+100) * time.Second))
+	f.tasks = append(f.tasks, x)
+	f.comments["X"] = []Comment{comment("cx", peerID, base.Add(10*time.Second), "revisa", 0, meID)}
+	srv := httptest.NewServer(f.handler(t))
+	defer srv.Close()
+
+	notes := &fakeNotes{}
+	notified := 0
+	p, store := newTestPoller(t, srv.URL, notes, &notified)
+	for i := 0; i < 12 && len(notes.calls) == 0; i++ {
+		if _, err := p.Poll(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 && store.Status().WindowStart.IsZero() {
+			t.Fatal("a cut listing must keep the detection window")
+		}
+	}
+	if len(notes.calls) != 1 || notes.calls[0].marker != "clickup:cx" {
+		t.Fatalf("mention older than the cut point was dropped: %+v", notes.calls)
+	}
+}
+
+// More than a cut's worth of tasks share one update date: the listing pages through them instead
+// of jumping past the instant, and every task is reached.
+func TestPollPagesThroughTasksWithTheSameDate(t *testing.T) {
+	const total = maxUpdatedPages*fakeTaskPage + 150
+	f := newFake()
+	f.pagedTasks = true
+	at := time.Now().Add(-10 * time.Hour)
+	for i := 0; i < total; i++ {
+		id := fmt.Sprintf("S%03d", i)
+		tk := task(id, "Masivo "+id, peerID)
+		tk["date_updated"] = ms(at)
+		f.tasks = append(f.tasks, tk)
+		f.comments[id] = []Comment{comment("c"+id, peerID, at, "revisa", 0, meID)}
+	}
+	srv := httptest.NewServer(f.handler(t))
+	defer srv.Close()
+
+	notes := &fakeNotes{}
+	notified := 0
+	p, store := newTestPoller(t, srv.URL, notes, &notified)
+	// Poll 1 can still move the window up to just before the shared instant; poll 2 lists only tasks
+	// of that instant, cannot move it further and must continue by page.
+	for i := 0; i < 2; i++ {
+		if _, err := p.Poll(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if st := store.Status(); st.NextPage != maxUpdatedPages || !st.NextWindow.Equal(time.UnixMilli(at.UnixMilli()).Add(-time.Millisecond)) {
+		t.Fatalf("same-instant cut should continue by page, got NextPage=%d NextWindow=%v", st.NextPage, st.NextWindow)
+	}
+	for i := 0; i < 15 && len(notes.calls) < total; i++ {
+		if _, err := p.Poll(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(notes.calls) != total {
+		t.Fatalf("reached %d of %d tasks sharing one update date", len(notes.calls), total)
+	}
+}
+
 // More than one page of new comments: the older pages are read too.
 func TestPollPaginatesLongTasks(t *testing.T) {
 	f := newFake()
@@ -296,6 +373,44 @@ func TestPollChecksMyThreadBeyondThePagesRead(t *testing.T) {
 	}
 }
 
+// A comment of mine with no replies yet is remembered as my thread: its first reply is found even
+// after newer comments push it past the pages read.
+func TestPollFindsTheFirstReplyToMyBuriedComment(t *testing.T) {
+	now := time.Now()
+	f := newFake()
+	f.tasks = []map[string]any{task("W1", "Ticket ajeno largo", peerID)}
+	f.comments["W1"] = []Comment{comment("root", meID, now.Add(-3*time.Hour), "MR con el fix", 0)}
+	srv := httptest.NewServer(f.handler(t))
+	defer srv.Close()
+
+	notes := &fakeNotes{}
+	notified := 0
+	p, _ := newTestPoller(t, srv.URL, notes, &notified)
+	if _, err := p.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	f.mu.Lock()
+	f.tasks = nil
+	var filler []Comment
+	for i := 0; i < 110; i++ {
+		filler = append(filler, comment(fmt.Sprintf("f%03d", i), peerID, now.Add(-150*time.Minute-time.Duration(i)*time.Second), "relleno", 0))
+	}
+	root := f.comments["W1"][0]
+	root.ReplyCount = 1
+	f.comments["W1"] = append(filler, root)
+	f.replies["root"] = []Comment{comment("r1", peerID, time.Now(), "¿ya está en develop?", 0)}
+	f.mu.Unlock()
+
+	res, err := p.Poll(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.New != 1 || notes.calls[len(notes.calls)-1].marker != "clickup:r1" {
+		t.Fatalf("first reply to my buried comment was missed: %+v %+v", res, notes.calls)
+	}
+}
+
 // Pending to-dos are not dropped by count: all of them survive a reopen of the store.
 func TestPendingNotesAreNotCapped(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.json")
@@ -306,7 +421,12 @@ func TestPendingNotesAreNotCapped(t *testing.T) {
 	st := s.snapshot()
 	now := time.Now()
 	for i := 0; i < 150; i++ {
-		st.PendingNotes = append(st.PendingNotes, Mention{CommentID: fmt.Sprintf("p%03d", i), DetectedAt: now})
+		// Half of them older than the 30-day history: still undelivered, so still kept.
+		detected := now
+		if i%2 == 0 {
+			detected = now.Add(-40 * 24 * time.Hour)
+		}
+		st.PendingNotes = append(st.PendingNotes, Mention{CommentID: fmt.Sprintf("p%03d", i), DetectedAt: detected})
 	}
 	if err := s.replace(st, now); err != nil {
 		t.Fatal(err)

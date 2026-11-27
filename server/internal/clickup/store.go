@@ -52,10 +52,16 @@ type Status struct {
 	LastPollStart time.Time `json:"lastPollStart,omitempty"`
 	LastPollEnd   time.Time `json:"lastPollEnd,omitempty"`
 	LastSuccess   time.Time `json:"lastSuccess,omitempty"`
-	// NextWindow is where the next poll's window starts when the updated-tasks listing was cut:
+	// NextWindow is where the next poll's listing resumes when the updated-tasks listing was cut:
 	// the update date of the last task listed (listing is oldest first), so it never re-reads the
 	// same pages nor skips the ones it did not reach. Zero once a poll lists everything.
-	NextWindow  time.Time `json:"nextWindow,omitempty"`
+	NextWindow time.Time `json:"nextWindow,omitempty"`
+	// NextPage is the listing page to resume at when more than a cut's worth of tasks share the
+	// same update date (NextWindow cannot move past them).
+	NextPage int `json:"nextPage,omitempty"`
+	// WindowStart is the detection window kept while catching up after a cut listing: tasks listed
+	// later are still checked from here, not from NextWindow, so their older comments are not dropped.
+	WindowStart time.Time `json:"windowStart,omitempty"`
 	LastError   string    `json:"lastError,omitempty"`
 	LastChecked int       `json:"lastChecked"` // tasks scanned in the last poll
 }
@@ -253,15 +259,8 @@ func prune(st storeState, now time.Time) storeState {
 			delete(st.NextSince, id)
 		}
 	}
-	// Pending to-dos are never dropped by count (their comments are already marked seen and would
-	// not come back); only once they are as old as the history itself.
-	keptPending := st.PendingNotes[:0]
-	for _, m := range st.PendingNotes {
-		if now.Sub(m.DetectedAt) <= mentionRetention {
-			keptPending = append(keptPending, m)
-		}
-	}
-	st.PendingNotes = keptPending
+	// PendingNotes are never pruned: their comments are already marked seen and would not come back,
+	// so they stay queued until the note accepts them (deliver removes them once written).
 	sort.SliceStable(st.Mentions, func(i, j int) bool { return st.Mentions[i].Date.After(st.Mentions[j].Date) })
 	kept := st.Mentions[:0]
 	for _, m := range st.Mentions {

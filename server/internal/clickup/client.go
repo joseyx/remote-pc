@@ -164,6 +164,7 @@ type TaskQuery struct {
 	AssigneeID    int64 // 0 = any
 	IncludeClosed bool
 	MaxPages      int
+	FirstPage     int // page to start from (0 = the first)
 	// OldestFirst lists by update date ascending, so a listing cut by MaxPages has covered
 	// everything up to the last task returned (that task's date is a safe resume point).
 	OldestFirst bool
@@ -176,7 +177,11 @@ func (c *Client) Tasks(ctx context.Context, teamID string, q TaskQuery) (tasks [
 	if maxPages <= 0 {
 		maxPages = 1
 	}
-	for page := 0; page < maxPages; page++ {
+	first := q.FirstPage
+	if first < 0 {
+		first = 0
+	}
+	for page := first; page < first+maxPages; page++ {
 		v := url.Values{}
 		v.Set("order_by", "updated")
 		if q.OldestFirst {
