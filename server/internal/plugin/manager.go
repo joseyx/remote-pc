@@ -77,7 +77,7 @@ var defaultRegistry = []PluginInfo{
 	{
 		ID:              "clickup",
 		Name:            "ClickUp: menciones y respuestas",
-		Description:     "Revisa ClickUp cada cierto tiempo y lleva a la nota diaria, como pendientes, las menciones, las respuestas en hilos donde participaste y los comentarios en tus tickets. Avisa en el dashboard y expone get_clickup_mentions a Claude Code.",
+		Description:     "Revisa ClickUp cada cierto tiempo y lleva a la bandeja 💬 ClickUp del Cockpit las menciones, las respuestas en hilos donde participaste y los comentarios en tus tickets. Avisa en el dashboard y expone get_clickup_mentions y mark_clickup_mention_done a Claude Code.",
 		Icon:            "📬",
 		Category:        "Productividad",
 		Version:         "1.0.0",
@@ -88,6 +88,7 @@ var defaultRegistry = []PluginInfo{
 			"api_key":          "",
 			"workspace_id":     "",
 			"interval_minutes": 20,
+			"daily_note":       false,
 		},
 		ConfigSchema: []ConfigField{
 			{
@@ -111,6 +112,13 @@ var defaultRegistry = []PluginInfo{
 				Type:    "number",
 				Default: 20,
 				Help:    "Mínimo 5. Cada revisión hace unas decenas de peticiones a ClickUp.",
+			},
+			{
+				Key:     "daily_note",
+				Label:   "Agregarlas también a la nota diaria",
+				Type:    "checkbox",
+				Default: false,
+				Help:    "Además de la bandeja, escribe cada mención nueva como pendiente en la nota del día.",
 			},
 		},
 	},

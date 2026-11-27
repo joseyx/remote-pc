@@ -36,6 +36,24 @@ type Mention struct {
 	Answered   bool      `json:"answered"` // the user replied after it in the same thread (top-level comment: in its own thread)
 	DetectedAt time.Time `json:"detectedAt"`
 	NoteDate   string    `json:"noteDate,omitempty"` // daily note that got the to-do
+	// DoneAt is when the user marked it attended in the inbox (nil = not marked). Only the user sets
+	// it: the poller never changes it.
+	DoneAt *time.Time `json:"doneAt,omitempty"`
+}
+
+// Pending reports whether the mention still waits for the user: not answered in its thread and not
+// marked attended.
+func (m Mention) Pending() bool {
+	return !m.Answered && m.DoneAt == nil
+}
+
+// threadKey is the thread a mention belongs to: its root, or itself for a top-level comment (whose
+// answers are the replies in its own thread).
+func (m Mention) threadKey() string {
+	if m.ThreadID != "" {
+		return m.ThreadID
+	}
+	return m.CommentID
 }
 
 // TaskActivity is what the poller fetched for one task.
@@ -56,6 +74,9 @@ type DetectResult struct {
 	ParticipatedThreads []string
 	// MyLastActivity is when the user last wrote in this task (zero if never, among what was fetched).
 	MyLastActivity time.Time
+	// MyLastReply maps each fetched thread the user replied in to their latest reply, so mentions
+	// stored earlier in that thread can be marked answered.
+	MyLastReply map[string]time.Time
 }
 
 // TaskURL is the canonical link to a task. It is built from the ID instead of trusting the API field,
@@ -96,6 +117,12 @@ func Detect(me int64, act TaskActivity, since time.Time) DetectResult {
 		}
 		if participated {
 			res.ParticipatedThreads = append(res.ParticipatedThreads, c.ID)
+		}
+		if !myLastReply.IsZero() {
+			if res.MyLastReply == nil {
+				res.MyLastReply = map[string]time.Time{}
+			}
+			res.MyLastReply[c.ID] = myLastReply
 		}
 		if myLastReply.After(res.MyLastActivity) {
 			res.MyLastActivity = myLastReply

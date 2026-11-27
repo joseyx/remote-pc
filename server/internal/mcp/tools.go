@@ -609,6 +609,8 @@ func ExecuteTool(name string, args map[string]interface{}) (string, error) {
 		return handleExtractAudio(args)
 	case "get_clickup_mentions":
 		return handleGetClickUpMentions(args)
+	case "mark_clickup_mention_done":
+		return handleMarkClickUpMentionDone(args)
 	default:
 		return "", fmt.Errorf("herramienta desconocida: %s", name)
 	}

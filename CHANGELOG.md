@@ -3,6 +3,19 @@
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y sigue [Semantic Versioning](https://semver.org/lang/es/).
 
+## [1.10.0] - 2026-11-27
+
+### ✨ Nuevas Funcionalidades (Features)
+- **Bandeja de ClickUp en el Cockpit** (#68, #67): las menciones de ClickUp dejan la nota diaria y pasan a una bandeja propia, visible desde cualquier bubble o pestaña.
+  - Botón `💬 ClickUp` en el encabezado con el número de pendientes, que abre un panel lateral con pestañas «Pendientes» y «Todas» (últimos 30 días), agrupado por día.
+  - Cada mensaje enlaza al comentario dentro de su hilo y se marca como atendido (o se devuelve a pendiente). Una mención también se resuelve sola cuando el usuario responde en ese hilo, aunque la tarea no sea suya.
+  - «⏪ 3 días» vuelve a revisar las últimas 72 horas para recuperar lo que haya quedado fuera, sin repetir nada. La primera revisión al activar el plugin ahora mira 72 horas en vez de 24.
+  - Los pendientes se conservan hasta resolverse; los resueltos, 30 días.
+  - La nota diaria pasa a ser opcional: campo «Agregarlas también a la nota diaria» del plugin, apagado por defecto.
+  - API: `POST /api/clickup/mentions/{id}/done` y `POST /api/clickup/poll` con `lookback_hours`. MCP: `get_clickup_mentions` devuelve toda la bandeja con IDs y la nueva tool `mark_clickup_mention_done` marca desde un agente.
+
+---
+
 ## [1.9.0] - 2026-11-27
 
 ### ✨ Nuevas Funcionalidades (Features)
