@@ -147,34 +147,34 @@ claude mcp list
 
 ```mermaid
 graph TD
-    subgraph Clientes
-        Mobile[App Android Kotlin/Compose]
-        Browser[Orbit Cockpit Web Dashboard]
-        ClaudeAgent[Claude Code / Claude Desktop]
+    subgraph Clientes["Clientes"]
+        Mobile["App Android Kotlin/Compose"]
+        Browser["Orbit Cockpit Web Dashboard"]
+        ClaudeAgent["Claude Code / Claude Desktop"]
     end
 
-    subgraph Orbit Daemon [Orbit Server Daemon (Go)]
-        API[Enrutador REST / API Server]
-        WSHub[Hub WebSockets / Multiplexor PTY]
-        MCPServer[Servidor MCP stdio JSON-RPC 2.0]
-        SessionMgr[Gestor de Sesiones & PTY Ring Buffer]
-        BubbleMgr[Gestor de Workspace Bubbles]
-        CalendarMgr[Calendario & Handoffs Registry]
-        ObsidianMgr[Obsidian Vault Discovery]
+    subgraph Daemon["Orbit Server Daemon (Go)"]
+        API["Enrutador REST / API Server"]
+        WSHub["Hub WebSockets / Multiplexor PTY"]
+        MCPServer["Servidor MCP stdio JSON-RPC 2.0"]
+        SessionMgr["Gestor de Sesiones & PTY Ring Buffer"]
+        BubbleMgr["Gestor de Workspace Bubbles"]
+        CalendarMgr["Calendario & Handoffs Registry"]
+        ObsidianMgr["Obsidian Vault Discovery"]
     end
 
-    subgraph SO & Herramientas
-        PTY[Motor PTY: ConPTY (Win) / creack/pty (Unix)]
-        GitCLI[Git CLI & Monorepo Worktrees]
-        ObsidianFS[Bóvedas Markdown de Obsidian]
+    subgraph SO["SO & Herramientas"]
+        PTY["Motor PTY: ConPTY (Win) / creack/pty (Unix)"]
+        GitCLI["Git CLI & Monorepo Worktrees"]
+        ObsidianFS["Bóvedas Markdown de Obsidian"]
     end
 
-    ClaudeAgent <-->|stdio JSON-RPC| MCPServer
-    MCPServer <-->|Internal API| BubbleMgr
-    MCPServer <-->|Internal API| CalendarMgr
+    ClaudeAgent <-->|"stdio JSON-RPC"| MCPServer
+    MCPServer <-->|"Internal API"| BubbleMgr
+    MCPServer <-->|"Internal API"| CalendarMgr
 
-    Mobile <-->|HTTP / WebSockets| API
-    Browser <-->|HTTP / WebSockets| API
+    Mobile <-->|"HTTP / WebSockets"| API
+    Browser <-->|"HTTP / WebSockets"| API
     API --> WSHub
     WSHub --> SessionMgr
     SessionMgr --> PTY
